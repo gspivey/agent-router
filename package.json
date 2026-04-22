@@ -1,0 +1,30 @@
+{
+  "name": "agent-router",
+  "version": "0.1.0",
+  "description": "Single-user daemon bridging GitHub events to ACP-compatible coding agents",
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx/esm src/index.ts",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project tier1 --project tier2",
+    "test:watch": "vitest --project tier1",
+    "test:integration": "vitest run --project tier3",
+    "test:all": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^11.9.1",
+    "hono": "^4.7.7",
+    "node-cron": "^3.0.3",
+    "tsx": "^4.19.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.15.3",
+    "@types/node-cron": "^3.0.11",
+    "fast-check": "^3.23.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}
