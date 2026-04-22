@@ -1,0 +1,12 @@
+{
+  "name": "hang-then-exit",
+  "steps": [
+    {
+      "trigger": "session/prompt",
+      "notifications": [],
+      "result": { "ok": true },
+      "delayMs": 500,
+      "exitCode": 0
+    }
+  ]
+}

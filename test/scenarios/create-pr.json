@@ -1,0 +1,29 @@
+{
+  "name": "create-pr",
+  "steps": [
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "tool_call",
+            "tool": "register_pr",
+            "args": { "repo": "testowner/testrepo", "pr_number": 1 }
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "message",
+            "content": "Registered PR #1."
+          }
+        }
+      ],
+      "result": { "ok": true },
+      "exitCode": 0
+    }
+  ]
+}

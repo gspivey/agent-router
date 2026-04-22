@@ -1,0 +1,20 @@
+{
+  "name": "simple-echo",
+  "steps": [
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "message",
+            "content": "Echo: received your prompt."
+          }
+        }
+      ],
+      "result": { "ok": true },
+      "exitCode": 0
+    }
+  ]
+}

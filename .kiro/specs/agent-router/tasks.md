@@ -12,33 +12,33 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
 
 ## Tasks
 
-- [ ] 1. Project scaffolding and core types
-  - [ ] 1.1 Initialize project structure with `package.json`, `tsconfig.json` (strict mode), and install dependencies: `hono`, `@hono/node-server`, `better-sqlite3`, `node-cron`, `tsx`, `vitest`, `fast-check`, `@types/better-sqlite3`
+- [x] 1. Project scaffolding and core types
+  - [x] 1.1 Initialize project structure with `package.json`, `tsconfig.json` (strict mode), and install dependencies: `hono`, `@hono/node-server`, `better-sqlite3`, `node-cron`, `tsx`, `vitest`, `fast-check`, `@types/better-sqlite3`
     - Create `src/` directory with placeholder files matching the design layout: `index.ts`, `config.ts`, `db.ts`, `log.ts`, `session-files.ts`, `server.ts`, `cli-server.ts`, `queue.ts`, `session-mgr.ts`, `router.ts`, `acp.ts`, `prompt.ts`, `mcp-server.ts`
     - Define shared TypeScript interfaces and types in each module header as specified in the design: `AgentRouterConfig`, `RepoConfig`, `CronConfig`, `NewEvent`, `Session`, `QueuedEvent`, `StreamEntry`, `SessionMeta`, `PromptSource`, `SessionPaths`, `ACPNotification`, `WakeDecision`, `CliRequest`
     - Define error classes `FatalError`, `EventError`, `WakeError`
     - _Requirements: 1.1, 15.1_
 
-- [ ] 2. Tier 2 integration test harness (Weekend 1)
-  - [ ] 2.1 Create `test/harness/interfaces.ts` defining GitHubBackend, KiroBackend, TestDaemon interfaces
+- [x] 2. Tier 2 integration test harness (Weekend 1)
+  - [x] 2.1 Create `test/harness/interfaces.ts` defining GitHubBackend, KiroBackend, TestDaemon interfaces
     - _Requirements: 22.1, 22.2_
-  - [ ] 2.2 Create `test/harness/scripts/make-fixture-repo.sh` — recreate Local_Git_Fixture with seeded initial commit
+  - [x] 2.2 Create `test/harness/scripts/make-fixture-repo.sh` — recreate Local_Git_Fixture with seeded initial commit
     - _Requirements: 23.1, 23.2, 23.3_
-  - [ ] 2.3 Implement `test/harness/fake-github.ts` HTTP server — GitHub API subset, in-memory state, HMAC webhook signing, API call recording
+  - [x] 2.3 Implement `test/harness/fake-github.ts` HTTP server — GitHub API subset, in-memory state, HMAC webhook signing, API call recording
     - _Requirements: 22.1, 23.4, 23.5_
-  - [ ] 2.4 Wire FakeGitHubBackend to Local_Git_Fixture — real git commands for PR creation, merge, clone URLs
+  - [x] 2.4 Wire FakeGitHubBackend to Local_Git_Fixture — real git commands for PR creation, merge, clone URLs
     - _Requirements: 23.4, 23.5, 23.6_
-  - [ ] 2.5 Implement `test/harness/fake-kiro.ts` — scriptable ACP subprocess reading FAKE_KIRO_SCENARIO env var
+  - [x] 2.5 Implement `test/harness/fake-kiro.ts` — scriptable ACP subprocess reading FAKE_KIRO_SCENARIO env var
     - _Requirements: 22.2_
-  - [ ] 2.6 Create initial scenario set at `test/scenarios/`: simple-echo, create-pr, create-pr-fix-ci-merge, hang-then-exit, crash-mid-turn
+  - [x] 2.6 Create initial scenario set at `test/scenarios/`: simple-echo, create-pr, create-pr-fix-ci-merge, hang-then-exit, crash-mid-turn
     - _Requirements: 22.2_
-  - [ ] 2.7 Implement `test/harness/test-daemon.ts` — TestDaemon spawning daemon as child process in temp dir with injected config
+  - [x] 2.7 Implement `test/harness/test-daemon.ts` — TestDaemon spawning daemon as child process in temp dir with injected config
     - _Requirements: 24.6_
-  - [ ] 2.8 Implement `test/harness/test-cli.ts` — programmatic CLI client with typed methods
+  - [x] 2.8 Implement `test/harness/test-cli.ts` — programmatic CLI client with typed methods
     - _Requirements: 24.6_
-  - [ ] 2.9 Configure Vitest project structure — three projects for tier1/tier2/tier3, npm script entries
+  - [x] 2.9 Configure Vitest project structure — three projects for tier1/tier2/tier3, npm script entries
     - _Requirements: 24.1, 24.2, 24.3, 24.4, 24.5_
-  - [ ] 2.10 Write smoke test — `test/tier2/smoke.test.ts` exercising full daemon with fake backends
+  - [x] 2.10 Write smoke test — `test/tier2/smoke.test.ts` exercising full daemon with fake backends
     - _Requirements: 24.6_
 
 - [ ] 3. Configuration loading and validation (`config.ts`)

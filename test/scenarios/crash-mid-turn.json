@@ -1,0 +1,20 @@
+{
+  "name": "crash-mid-turn",
+  "steps": [
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "message",
+            "content": "Starting work..."
+          }
+        }
+      ],
+      "result": { "ok": true },
+      "exitCode": 1
+    }
+  ]
+}

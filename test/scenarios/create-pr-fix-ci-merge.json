@@ -1,0 +1,33 @@
+{
+  "name": "create-pr-fix-ci-merge",
+  "steps": [
+    {
+      "trigger": "session/load",
+      "result": { "ok": true }
+    },
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "message",
+            "content": "Fixing CI failure and merging PR."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "tool_call",
+            "tool": "complete_session",
+            "args": { "reason": "PR merged successfully" }
+          }
+        }
+      ],
+      "result": { "ok": true },
+      "exitCode": 0
+    }
+  ]
+}
