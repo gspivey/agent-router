@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Git Commit After Task",
+  "description": "Automatically stages all changes and creates a descriptive git commit after each spec task is completed when running tasks on autopilot.",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Run `git diff --cached --stat` and `git diff --stat` to see what changed. Then stage all changes with `git add -A` and commit with a concise, descriptive commit message that summarizes the actual changes made (e.g., 'feat: add request routing logic for agent sessions' or 'refactor: extract queue processing into separate module'). Use conventional commit format (feat/fix/refactor/test/chore). Do NOT use a generic message like 'Complete spec task'."
+  }
+}
