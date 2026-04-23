@@ -77,14 +77,14 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - **Property 15: Log Level Filtering**
     - **Validates: Requirements 17.6**
 
-- [ ] 5. Prompt composition (`prompt.ts`)
-  - [-] 5.1a Implement `composeCheckRunPrompt` — extract check run name, repo full name, PR number, and output summary from check_run payload
+- [x] 5. Prompt composition (`prompt.ts`)
+  - [x] 5.1a Implement `composeCheckRunPrompt` — extract check run name, repo full name, PR number, and output summary from check_run payload
     - _Requirements: 11.1_
-  - [ ] 5.1b Implement `composeReviewCommentPrompt` — extract comment body, file path, diff hunk, repo full name, PR number
+  - [x] 5.1b Implement `composeReviewCommentPrompt` — extract comment body, file path, diff hunk, repo full name, PR number
     - _Requirements: 11.2_
-  - [ ] 5.1c Implement `composeCommandTriggerPrompt` — extract comment body, strip leading `/agent` token per regex `^/agent(\s|$)`, include repo full name and PR number
+  - [x] 5.1c Implement `composeCommandTriggerPrompt` — extract comment body, strip leading `/agent` token per regex `^/agent(\s|$)`, include repo full name and PR number
     - _Requirements: 11.3_
-  - [ ] 5.1d Implement `composeCronTaskPrompt` — pure function taking (task, repo, roadmapPath) returning structured prompt string
+  - [x] 5.1d Implement `composeCronTaskPrompt` — pure function taking (task, repo, roadmapPath) returning structured prompt string
     - _Requirements: 11.4_
   - [ ]* 5.2a Property test for `composeCheckRunPrompt` completeness
     - Validates: Requirements 11.1
@@ -96,7 +96,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - Validates: Requirements 11.4
 
 - [ ] 6. Roadmap parsing (`roadmap.ts`)
-  - [ ] 6.1 Create `roadmap.ts` — implement `parseRoadmap(content: string): RoadmapTask[]` parsing markdown lines matching `^[-*]\s+\[\s\]` as unchecked and `^[-*]\s+\[x\]` (case-insensitive) as checked
+  - [-] 6.1 Create `roadmap.ts` — implement `parseRoadmap(content: string): RoadmapTask[]` parsing markdown lines matching `^[-*]\s+\[\s\]` as unchecked and `^[-*]\s+\[x\]` (case-insensitive) as checked
     - _Requirements: 14.1, 14.2_
   - [ ] 6.2 Implement `findNextTask(tasks: RoadmapTask[]): RoadmapTask | null` returning the first unchecked task
     - _Requirements: 14.3_
