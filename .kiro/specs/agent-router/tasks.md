@@ -318,11 +318,11 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 19.5 End-to-end Tier 2 test for full webhook → wake → session loop
     - _Requirements: 3.4, 6.1, 8.3, 10.7, 24.6_
 
-- [-] 20. Final checkpoint — Ensure all tests pass
+- [x] 20. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 21. CLI client binary (`bin/agent-router.ts`)
-  - [ ] 21.1 Implement CLI entry point and command dispatch — parse argv, dispatch to subcommand handlers, connect to daemon socket
+  - [-] 21.1 Implement CLI entry point and command dispatch — parse argv, dispatch to subcommand handlers, connect to daemon socket
     - _Requirements: 21.6, 21.7_
   - [ ] 21.2 Implement `prompt --new` subcommand — read from stdin or `--file`, send `new_session` op, by default tail stream log and pretty-print
     - _Requirements: 21.3, 21.6, 21.8_

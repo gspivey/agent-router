@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Single-user daemon bridging GitHub events to ACP-compatible coding agents",
   "type": "module",
+  "bin": {
+    "agent-router": "bin/agent-router.ts"
+  },
   "scripts": {
     "start": "node --import tsx/esm src/index.ts",
     "dev": "tsx src/index.ts",
