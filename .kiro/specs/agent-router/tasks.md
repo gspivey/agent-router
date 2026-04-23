@@ -95,12 +95,12 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [ ]* 5.2d Property test for `composeCronTaskPrompt` completeness
     - Validates: Requirements 11.4
 
-- [ ] 6. Roadmap parsing (`roadmap.ts`)
-  - [-] 6.1 Create `roadmap.ts` — implement `parseRoadmap(content: string): RoadmapTask[]` parsing markdown lines matching `^[-*]\s+\[\s\]` as unchecked and `^[-*]\s+\[x\]` (case-insensitive) as checked
+- [x] 6. Roadmap parsing (`roadmap.ts`)
+  - [x] 6.1 Create `roadmap.ts` — implement `parseRoadmap(content: string): RoadmapTask[]` parsing markdown lines matching `^[-*]\s+\[\s\]` as unchecked and `^[-*]\s+\[x\]` (case-insensitive) as checked
     - _Requirements: 14.1, 14.2_
-  - [ ] 6.2 Implement `findNextTask(tasks: RoadmapTask[]): RoadmapTask | null` returning the first unchecked task
+  - [x] 6.2 Implement `findNextTask(tasks: RoadmapTask[]): RoadmapTask | null` returning the first unchecked task
     - _Requirements: 14.3_
-  - [ ] 6.3 Implement `markTaskChecked(content: string, taskLine: number): string` — return updated content with target line's `[ ]` replaced by `[x]`, preserving all other content
+  - [x] 6.3 Implement `markTaskChecked(content: string, taskLine: number): string` — return updated content with target line's `[ ]` replaced by `[x]`, preserving all other content
     - _Requirements: 14.5_
   - [ ]* 6.4 Property test for roadmap task parsing
     - Validates: Requirements 14.1, 14.2, 14.3
@@ -108,7 +108,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - Validates: Requirements 14.5
   - Note: roadmap.ts is consumed by the agent during its prompt, not by the daemon itself. The daemon ships it as a utility library.
 
-- [ ] 7. Checkpoint — Ensure all tests pass
+- [x] 7. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. Wake policy and event routing (`router.ts`)
