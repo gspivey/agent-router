@@ -62,10 +62,10 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 3.7 Tier 2 test asserting daemon refuses to start with invalid config
     - _Requirements: 15.6, 24.6_
 
-- [ ] 4. Structured logger (`log.ts`)
-  - [-] 4.1 Implement `createLogger` — read `LOG_LEVEL` env var (default `info`), return `Logger` that writes NDJSON to stdout with `timestamp` (ISO 8601 UTC), `level`, `message`, and merged fields; implement `child()` for field inheritance
+- [x] 4. Structured logger (`log.ts`)
+  - [x] 4.1 Implement `createLogger` — read `LOG_LEVEL` env var (default `info`), return `Logger` that writes NDJSON to stdout with `timestamp` (ISO 8601 UTC), `level`, `message`, and merged fields; implement `child()` for field inheritance
     - _Requirements: 17.1, 17.2, 17.6_
-  - [ ] 4.2 Implement secret filtering — ensure no log entry contains `webhookSecret`, resolved ENV values, or common secret patterns
+  - [x] 4.2 Implement secret filtering — ensure no log entry contains `webhookSecret`, resolved ENV values, or common secret patterns
     - _Requirements: 17.5_
   - [ ]* 4.3 Write property test for log entry structure
     - **Property 13: Log Entry Structure**
@@ -78,7 +78,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - **Validates: Requirements 17.6**
 
 - [ ] 5. Prompt composition (`prompt.ts`)
-  - [ ] 5.1a Implement `composeCheckRunPrompt` — extract check run name, repo full name, PR number, and output summary from check_run payload
+  - [-] 5.1a Implement `composeCheckRunPrompt` — extract check run name, repo full name, PR number, and output summary from check_run payload
     - _Requirements: 11.1_
   - [ ] 5.1b Implement `composeReviewCommentPrompt` — extract comment body, file path, diff hunk, repo full name, PR number
     - _Requirements: 11.2_
