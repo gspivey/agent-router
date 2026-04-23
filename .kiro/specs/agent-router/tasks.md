@@ -190,12 +190,12 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
 - [x] 12. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 13. HTTP server (`server.ts`)
-  - [-] 13.1 Implement Hono app with `POST /webhook` handler: extract raw body, verify HMAC-SHA256 via `verifySignature`, extract `X-GitHub-Event` header, insert event into DB, enqueue onto event queue, respond 200
+- [x] 13. HTTP server (`server.ts`)
+  - [x] 13.1 Implement Hono app with `POST /webhook` handler: extract raw body, verify HMAC-SHA256 via `verifySignature`, extract `X-GitHub-Event` header, insert event into DB, enqueue onto event queue, respond 200
     - _Requirements: 2.1, 2.4, 3.1, 3.4, 3.5, 3.6_
-  - [ ] 13.2 Implement catch-all 404 for non-`/webhook` paths and 405 with `Allow: POST` header for non-POST on `/webhook`
+  - [x] 13.2 Implement catch-all 404 for non-`/webhook` paths and 405 with `Allow: POST` header for non-POST on `/webhook`
     - _Requirements: 2.2, 2.3_
-  - [ ] 13.3 Implement `verifySignature` — HMAC-SHA256 comparison using `crypto.timingSafeEqual`; return false on missing/malformed signature header
+  - [x] 13.3 Implement `verifySignature` — HMAC-SHA256 comparison using `crypto.timingSafeEqual`; return false on missing/malformed signature header
     - _Requirements: 3.1, 3.2, 3.3_
   - [ ]* 13.4 Write property test for HMAC-SHA256 verification correctness
     - **Property 3: HMAC-SHA256 Verification Correctness**
@@ -207,11 +207,11 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - Test 405 for GET, PUT, DELETE, PATCH on `/webhook` with `Allow: POST` header
     - Test 401 for missing `X-Hub-Signature-256` header
     - _Requirements: 2.3, 3.2_
-  - [ ] 13.7 Tier 2 test for signed/unsigned webhooks
+  - [x] 13.7 Tier 2 test for signed/unsigned webhooks
     - _Requirements: 3.1, 3.2, 3.3, 24.6_
 
 - [ ] 14. ACP client (`acp.ts`)
-  - [ ] 14.1a Implement subprocess wrapper — `spawnACPClient` wrapping `child_process.spawn` with stdio `['pipe', 'pipe', 'inherit']`, stderr line capture, process-level `close()` and `kill()` primitives
+  - [-] 14.1a Implement subprocess wrapper — `spawnACPClient` wrapping `child_process.spawn` with stdio `['pipe', 'pipe', 'inherit']`, stderr line capture, process-level `close()` and `kill()` primitives
     - _Requirements: 10.1, 10.3, 10.9_
   - [ ] 14.1b Implement JSON-RPC 2.0 framing layer — newline-delimited read/write over subprocess stdio, request/response correlation by id, expose notifications as `AsyncIterable<ACPNotification>`
     - _Requirements: 10.7_
