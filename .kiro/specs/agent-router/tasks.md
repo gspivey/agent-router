@@ -301,24 +301,24 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 18.5.9 Configure CI — Tier 1+2 on every push, Tier 3 nightly
     - _Requirements: 24.1, 24.7_
 
-- [ ] 19. Entry point and orchestration (`index.ts`)
-  - [ ] 19.1a Implement foundation startup — load config → init logger → init database (WAL mode) → mark stale events
+- [x] 19. Entry point and orchestration (`index.ts`)
+  - [x] 19.1a Implement foundation startup — load config → init logger → init database (WAL mode) → mark stale events
     - _Requirements: 1.1, 5.3, 12.1, 12.2, 12.3_
-  - [ ] 19.1b Implement session infrastructure startup — create session files root → create session manager → wire per-session event queue factory
+  - [x] 19.1b Implement session infrastructure startup — create session files root → create session manager → wire per-session event queue factory
     - _Requirements: 18.1, 18.2_
   - [ ] 19.1c Implement server surfaces startup — bind Hono HTTP server → start CLI IPC server on Unix socket → register cron jobs if retained
     - _Requirements: 1.1, 13.1, 13.2, 21.1_
-  - [ ] 19.2 Wire webhook event processing: on dequeue, run `evaluateWakePolicy` → if wake, compose prompt → call `sessionMgr.injectPrompt` → update event row with `processed_at` and `wake_triggered`
+  - [x] 19.2 Wire webhook event processing: on dequeue, run `evaluateWakePolicy` → if wake, compose prompt → call `sessionMgr.injectPrompt` → update event row with `processed_at` and `wake_triggered`
     - _Requirements: 3.4, 4.3, 6.4, 8.3, 9.4, 10.7_
-  - [ ] 19.3 Wire cron triggers: on cron fire, read roadmap file → parse first unchecked task → compose prompt → create new session or inject into existing session
+  - [x] 19.3 Wire cron triggers: on cron fire, read roadmap file → parse first unchecked task → compose prompt → create new session or inject into existing session
     - Note: If the team adopts the "cron invokes CLI" simplification from the design, this task becomes a no-op.
     - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5_
-  - [ ] 19.4 Implement graceful shutdown: on SIGTERM/SIGINT stop HTTP server, close CLI server socket, wait up to 30s for in-flight events, SIGTERM → 5s → SIGKILL active subprocesses, update active sessions to `abandoned`, WAL checkpoint, exit 0; second signal → immediate SIGKILL + exit 130
+  - [x] 19.4 Implement graceful shutdown: on SIGTERM/SIGINT stop HTTP server, close CLI server socket, wait up to 30s for in-flight events, SIGTERM → 5s → SIGKILL active subprocesses, update active sessions to `abandoned`, WAL checkpoint, exit 0; second signal → immediate SIGKILL + exit 130
     - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7_
-  - [ ] 19.5 End-to-end Tier 2 test for full webhook → wake → session loop
+  - [x] 19.5 End-to-end Tier 2 test for full webhook → wake → session loop
     - _Requirements: 3.4, 6.1, 8.3, 10.7, 24.6_
 
-- [ ] 20. Final checkpoint — Ensure all tests pass
+- [-] 20. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 21. CLI client binary (`bin/agent-router.ts`)
