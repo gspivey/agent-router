@@ -154,18 +154,18 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - **Property 5: FIFO Queue Ordering**
     - **Validates: Requirements 5.1**
 
-- [ ] 11. Session file I/O (`session-files.ts`)
-  - [-] 11.1 Implement `createSessionFiles` — resolve root dir from `$AGENT_ROUTER_HOME` or `$HOME/.agent-router`; create root, `sessions/`, and `daemon.log` on init if missing
+- [x] 11. Session file I/O (`session-files.ts`)
+  - [x] 11.1 Implement `createSessionFiles` — resolve root dir from `$AGENT_ROUTER_HOME` or `$HOME/.agent-router`; create root, `sessions/`, and `daemon.log` on init if missing
     - _Requirements: 18.1, 18.2_
-  - [ ] 11.2 Implement `createSession` — create `<root>/sessions/<session_id>/` with `meta.json` (atomic write, status `active`, empty `prs`, null `completed_at`), `stream.log`, and `prompts.log`; return `SessionPaths`; throw on filesystem errors
+  - [x] 11.2 Implement `createSession` — create `<root>/sessions/<session_id>/` with `meta.json` (atomic write, status `active`, empty `prs`, null `completed_at`), `stream.log`, and `prompts.log`; return `SessionPaths`; throw on filesystem errors
     - _Requirements: 18.3, 18.8, 20.1, 20.2_
-  - [ ] 11.3 Implement `appendStream` — append single-line NDJSON `StreamEntry` to `stream.log` with `fs.appendFileSync` + `fsync`; enforce no embedded newlines in string values
+  - [x] 11.3 Implement `appendStream` — append single-line NDJSON `StreamEntry` to `stream.log` with `fs.appendFileSync` + `fsync`; enforce no embedded newlines in string values
     - _Requirements: 18.4, 18.5, 18.6, 19.1, 19.2_
-  - [ ] 11.4 Implement `appendPrompt` — append `PromptEntry` to `prompts.log` with `ts`, `source`, `prompt` fields; same flush semantics
+  - [x] 11.4 Implement `appendPrompt` — append `PromptEntry` to `prompts.log` with `ts`, `source`, `prompt` fields; same flush semantics
     - _Requirements: 19.7_
-  - [ ] 11.5 Implement `updateMeta` — atomic temp-file-plus-rename pattern; refuse to modify non-active sessions; validate status transitions (`active` → `completed` | `failed` | `abandoned`)
+  - [x] 11.5 Implement `updateMeta` — atomic temp-file-plus-rename pattern; refuse to modify non-active sessions; validate status transitions (`active` → `completed` | `failed` | `abandoned`)
     - _Requirements: 18.7, 20.3, 20.4, 20.5, 20.6, 20.7_
-  - [ ] 11.6 Implement `readMeta`, `listSessions`, `sessionExists` helpers
+  - [x] 11.6 Implement `readMeta`, `listSessions`, `sessionExists` helpers
     - _Requirements: 20.1, 21.4_
   - [ ]* 11.7 Write property test for stream entry structure
     - **Property 16: Stream Entry Structure**
@@ -184,10 +184,10 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - Test no secrets in stream entries
     - Test meta.json initial state
     - _Requirements: 18.8, 19.6, 20.2_
-  - [ ] 11.12 Tier 2 test asserting session directory structure and atomic meta updates
+  - [x] 11.12 Tier 2 test asserting session directory structure and atomic meta updates
     - _Requirements: 18.3, 18.7, 24.6_
 
-- [ ] 12. Checkpoint — Ensure all tests pass
+- [-] 12. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 13. HTTP server (`server.ts`)
