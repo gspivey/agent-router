@@ -127,14 +127,14 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [ ] 8.6 Tier 2 test sending each wakeable event type through fake GitHub
     - _Requirements: 6.1, 6.2, 6.3, 24.6_
 
-- [ ] 9. SQLite database layer (`db.ts`)
-  - [-] 9.1 Implement `initDatabase` — open/create SQLite file, enable WAL mode, execute DDL for `sessions` and `events` tables with indexes using `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`
+- [x] 9. SQLite database layer (`db.ts`)
+  - [x] 9.1 Implement `initDatabase` — open/create SQLite file, enable WAL mode, execute DDL for `sessions` and `events` tables with indexes using `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`
     - _Requirements: 12.1, 12.2, 12.3_
-  - [ ] 9.2a Implement event-related helpers — `insertEvent`, `updateEventProcessed`, `markStaleEvents`
+  - [x] 9.2a Implement event-related helpers — `insertEvent`, `updateEventProcessed`, `markStaleEvents`
     - _Requirements: 4.1, 4.2, 4.3, 5.3_
-  - [ ] 9.2b Implement session lookup + atomic rate limit — `findSession`, `tryAcquireWakeSlot` (single-transaction check-and-update)
+  - [x] 9.2b Implement session lookup + atomic rate limit — `findSession`, `tryAcquireWakeSlot` (single-transaction check-and-update)
     - _Requirements: 8.1, 8.2, 9.1, 9.2, 9.3, 9.4_
-  - [ ] 9.2c Implement lifecycle helpers — `walCheckpoint`, `shutdown` (checkpoint + close)
+  - [x] 9.2c Implement lifecycle helpers — `walCheckpoint`, `shutdown` (checkpoint + close)
     - _Requirements: 16.4_
   - [ ]* 9.3 Write property test for event storage round-trip
     - **Property 4: Event Storage Round-Trip**
@@ -148,7 +148,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 5.3, 8.2_
 
 - [ ] 10. Event queue (`queue.ts`)
-  - [ ] 10.1 Implement `createEventQueue` — array-based FIFO queue with `enqueue`, `startWorker` (sequential async processor), `shutdown` (wait for in-flight event up to timeout), and `length` getter
+  - [-] 10.1 Implement `createEventQueue` — array-based FIFO queue with `enqueue`, `startWorker` (sequential async processor), `shutdown` (wait for in-flight event up to timeout), and `length` getter
     - _Requirements: 5.1, 5.2, 5.4_
   - [ ]* 10.2 Write property test for FIFO queue ordering
     - **Property 5: FIFO Queue Ordering**
