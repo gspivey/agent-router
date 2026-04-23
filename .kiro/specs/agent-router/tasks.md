@@ -210,29 +210,29 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 13.7 Tier 2 test for signed/unsigned webhooks
     - _Requirements: 3.1, 3.2, 3.3, 24.6_
 
-- [ ] 14. ACP client (`acp.ts`)
-  - [-] 14.1a Implement subprocess wrapper — `spawnACPClient` wrapping `child_process.spawn` with stdio `['pipe', 'pipe', 'inherit']`, stderr line capture, process-level `close()` and `kill()` primitives
+- [x] 14. ACP client (`acp.ts`)
+  - [x] 14.1a Implement subprocess wrapper — `spawnACPClient` wrapping `child_process.spawn` with stdio `['pipe', 'pipe', 'inherit']`, stderr line capture, process-level `close()` and `kill()` primitives
     - _Requirements: 10.1, 10.3, 10.9_
   - [ ] 14.1b Implement JSON-RPC 2.0 framing layer — newline-delimited read/write over subprocess stdio, request/response correlation by id, expose notifications as `AsyncIterable<ACPNotification>`
     - _Requirements: 10.7_
-  - [ ] 14.2 Implement `initialize` — send ACP `initialize` request with `protocolVersion: 1` and client capabilities `['fs.readTextFile', 'fs.writeTextFile', 'terminal']`; handle version mismatch by closing subprocess
+  - [x] 14.2 Implement `initialize` — send ACP `initialize` request with `protocolVersion: 1` and client capabilities `['fs.readTextFile', 'fs.writeTextFile', 'terminal']`; handle version mismatch by closing subprocess
     - _Requirements: 10.2, 10.4_
-  - [ ] 14.3 Implement `loadSession` and `sendPrompt` — send `session/load` and `session/prompt` JSON-RPC requests; expose `notifications` as `AsyncIterable<ACPNotification>` for the session manager to consume
+  - [x] 14.3 Implement `loadSession` and `sendPrompt` — send `session/load` and `session/prompt` JSON-RPC requests; expose `notifications` as `AsyncIterable<ACPNotification>` for the session manager to consume
     - _Requirements: 10.6, 10.7, 10.8_
-  - [ ] 14.4 Implement auto-approval of `session/request_permission` notifications
+  - [x] 14.4 Implement auto-approval of `session/request_permission` notifications
     - _Requirements: 10.5_
-  - [ ] 14.5 Implement stderr line capture — translate each stderr line into a StreamEntry with source: "agent", type: "stderr"
+  - [x] 14.5 Implement stderr line capture — translate each stderr line into a StreamEntry with source: "agent", type: "stderr"
     - _Requirements: 10.13_
   - [ ]* 14.6 Write unit tests for ACP error paths
     - Test protocol version mismatch handling
     - Test spawn failure handling
     - Test non-zero exit code handling
     - _Requirements: 10.4, 10.10, 10.11_
-  - [ ] 14.7 Tier 2 test running simple-echo scenario
+  - [x] 14.7 Tier 2 test running simple-echo scenario
     - _Requirements: 10.2, 10.6, 10.7, 24.6_
 
 - [ ] 15. Session manager (`session-mgr.ts`)
-  - [ ] 15.1a Implement session registry — in-memory `Map<sessionId, SessionHandle>` with add, remove, get, list, has methods
+  - [-] 15.1a Implement session registry — in-memory `Map<sessionId, SessionHandle>` with add, remove, get, list, has methods
     - _Requirements: supports 18.3, 20.2_
   - [ ] 15.1b Implement `createSession` — orchestrate session file creation, ACP subprocess spawn, initialize, new per-session event queue + worker; insert into registry; return SessionHandle
     - _Requirements: 18.3, 20.2_
