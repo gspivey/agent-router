@@ -5,7 +5,7 @@ import type { SessionManager } from './session-mgr.js';
 import type { SessionFiles } from './session-files.js';
 
 export interface CliRequest {
-  op: 'new_session' | 'list_sessions' | 'inject_prompt' | 'terminate_session';
+  op: 'new_session' | 'list_sessions' | 'inject_prompt' | 'terminate_session' | 'register_pr' | 'session_status' | 'complete_session';
   [key: string]: unknown;
 }
 
@@ -68,6 +68,58 @@ export function createCliServer(deps: {
         throw new Error('Missing or empty "session_id" parameter');
       }
       await sessionMgr.terminateSession(sessionId);
+      return { ok: true };
+    },
+
+    async register_pr(req: CliRequest): Promise<Record<string, unknown>> {
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('Missing or empty "session_id" parameter');
+      }
+      const repo = req['repo'];
+      if (typeof repo !== 'string' || repo.length === 0) {
+        throw new Error('Missing or empty "repo" parameter');
+      }
+      const prNumber = req['pr_number'];
+      if (typeof prNumber !== 'number' || !Number.isInteger(prNumber) || prNumber <= 0) {
+        throw new Error('Missing or invalid "pr_number" parameter');
+      }
+      await sessionMgr.registerPR(sessionId, repo, prNumber);
+      return { ok: true };
+    },
+
+    async session_status(req: CliRequest): Promise<Record<string, unknown>> {
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('Missing or empty "session_id" parameter');
+      }
+      const meta = sessionFiles.readMeta(sessionId);
+      return {
+        original_prompt: meta.original_prompt,
+        prs: meta.prs,
+        status: meta.status,
+      };
+    },
+
+    async complete_session(req: CliRequest): Promise<Record<string, unknown>> {
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('Missing or empty "session_id" parameter');
+      }
+      const reason = req['reason'];
+      if (typeof reason !== 'string' || reason.length === 0) {
+        throw new Error('Missing or empty "reason" parameter');
+      }
+      sessionFiles.updateMeta(sessionId, {
+        status: 'completed',
+        completed_at: Math.floor(Date.now() / 1000),
+      });
+      sessionFiles.appendStream(sessionId, {
+        ts: new Date().toISOString(),
+        source: 'router',
+        type: 'session_ended',
+        reason,
+      });
       return { ok: true };
     },
   };

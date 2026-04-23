@@ -253,8 +253,8 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 15.7 Tier 2 tests for session creation, PR registration, termination
     - _Requirements: 18.3, 20.3, 20.6, 24.6_
 
-- [ ] 16. CLI IPC server (`cli-server.ts`)
-  - [-] 16.1a Implement socket listener and NDJSON request framing — Unix domain socket at `<root>/sock`, accept one connection at a time, parse NDJSON requests; implement read-only op `list_sessions`
+- [x] 16. CLI IPC server (`cli-server.ts`)
+  - [x] 16.1a Implement socket listener and NDJSON request framing — Unix domain socket at `<root>/sock`, accept one connection at a time, parse NDJSON requests; implement read-only op `list_sessions`
     - _Requirements: 21.1, 21.2, 21.4_
   - [ ] 16.1b Implement mutation ops — `new_session`, `inject_prompt`, `terminate_session`
     - _Requirements: 21.3, 21.5, 21.7_
@@ -264,11 +264,11 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - Test terminate_session returns ok
     - Test inject_prompt dispatches to session manager
     - _Requirements: 21.3, 21.4, 21.5, 21.7_
-  - [ ] 16.3 Tier 2 test for each op
+  - [x] 16.3 Tier 2 test for each op
     - _Requirements: 21.3, 21.4, 21.5, 21.7, 24.6_
 
 - [ ] 17. MCP server (`mcp-server.ts`)
-  - [ ] 17.1a Implement MCP server plumbing and read-only tool — read `AGENT_ROUTER_SESSION_ID` from env, connect to daemon socket, implement MCP JSON-RPC handler, expose `session_status` tool
+  - [-] 17.1a Implement MCP server plumbing and read-only tool — read `AGENT_ROUTER_SESSION_ID` from env, connect to daemon socket, implement MCP JSON-RPC handler, expose `session_status` tool
     - _Requirements: 21.1_
   - [ ] 17.1b Implement mutation tools — `register_pr` and `complete_session`
     - _Requirements: 20.3, 20.4_
