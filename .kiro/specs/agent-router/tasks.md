@@ -41,10 +41,10 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 2.10 Write smoke test — `test/tier2/smoke.test.ts` exercising full daemon with fake backends
     - _Requirements: 24.6_
 
-- [-] 3. Configuration loading and validation (`config.ts`)
+- [x] 3. Configuration loading and validation (`config.ts`)
   - [x] 3.1 Implement `resolveEnvValues` — recursively walk a config object and replace `ENV:X` string values with `process.env[X]`, throwing `FatalError` if the env var is unset
     - _Requirements: 1.2, 1.4_
-  - [ ] 3.2 Implement `validateConfig` — validate `port` ∈ [1, 65535], non-empty `webhookSecret`, non-empty `owner`/`name` in each repo, valid cron entries with matching repo, and `kiroPath` pointing to an executable file; throw `FatalError` with descriptive message on failure
+  - [x] 3.2 Implement `validateConfig` — validate `port` ∈ [1, 65535], non-empty `webhookSecret`, non-empty `owner`/`name` in each repo, valid cron entries with matching repo, and `kiroPath` pointing to an executable file; throw `FatalError` with descriptive message on failure
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6_
   - [x] 3.3 Implement `loadConfig` — read `./config.json`, parse JSON (throw `FatalError` on missing/invalid), call `resolveEnvValues`, call `validateConfig`, return typed `AgentRouterConfig`
     - _Requirements: 1.1, 1.3_
@@ -59,11 +59,11 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - Test invalid JSON throws FatalError
     - Test missing env var throws FatalError with variable name
     - _Requirements: 1.3, 1.4, 15.6_
-  - [-] 3.7 Tier 2 test asserting daemon refuses to start with invalid config
+  - [x] 3.7 Tier 2 test asserting daemon refuses to start with invalid config
     - _Requirements: 15.6, 24.6_
 
 - [ ] 4. Structured logger (`log.ts`)
-  - [ ] 4.1 Implement `createLogger` — read `LOG_LEVEL` env var (default `info`), return `Logger` that writes NDJSON to stdout with `timestamp` (ISO 8601 UTC), `level`, `message`, and merged fields; implement `child()` for field inheritance
+  - [-] 4.1 Implement `createLogger` — read `LOG_LEVEL` env var (default `info`), return `Logger` that writes NDJSON to stdout with `timestamp` (ISO 8601 UTC), `level`, `message`, and merged fields; implement `child()` for field inheritance
     - _Requirements: 17.1, 17.2, 17.6_
   - [ ] 4.2 Implement secret filtering — ensure no log entry contains `webhookSecret`, resolved ENV values, or common secret patterns
     - _Requirements: 17.5_
