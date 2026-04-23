@@ -1,0 +1,27 @@
+name: Tier 3 Nightly
+
+on:
+  schedule:
+    # Run nightly at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  test-tier3:
+    name: Tier 3 Tests (Real GitHub + Real Kiro)
+    runs-on: ubuntu-latest
+    environment: tier3-integration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration
+        env:
+          GITHUB_TOKEN: ${{ secrets.TIER3_GITHUB_TOKEN }}
+          GITHUB_TEST_REPO: ${{ secrets.TIER3_GITHUB_TEST_REPO }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.TIER3_GITHUB_WEBHOOK_SECRET }}
+          WEBHOOK_URL: ${{ secrets.TIER3_WEBHOOK_URL }}
+          KIRO_PATH: ${{ secrets.TIER3_KIRO_PATH }}

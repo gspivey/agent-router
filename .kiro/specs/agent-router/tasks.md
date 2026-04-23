@@ -282,23 +282,23 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 18.5 Tier 3 real-backend harness
-  - [ ] 18.5.1 Implement `test/harness/real-github.ts` — RealGitHubBackend using Octokit
+  - [x] 18.5.1 Implement `test/harness/real-github.ts` — RealGitHubBackend using Octokit
     - _Requirements: 22.1, 24.7_
-  - [ ] 18.5.2 Implement artifact cleanup — reset() closes PRs, deletes test branches
+  - [x] 18.5.2 Implement artifact cleanup — reset() closes PRs, deletes test branches
     - _Requirements: 22.1_
-  - [ ] 18.5.3 Implement webhook delivery polling with 30-second timeout
+  - [x] 18.5.3 Implement webhook delivery polling with 30-second timeout
     - _Requirements: 24.7_
-  - [ ] 18.5.4 Implement rate-limit detection — fail clearly on 403
+  - [x] 18.5.4 Implement rate-limit detection — fail clearly on 403
     - _Requirements: 24.7_
-  - [ ] 18.5.5 Implement `test/harness/real-kiro.ts` — real kiro-cli spawn, getActions from stream.log
+  - [x] 18.5.5 Implement `test/harness/real-kiro.ts` — real kiro-cli spawn, getActions from stream.log
     - _Requirements: 22.2, 24.7_
-  - [ ] 18.5.6 Port smoke test to Tier 3
+  - [x] 18.5.6 Port smoke test to Tier 3
     - _Requirements: 24.9_
-  - [ ] 18.5.7 Port 3-5 critical Tier 2 tests to Tier 3
+  - [x] 18.5.7 Port 3-5 critical Tier 2 tests to Tier 3
     - _Requirements: 24.9_
-  - [ ] 18.5.8 Update operational guide with Tier 3 setup instructions
+  - [x] 18.5.8 Update operational guide with Tier 3 setup instructions
     - _Requirements: 24.8_
-  - [ ] 18.5.9 Configure CI — Tier 1+2 on every push, Tier 3 nightly
+  - [x] 18.5.9 Configure CI — Tier 1+2 on every push, Tier 3 nightly
     - _Requirements: 24.1, 24.7_
 
 - [ ] 19. Entry point and orchestration (`index.ts`)

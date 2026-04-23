@@ -20,6 +20,7 @@
     "tsx": "^4.19.3"
   },
   "devDependencies": {
+    "@octokit/rest": "^22.0.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.15.3",
     "@types/node-cron": "^3.0.11",
