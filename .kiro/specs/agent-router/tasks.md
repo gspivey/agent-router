@@ -112,7 +112,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. Wake policy and event routing (`router.ts`)
-  - [ ] 8.1 Implement `filterEventType` — classify events as wakeable per the three patterns: `check_run` completed+failure, `pull_request_review_comment` created, `issue_comment` created with `/agent` command trigger matching `^/agent(\s|$)`
+  - [-] 8.1 Implement `filterEventType` — classify events as wakeable per the three patterns: `check_run` completed+failure, `pull_request_review_comment` created, `issue_comment` created with `/agent` command trigger matching `^/agent(\s|$)`
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
   - [ ] 8.2 Implement `resolvePRNumber` — extract PR number from payload per event type: `pull_request.number` for review comments, `issue.number` for issue comments (with `issue.pull_request` presence check), first entry of `check_run.pull_requests` for check runs; return null on failure
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
