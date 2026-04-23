@@ -231,30 +231,30 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 14.7 Tier 2 test running simple-echo scenario
     - _Requirements: 10.2, 10.6, 10.7, 24.6_
 
-- [ ] 15. Session manager (`session-mgr.ts`)
-  - [-] 15.1a Implement session registry — in-memory `Map<sessionId, SessionHandle>` with add, remove, get, list, has methods
+- [x] 15. Session manager (`session-mgr.ts`)
+  - [x] 15.1a Implement session registry — in-memory `Map<sessionId, SessionHandle>` with add, remove, get, list, has methods
     - _Requirements: supports 18.3, 20.2_
-  - [ ] 15.1b Implement `createSession` — orchestrate session file creation, ACP subprocess spawn, initialize, new per-session event queue + worker; insert into registry; return SessionHandle
+  - [x] 15.1b Implement `createSession` — orchestrate session file creation, ACP subprocess spawn, initialize, new per-session event queue + worker; insert into registry; return SessionHandle
     - _Requirements: 18.3, 20.2_
-  - [ ] 15.2 Implement `injectPrompt` — send `session/prompt` to active session's ACP client, append to `prompts.log`, append `prompt_injected` stream entry
+  - [x] 15.2 Implement `injectPrompt` — send `session/prompt` to active session's ACP client, append to `prompts.log`, append `prompt_injected` stream entry
     - _Requirements: 10.7, 19.7, 21.7_
-  - [ ] 15.3 Implement `registerPR` — insert/update session-PR mapping in DB, update `meta.json` atomically to append PR entry
+  - [x] 15.3 Implement `registerPR` — insert/update session-PR mapping in DB, update `meta.json` atomically to append PR entry
     - _Requirements: 20.3_
-  - [ ] 15.4 Implement `terminateSession` — SIGTERM → 5s → SIGKILL, update `meta.json` to `status: "abandoned"`
+  - [x] 15.4 Implement `terminateSession` — SIGTERM → 5s → SIGKILL, update `meta.json` to `status: "abandoned"`
     - _Requirements: 20.6, 21.5_
-  - [ ] 15.5a Implement notification → stream entry translation — consume `AsyncIterable<ACPNotification>`, translate each to StreamEntry, write via `sessionFiles.appendStream`
+  - [x] 15.5a Implement notification → stream entry translation — consume `AsyncIterable<ACPNotification>`, translate each to StreamEntry, write via `sessionFiles.appendStream`
     - _Requirements: 10.8, 19.1_
-  - [ ] 15.5b Implement completion detection — subprocess exit 0 after `complete_session` MCP call → update meta.json to status: "completed"
+  - [x] 15.5b Implement completion detection — subprocess exit 0 after `complete_session` MCP call → update meta.json to status: "completed"
     - _Requirements: 20.4_
   - [ ] 15.5c Implement failure detection and timeout enforcement — subprocess crash/non-zero exit → status: "failed"; 10-minute max wake duration, on expiry SIGTERM → 5s → SIGKILL
     - _Requirements: 10.11, 10.12, 20.5_
-  - [ ] 15.6 Implement `shutdown` — update all active sessions' `meta.json` to `status: "abandoned"`, terminate subprocesses
+  - [x] 15.6 Implement `shutdown` — update all active sessions' `meta.json` to `status: "abandoned"`, terminate subprocesses
     - _Requirements: 16.7_
-  - [ ] 15.7 Tier 2 tests for session creation, PR registration, termination
+  - [x] 15.7 Tier 2 tests for session creation, PR registration, termination
     - _Requirements: 18.3, 20.3, 20.6, 24.6_
 
 - [ ] 16. CLI IPC server (`cli-server.ts`)
-  - [ ] 16.1a Implement socket listener and NDJSON request framing — Unix domain socket at `<root>/sock`, accept one connection at a time, parse NDJSON requests; implement read-only op `list_sessions`
+  - [-] 16.1a Implement socket listener and NDJSON request framing — Unix domain socket at `<root>/sock`, accept one connection at a time, parse NDJSON requests; implement read-only op `list_sessions`
     - _Requirements: 21.1, 21.2, 21.4_
   - [ ] 16.1b Implement mutation ops — `new_session`, `inject_prompt`, `terminate_session`
     - _Requirements: 21.3, 21.5, 21.7_
