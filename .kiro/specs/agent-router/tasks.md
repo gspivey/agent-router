@@ -187,11 +187,11 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 11.12 Tier 2 test asserting session directory structure and atomic meta updates
     - _Requirements: 18.3, 18.7, 24.6_
 
-- [-] 12. Checkpoint — Ensure all tests pass
+- [x] 12. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 13. HTTP server (`server.ts`)
-  - [ ] 13.1 Implement Hono app with `POST /webhook` handler: extract raw body, verify HMAC-SHA256 via `verifySignature`, extract `X-GitHub-Event` header, insert event into DB, enqueue onto event queue, respond 200
+  - [-] 13.1 Implement Hono app with `POST /webhook` handler: extract raw body, verify HMAC-SHA256 via `verifySignature`, extract `X-GitHub-Event` header, insert event into DB, enqueue onto event queue, respond 200
     - _Requirements: 2.1, 2.4, 3.1, 3.4, 3.5, 3.6_
   - [ ] 13.2 Implement catch-all 404 for non-`/webhook` paths and 405 with `Allow: POST` header for non-POST on `/webhook`
     - _Requirements: 2.2, 2.3_
