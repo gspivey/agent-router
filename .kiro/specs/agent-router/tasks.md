@@ -112,11 +112,11 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. Wake policy and event routing (`router.ts`)
-  - [-] 8.1 Implement `filterEventType` — classify events as wakeable per the three patterns: `check_run` completed+failure, `pull_request_review_comment` created, `issue_comment` created with `/agent` command trigger matching `^/agent(\s|$)`
+  - [x] 8.1 Implement `filterEventType` — classify events as wakeable per the three patterns: `check_run` completed+failure, `pull_request_review_comment` created, `issue_comment` created with `/agent` command trigger matching `^/agent(\s|$)`
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
-  - [ ] 8.2 Implement `resolvePRNumber` — extract PR number from payload per event type: `pull_request.number` for review comments, `issue.number` for issue comments (with `issue.pull_request` presence check), first entry of `check_run.pull_requests` for check runs; return null on failure
+  - [x] 8.2 Implement `resolvePRNumber` — extract PR number from payload per event type: `pull_request.number` for review comments, `issue.number` for issue comments (with `issue.pull_request` presence check), first entry of `check_run.pull_requests` for check runs; return null on failure
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
-  - [ ] 8.3 Implement `evaluateWakePolicy` — orchestrate the pipeline: filter event type → resolve PR → lookup session in DB → check rate limit via `db.tryAcquireWakeSlot`; return `WakeDecision` with reason string for logging
+  - [x] 8.3 Implement `evaluateWakePolicy` — orchestrate the pipeline: filter event type → resolve PR → lookup session in DB → check rate limit via `db.tryAcquireWakeSlot`; return `WakeDecision` with reason string for logging
     - _Requirements: 6.4, 8.1, 8.2, 9.1, 9.2, 9.3_
   - [ ]* 8.4 Write property test for event type filtering
     - **Property 6: Event Type Filtering**
@@ -128,7 +128,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 6.1, 6.2, 6.3, 24.6_
 
 - [ ] 9. SQLite database layer (`db.ts`)
-  - [ ] 9.1 Implement `initDatabase` — open/create SQLite file, enable WAL mode, execute DDL for `sessions` and `events` tables with indexes using `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`
+  - [-] 9.1 Implement `initDatabase` — open/create SQLite file, enable WAL mode, execute DDL for `sessions` and `events` tables with indexes using `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`
     - _Requirements: 12.1, 12.2, 12.3_
   - [ ] 9.2a Implement event-related helpers — `insertEvent`, `updateEventProcessed`, `markStaleEvents`
     - _Requirements: 4.1, 4.2, 4.3, 5.3_

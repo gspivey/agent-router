@@ -248,6 +248,7 @@ describe('evaluateWakePolicy', () => {
         lastWakedAt: null,
       }),
       tryAcquireWakeSlot: () => true,
+      insertSession: () => undefined,
       walCheckpoint: () => undefined,
       shutdown: () => Promise.resolve(),
       ...overrides,
