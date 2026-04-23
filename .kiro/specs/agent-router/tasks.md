@@ -321,31 +321,31 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
 - [x] 20. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 21. CLI client binary (`bin/agent-router.ts`)
-  - [-] 21.1 Implement CLI entry point and command dispatch — parse argv, dispatch to subcommand handlers, connect to daemon socket
+- [x] 21. CLI client binary (`bin/agent-router.ts`)
+  - [x] 21.1 Implement CLI entry point and command dispatch — parse argv, dispatch to subcommand handlers, connect to daemon socket
     - _Requirements: 21.6, 21.7_
-  - [ ] 21.2 Implement `prompt --new` subcommand — read from stdin or `--file`, send `new_session` op, by default tail stream log and pretty-print
+  - [x] 21.2 Implement `prompt --new` subcommand — read from stdin or `--file`, send `new_session` op, by default tail stream log and pretty-print
     - _Requirements: 21.3, 21.6, 21.8_
-  - [ ] 21.3 Implement `prompt --session-id <id>` subcommand — send additional prompt text via `inject_prompt` op
+  - [x] 21.3 Implement `prompt --session-id <id>` subcommand — send additional prompt text via `inject_prompt` op
     - _Requirements: 21.7_
-  - [ ] 21.4 Implement `prompt --new --quiet` flag — create session, print session_id, exit without tailing
+  - [x] 21.4 Implement `prompt --new --quiet` flag — create session, print session_id, exit without tailing
     - _Requirements: 21.12_
-  - [ ] 21.5 Implement `ls` subcommand — send `list_sessions`, format as human-readable table
+  - [x] 21.5 Implement `ls` subcommand — send `list_sessions`, format as human-readable table
     - _Requirements: 21.11_
-  - [ ] 21.6 Implement `tail <session_id>` subcommand — follow `stream.log` with pretty-printing (router events gray, agent messages default, tool calls cyan, errors red)
+  - [x] 21.6 Implement `tail <session_id>` subcommand — follow `stream.log` with pretty-printing (router events gray, agent messages default, tool calls cyan, errors red)
     - _Requirements: 21.8_
-  - [ ] 21.7 Implement tail flags — `--raw` (NDJSON unchanged), `--prompts` (tail `prompts.log`)
+  - [x] 21.7 Implement tail flags — `--raw` (NDJSON unchanged), `--prompts` (tail `prompts.log`)
     - _Requirements: 21.9, 21.10_
-  - [ ] 21.8 Implement `terminate <session_id>` subcommand — send `terminate_session` op
+  - [x] 21.8 Implement `terminate <session_id>` subcommand — send `terminate_session` op
     - _Requirements: 21.5_
-  - [ ] 21.9 Implement CLI SIGINT handling — on Ctrl-C during tail, stop file watching and exit 0; session continues
+  - [x] 21.9 Implement CLI SIGINT handling — on Ctrl-C during tail, stop file watching and exit 0; session continues
     - _Requirements: 21.13_
   - [ ]* 21.10 Unit tests for pretty-print formatting and flag handling
-  - [ ] 21.11 Tier 2 test invoking CLI as subprocess
+  - [x] 21.11 Tier 2 test invoking CLI as subprocess
     - _Requirements: 21.3, 21.4, 21.5, 24.6_
 
 - [ ] 22. Operational setup
-  - [ ] 22.1 Write `scripts/setup-tunnel.sh` — detect platform, install cloudflared, create named tunnel, print stable HTTPS URL
+  - [-] 22.1 Write `scripts/setup-tunnel.sh` — detect platform, install cloudflared, create named tunnel, print stable HTTPS URL
   - [ ] 22.2 Write `scripts/install-mcp-config.sh` — append Agent Router MCP server entry to Kiro's MCP config
   - [ ] 22.3 Write README.md operational section — step-by-step first-run guide
   - [ ] 22.4 Document LEARNINGS.md starter template

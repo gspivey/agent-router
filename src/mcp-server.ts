@@ -280,7 +280,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
 
         // Notifications don't have an id — handle them but don't respond
         if (!('id' in req)) {
-          handleRequest({ ...req, id: 0 } as JsonRpcRequest).catch(() => {});
+          handleRequest({ method: req.method, params: req.params, jsonrpc: req.jsonrpc, id: 0 }).catch(() => {});
           return;
         }
 

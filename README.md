@@ -155,6 +155,133 @@ Tests skip gracefully if the required environment variables are not set. Tier 3 
 - Tier 1 + Tier 2 run on every push (fast, no credentials needed)
 - Tier 3 runs as a nightly scheduled job (requires GitHub secrets)
 
+## First-Run Guide
+
+Step-by-step setup from a fresh clone to a running daemon receiving GitHub webhooks.
+
+### Prerequisites
+
+- Node.js 20+
+- Git
+- A GitHub repository you control (for webhook configuration)
+- A GitHub personal access token with `repo` scope
+- Kiro CLI installed (note the absolute path)
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Create config.json
+
+```bash
+cp config.example.json config.json
+```
+
+Edit `config.json`:
+
+```json
+{
+  "port": 3000,
+  "webhookSecret": "ENV:GITHUB_WEBHOOK_SECRET",
+  "kiroPath": "/path/to/kiro",
+  "rateLimit": { "perPRSeconds": 60 },
+  "repos": [
+    { "owner": "your-org", "name": "your-repo" }
+  ],
+  "cron": []
+}
+```
+
+Set the environment variable:
+
+```bash
+export GITHUB_WEBHOOK_SECRET="your-secret-here"
+```
+
+### 3. Set up the cloudflared tunnel
+
+```bash
+./scripts/setup-tunnel.sh
+```
+
+This detects your platform, installs `cloudflared` if needed, creates a named tunnel (`agent-router` by default), and prints the stable HTTPS URL. You can customize the tunnel name and port:
+
+```bash
+./scripts/setup-tunnel.sh my-tunnel 3000
+```
+
+Start the tunnel in a separate terminal:
+
+```bash
+cloudflared tunnel run agent-router
+```
+
+### 4. Configure the GitHub webhook
+
+1. Go to your repository's Settings → Webhooks → Add webhook
+2. Set Payload URL to `https://<tunnel-id>.cfargotunnel.com/webhook`
+3. Set Content type to `application/json`
+4. Set Secret to the same value as `GITHUB_WEBHOOK_SECRET`
+5. Select individual events: `Check runs`, `Issue comments`, `Pull request review comments`
+
+### 5. Install the MCP config
+
+```bash
+./scripts/install-mcp-config.sh
+```
+
+This adds the Agent Router MCP server entry to `~/.kiro/settings/mcp.json` so Kiro can communicate back to the daemon during sessions.
+
+### 6. Start the daemon
+
+```bash
+npm run dev
+```
+
+The daemon binds to the configured port and starts listening for webhooks. Logs are structured NDJSON on stdout.
+
+### 7. Create your first session
+
+In another terminal:
+
+```bash
+echo "Fix the failing CI check on PR #1" | agent-router prompt --new
+```
+
+Or create a session quietly and tail it separately:
+
+```bash
+SESSION_ID=$(echo "Fix CI" | agent-router prompt --new --quiet)
+agent-router tail "$SESSION_ID"
+```
+
+### 8. Monitor sessions
+
+```bash
+agent-router ls                          # List all sessions
+agent-router tail <session_id>           # Follow session output
+agent-router tail <session_id> --raw     # Raw NDJSON stream
+agent-router tail <session_id> --prompts # Follow prompts log
+```
+
+## Maintenance
+
+### Session cleanup
+
+Session directories accumulate under `~/.agent-router/sessions/`. To prune sessions older than 30 days:
+
+```bash
+find ~/.agent-router/sessions -maxdepth 1 -mtime +30 -exec rm -rf {} +
+```
+
+Run this periodically (e.g., via cron) to reclaim disk space. Active sessions are not affected — only directories whose modification time is older than 30 days are removed.
+
+### Database
+
+The SQLite database at `~/.agent-router/agent-router.db` uses WAL mode. It does not require manual maintenance. The daemon performs a WAL checkpoint on graceful shutdown.
+
 ## License
 
 MIT
