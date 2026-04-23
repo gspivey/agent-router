@@ -278,10 +278,10 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 17.3 Tier 2 test for register_pr
     - _Requirements: 20.3, 24.6_
 
-- [-] 18. Checkpoint — Ensure all tests pass
+- [x] 18. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 18.5 Tier 3 real-backend harness
+- [x] 18.5 Tier 3 real-backend harness
   - [x] 18.5.1 Implement `test/harness/real-github.ts` — RealGitHubBackend using Octokit
     - _Requirements: 22.1, 24.7_
   - [x] 18.5.2 Implement artifact cleanup — reset() closes PRs, deletes test branches
