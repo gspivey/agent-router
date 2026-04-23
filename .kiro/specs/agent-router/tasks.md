@@ -46,7 +46,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 1.2, 1.4_
   - [ ] 3.2 Implement `validateConfig` — validate `port` ∈ [1, 65535], non-empty `webhookSecret`, non-empty `owner`/`name` in each repo, valid cron entries with matching repo, and `kiroPath` pointing to an executable file; throw `FatalError` with descriptive message on failure
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6_
-  - [-] 3.3 Implement `loadConfig` — read `./config.json`, parse JSON (throw `FatalError` on missing/invalid), call `resolveEnvValues`, call `validateConfig`, return typed `AgentRouterConfig`
+  - [x] 3.3 Implement `loadConfig` — read `./config.json`, parse JSON (throw `FatalError` on missing/invalid), call `resolveEnvValues`, call `validateConfig`, return typed `AgentRouterConfig`
     - _Requirements: 1.1, 1.3_
   - [ ]* 3.4 Write property test for ENV: value resolution
     - **Property 1: ENV: Value Resolution**
@@ -59,7 +59,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - Test invalid JSON throws FatalError
     - Test missing env var throws FatalError with variable name
     - _Requirements: 1.3, 1.4, 15.6_
-  - [ ] 3.7 Tier 2 test asserting daemon refuses to start with invalid config
+  - [-] 3.7 Tier 2 test asserting daemon refuses to start with invalid config
     - _Requirements: 15.6, 24.6_
 
 - [ ] 4. Structured logger (`log.ts`)
