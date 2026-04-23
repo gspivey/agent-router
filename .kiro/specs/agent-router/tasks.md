@@ -267,18 +267,18 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 16.3 Tier 2 test for each op
     - _Requirements: 21.3, 21.4, 21.5, 21.7, 24.6_
 
-- [ ] 17. MCP server (`mcp-server.ts`)
-  - [-] 17.1a Implement MCP server plumbing and read-only tool — read `AGENT_ROUTER_SESSION_ID` from env, connect to daemon socket, implement MCP JSON-RPC handler, expose `session_status` tool
+- [x] 17. MCP server (`mcp-server.ts`)
+  - [x] 17.1a Implement MCP server plumbing and read-only tool — read `AGENT_ROUTER_SESSION_ID` from env, connect to daemon socket, implement MCP JSON-RPC handler, expose `session_status` tool
     - _Requirements: 21.1_
   - [ ] 17.1b Implement mutation tools — `register_pr` and `complete_session`
     - _Requirements: 20.3, 20.4_
   - [ ]* 17.2 Write unit tests for MCP tool dispatch
     - Test register_pr, session_status, complete_session return expected results
     - _Requirements: 20.3_
-  - [ ] 17.3 Tier 2 test for register_pr
+  - [x] 17.3 Tier 2 test for register_pr
     - _Requirements: 20.3, 24.6_
 
-- [ ] 18. Checkpoint — Ensure all tests pass
+- [-] 18. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 18.5 Tier 3 real-backend harness
