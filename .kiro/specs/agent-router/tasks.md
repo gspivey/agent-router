@@ -147,15 +147,15 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - Test `findSession` returns null when no session exists
     - _Requirements: 5.3, 8.2_
 
-- [ ] 10. Event queue (`queue.ts`)
-  - [-] 10.1 Implement `createEventQueue` — array-based FIFO queue with `enqueue`, `startWorker` (sequential async processor), `shutdown` (wait for in-flight event up to timeout), and `length` getter
+- [x] 10. Event queue (`queue.ts`)
+  - [x] 10.1 Implement `createEventQueue` — array-based FIFO queue with `enqueue`, `startWorker` (sequential async processor), `shutdown` (wait for in-flight event up to timeout), and `length` getter
     - _Requirements: 5.1, 5.2, 5.4_
   - [ ]* 10.2 Write property test for FIFO queue ordering
     - **Property 5: FIFO Queue Ordering**
     - **Validates: Requirements 5.1**
 
 - [ ] 11. Session file I/O (`session-files.ts`)
-  - [ ] 11.1 Implement `createSessionFiles` — resolve root dir from `$AGENT_ROUTER_HOME` or `$HOME/.agent-router`; create root, `sessions/`, and `daemon.log` on init if missing
+  - [-] 11.1 Implement `createSessionFiles` — resolve root dir from `$AGENT_ROUTER_HOME` or `$HOME/.agent-router`; create root, `sessions/`, and `daemon.log` on init if missing
     - _Requirements: 18.1, 18.2_
   - [ ] 11.2 Implement `createSession` — create `<root>/sessions/<session_id>/` with `meta.json` (atomic write, status `active`, empty `prs`, null `completed_at`), `stream.log`, and `prompts.log`; return `SessionPaths`; throw on filesystem errors
     - _Requirements: 18.3, 18.8, 20.1, 20.2_
