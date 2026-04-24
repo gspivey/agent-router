@@ -239,7 +239,13 @@ export function createSessionManager(deps: {
       await acp.initialize();
       sessionLog.info('ACP initialized');
 
-      // 4. Create per-session event queue + worker
+      // 4. Create ACP session and send initial prompt immediately
+      //    Kiro exits if no prompt arrives shortly after session/new,
+      //    so we pipeline both requests to prevent a gap.
+      const acpSessionId = await acp.newSessionWithPrompt(process.cwd(), originalPrompt);
+      sessionLog.info('ACP session created with prompt', { acpSessionId });
+
+      // 6. Create per-session event queue + worker
       const eventQueue = createEventQueue();
 
       // 5. Build handle
@@ -260,6 +266,15 @@ export function createSessionManager(deps: {
         source: 'router',
         type: 'session_started',
         original_prompt: originalPrompt,
+      });
+
+      // 7b. Record initial prompt
+      sessionFiles.appendPrompt(sessionId, 'cli', originalPrompt);
+      sessionFiles.appendStream(sessionId, {
+        ts: new Date().toISOString(),
+        source: 'router',
+        type: 'prompt_injected',
+        prompt_source: 'cli',
       });
 
       // 8. Start background notification consumer

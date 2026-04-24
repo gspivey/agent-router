@@ -10,6 +10,8 @@ export interface ACPNotification {
 
 export interface ACPClient {
   initialize(): Promise<void>;
+  newSession(cwd: string): Promise<string>;
+  newSessionWithPrompt(cwd: string, prompt: string): Promise<string>;
   loadSession(sessionId: string): Promise<void>;
   sendPrompt(prompt: string): Promise<void>;
   readonly notifications: AsyncIterable<ACPNotification>;
@@ -235,11 +237,17 @@ export function spawnACPClient(
     });
   }
 
+  let acpSessionId = '';
+
   return {
     async initialize(): Promise<void> {
       const result = await sendRequest('initialize', {
         protocolVersion: 1,
-        clientCapabilities: ['fs.readTextFile', 'fs.writeTextFile', 'terminal'],
+        clientCapabilities: {
+          fs: { readTextFile: true, writeTextFile: true },
+          terminal: true,
+        },
+        clientInfo: { name: 'agent-router', version: '0.1.0' },
       });
       // Check for protocol version mismatch
       const response = result as Record<string, unknown> | null | undefined;
@@ -251,12 +259,50 @@ export function spawnACPClient(
       }
     },
 
+    async newSession(cwd: string): Promise<string> {
+      const result = await sendRequest('session/new', { cwd, mcpServers: [] });
+      const res = result as Record<string, unknown> | null | undefined;
+      acpSessionId = (res?.['sessionId'] as string) ?? '';
+      return acpSessionId;
+    },
+
+    async newSessionWithPrompt(cwd: string, prompt: string): Promise<string> {
+      // Write session/new, and as soon as we get the sessionId back,
+      // immediately write session/prompt in the same microtask to
+      // prevent Kiro from exiting between the two calls.
+      const result = await sendRequest('session/new', { cwd, mcpServers: [] });
+      const res = result as Record<string, unknown> | null | undefined;
+      acpSessionId = (res?.['sessionId'] as string) ?? '';
+
+      // Write prompt to stdin synchronously — no await, no microtask gap
+      const promptId = nextId++;
+      const promptReq: JsonRpcRequest = {
+        jsonrpc: '2.0',
+        id: promptId,
+        method: 'session/prompt',
+        params: {
+          sessionId: acpSessionId,
+          prompt: [{ type: 'text', text: prompt }],
+        },
+      };
+      pending.set(promptId, {
+        resolve: () => {},
+        reject: () => {},
+      });
+      stdin.write(JSON.stringify(promptReq) + '\n');
+
+      return acpSessionId;
+    },
+
     async loadSession(sessionId: string): Promise<void> {
       await sendRequest('session/load', { sessionId });
     },
 
     async sendPrompt(prompt: string): Promise<void> {
-      await sendRequest('session/prompt', { prompt });
+      await sendRequest('session/prompt', {
+        sessionId: acpSessionId,
+        prompt: [{ type: 'text', text: prompt }],
+      });
     },
 
     get notifications(): AsyncIterable<ACPNotification> {

@@ -269,21 +269,22 @@ export function createMcpServer(ctx: McpContext): McpServer {
           return;
         }
 
-        const req = parsed as JsonRpcRequest;
-        if (typeof req.method !== 'string') {
-          // Notifications (no method) or invalid — skip
-          if ('id' in req) {
-            writeResponse(makeErrorResponse(req.id, -32600, 'Invalid request'));
+        const obj = parsed as Record<string, unknown>;
+        if (typeof obj['method'] !== 'string') {
+          if ('id' in obj) {
+            writeResponse(makeErrorResponse(obj['id'] as number | string, -32600, 'Invalid request'));
           }
           return;
         }
 
         // Notifications don't have an id — handle them but don't respond
-        if (!('id' in req)) {
-          handleRequest({ method: req.method, params: req.params, jsonrpc: req.jsonrpc, id: 0 }).catch(() => {});
+        if (!('id' in obj)) {
+          const notif: JsonRpcRequest = { jsonrpc: '2.0', id: 0, method: obj['method'], params: obj['params'] };
+          handleRequest(notif).catch(() => {});
           return;
         }
 
+        const req: JsonRpcRequest = { jsonrpc: '2.0', id: obj['id'] as number | string, method: obj['method'], params: obj['params'] };
         handleRequest(req).catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
           writeResponse(makeErrorResponse(req.id, -32603, msg));

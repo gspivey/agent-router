@@ -344,12 +344,12 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x] 21.11 Tier 2 test invoking CLI as subprocess
     - _Requirements: 21.3, 21.4, 21.5, 24.6_
 
-- [ ] 22. Operational setup
-  - [-] 22.1 Write `scripts/setup-tunnel.sh` — detect platform, install cloudflared, create named tunnel, print stable HTTPS URL
-  - [ ] 22.2 Write `scripts/install-mcp-config.sh` — append Agent Router MCP server entry to Kiro's MCP config
-  - [ ] 22.3 Write README.md operational section — step-by-step first-run guide
-  - [ ] 22.4 Document LEARNINGS.md starter template
-  - [ ] 22.5 Document manual session cleanup — one-line find command to prune old session directories
+- [x] 22. Operational setup
+  - [x] 22.1 Write `scripts/setup-tunnel.sh` — detect platform, install cloudflared, create named tunnel, print stable HTTPS URL
+  - [x] 22.2 Write `scripts/install-mcp-config.sh` — append Agent Router MCP server entry to Kiro's MCP config
+  - [x] 22.3 Write README.md operational section — step-by-step first-run guide
+  - [x] 22.4 Document LEARNINGS.md starter template
+  - [x] 22.5 Document manual session cleanup — one-line find command to prune old session directories
 
 ## Notes
 

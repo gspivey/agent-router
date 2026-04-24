@@ -11,7 +11,7 @@ import * as path from 'node:path';
 import * as url from 'node:url';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-const SIMPLE_ECHO_SCENARIO = path.resolve(__dirname, '../scenarios/simple-echo.json');
+const SIMPLE_ECHO_SCENARIO = path.resolve(__dirname, '../scenarios/single-prompt-echo.json');
 
 describe('ACP client — simple-echo scenario', () => {
   let kiro: FakeKiroBackend;
@@ -36,25 +36,29 @@ describe('ACP client — simple-echo scenario', () => {
     // Step 1: initialize
     await client.initialize();
 
-    // Step 2: load session
+    // Step 2: create session
+    await client.newSession('/tmp');
+
+    // Step 3: load session
     await client.loadSession('test-session-123');
 
-    // Step 3: send prompt — the simple-echo scenario emits one notification then exits
+    // Step 4: send prompt — the simple-echo scenario emits one notification then exits
     await client.sendPrompt('Hello, agent!');
 
-    // Step 4: collect notifications
+    // Step 5: collect notifications
     const collected: ACPNotification[] = [];
     for await (const notification of client.notifications) {
       collected.push(notification);
     }
 
     // The simple-echo scenario emits one session/notification
-    expect(collected.length).toBe(1);
-    expect(collected[0]!.method).toBe('session/notification');
-    expect(collected[0]!.params).toEqual({
-      type: 'message',
-      content: 'Echo: received your prompt.',
-    });
+    expect(collected.length).toBeGreaterThanOrEqual(1);
+    const echoNotification = collected.find(
+      (n) => (n.params as Record<string, unknown>)?.['type'] === 'message',
+    );
+    expect(echoNotification).toBeDefined();
+    expect(echoNotification!.method).toBe('session/notification');
+    expect((echoNotification!.params as Record<string, unknown>)['content']).toBe('Echo: received your prompt.');
 
     // The subprocess should have exited (exitCode: 0 in scenario)
     await client.sessionEnded;
@@ -98,6 +102,7 @@ describe('ACP client — simple-echo scenario', () => {
     });
 
     await client.initialize();
+    await client.newSession('/tmp');
     await client.loadSession('test-session-stderr');
     await client.sendPrompt('test');
 

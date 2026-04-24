@@ -83,6 +83,12 @@ async function main(): Promise<void> {
       continue;
     }
 
+    // Handle session/new — return a fake session ID
+    if (req.method === 'session/new') {
+      send({ jsonrpc: '2.0', id: req.id, result: { sessionId: 'fake-session-001' } } satisfies ACPResponse);
+      continue;
+    }
+
     // For other methods, emit notifications first then respond
     if (step) {
       for (const notification of step.notifications ?? []) {

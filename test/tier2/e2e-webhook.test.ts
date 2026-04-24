@@ -266,7 +266,7 @@ describe('E2E: webhook → wake → session loop', () => {
     expect(prRegistered!['pr_number']).toBe(42);
 
     // Should have prompt_injected entry from the webhook
-    const promptInjected = streamLines.find((e) => e['type'] === 'prompt_injected');
+    const promptInjected = streamLines.find((e) => e['type'] === 'prompt_injected' && e['prompt_source'] === 'webhook');
     expect(promptInjected).toBeDefined();
     expect(promptInjected!['prompt_source']).toBe('webhook');
 
