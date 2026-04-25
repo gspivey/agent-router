@@ -187,6 +187,10 @@ Edit `config.json`:
   "webhookSecret": "ENV:GITHUB_WEBHOOK_SECRET",
   "kiroPath": "/path/to/kiro",
   "rateLimit": { "perPRSeconds": 60 },
+  "sessionTimeout": {
+    "inactivityMinutes": 5,
+    "maxLifetimeMinutes": 120
+  },
   "repos": [
     { "owner": "your-org", "name": "your-repo" }
   ],

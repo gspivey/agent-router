@@ -16,6 +16,7 @@ export interface SessionMeta {
   status: 'active' | 'completed' | 'abandoned' | 'failed';
   created_at: number;
   completed_at: number | null;
+  termination_reason?: 'timeout_inactivity' | 'timeout_max_lifetime' | 'completed' | 'failed' | 'terminated' | 'shutdown';
   prs: Array<{ repo: string; pr_number: number; registered_at: number }>;
 }
 

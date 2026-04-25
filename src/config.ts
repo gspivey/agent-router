@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import cron from 'node-cron';
 import { FatalError } from './errors.js';
 
+export interface SessionTimeoutConfig {
+  inactivityMinutes: number;
+  maxLifetimeMinutes: number;
+}
+
 export interface AgentRouterConfig {
   port: number;
   webhookSecret: string;
@@ -9,6 +14,7 @@ export interface AgentRouterConfig {
   rateLimit: {
     perPRSeconds: number;
   };
+  sessionTimeout: SessionTimeoutConfig;
   repos: RepoConfig[];
   cron: CronConfig[];
 }
@@ -97,6 +103,35 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     }
   }
 
+  // sessionTimeout (optional with defaults)
+  const rawSessionTimeout = config['sessionTimeout'];
+  let inactivityMinutes = 5;
+  let maxLifetimeMinutes = 120;
+  if (rawSessionTimeout !== undefined) {
+    if (!isRecord(rawSessionTimeout)) {
+      throw new FatalError('Invalid "sessionTimeout": must be an object');
+    }
+    if (rawSessionTimeout['inactivityMinutes'] !== undefined) {
+      const val = rawSessionTimeout['inactivityMinutes'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "sessionTimeout.inactivityMinutes": must be a positive integer');
+      }
+      inactivityMinutes = val;
+    }
+    if (rawSessionTimeout['maxLifetimeMinutes'] !== undefined) {
+      const val = rawSessionTimeout['maxLifetimeMinutes'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "sessionTimeout.maxLifetimeMinutes": must be a positive integer');
+      }
+      maxLifetimeMinutes = val;
+    }
+    if (inactivityMinutes > maxLifetimeMinutes) {
+      throw new FatalError(
+        `Invalid "sessionTimeout": inactivityMinutes (${inactivityMinutes}) must not exceed maxLifetimeMinutes (${maxLifetimeMinutes})`
+      );
+    }
+  }
+
   // repos: array of { owner: string, name: string }
   const rawRepos = config['repos'];
   if (!Array.isArray(rawRepos)) {
@@ -165,6 +200,7 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     webhookSecret,
     kiroPath,
     rateLimit: { perPRSeconds },
+    sessionTimeout: { inactivityMinutes, maxLifetimeMinutes },
     repos,
     cron: cronEntries,
   };

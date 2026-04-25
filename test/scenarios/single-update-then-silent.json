@@ -1,0 +1,19 @@
+{
+  "name": "single-update-then-silent",
+  "steps": [
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "message",
+            "content": "Got it, starting now."
+          }
+        }
+      ],
+      "result": { "ok": true }
+    }
+  ]
+}

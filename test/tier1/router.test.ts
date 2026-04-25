@@ -260,6 +260,7 @@ describe('evaluateWakePolicy', () => {
     webhookSecret: 'secret',
     kiroPath: '/usr/bin/kiro',
     rateLimit: { perPRSeconds: 60 },
+    sessionTimeout: { inactivityMinutes: 5, maxLifetimeMinutes: 120 },
     repos: [{ owner: 'myorg', name: 'myrepo' }],
     cron: [],
   };

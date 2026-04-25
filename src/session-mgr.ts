@@ -5,6 +5,7 @@ import type { SessionFiles, SessionPaths, PromptSource, StreamEntry } from './se
 import type { EventQueue } from './queue.js';
 import { createEventQueue } from './queue.js';
 import type { ACPClient, ACPNotification } from './acp.js';
+import type { SessionTimeoutConfig } from './config.js';
 
 export interface SessionHandle {
   sessionId: string;
@@ -23,8 +24,11 @@ export interface SessionManager {
   shutdown(): Promise<void>;
 }
 
-/** Maximum session duration in milliseconds (10 minutes). */
-const MAX_WAKE_DURATION_MS = 10 * 60 * 1000;
+/** Default session timeout configuration. */
+const DEFAULT_SESSION_TIMEOUT: SessionTimeoutConfig = {
+  inactivityMinutes: 5,
+  maxLifetimeMinutes: 120,
+};
 
 // ---------------------------------------------------------------------------
 // Session Registry — in-memory Map<sessionId, SessionHandle>
@@ -95,15 +99,88 @@ export function createSessionManager(deps: {
   sessionFiles: SessionFiles;
   acpSpawner: (sessionId: string) => ACPClient;
   log: Logger;
+  sessionTimeout?: SessionTimeoutConfig;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
+  const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
+  const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
+  const maxLifetimeMs = timeout.maxLifetimeMinutes * 60 * 1000;
   const registry = createSessionRegistry();
 
-  // Track per-session timeout timers so we can clear them on shutdown
-  const timeoutTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Track per-session inactivity timers
+  const inactivityTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  // Track per-session max-lifetime timers
+  const lifetimeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   // Track per-session completion flags (set when complete_session MCP call is received)
   const completionFlags = new Set<string>();
+
+  /** Clear all timers for a session. */
+  function clearSessionTimers(sessionId: string): void {
+    const inactTimer = inactivityTimers.get(sessionId);
+    if (inactTimer !== undefined) {
+      clearTimeout(inactTimer);
+      inactivityTimers.delete(sessionId);
+    }
+    const lifeTimer = lifetimeTimers.get(sessionId);
+    if (lifeTimer !== undefined) {
+      clearTimeout(lifeTimer);
+      lifetimeTimers.delete(sessionId);
+    }
+  }
+
+  /** Reset the inactivity timer for a session (called on every notification). */
+  function resetInactivityTimer(sessionId: string, acp: ACPClient): void {
+    const existing = inactivityTimers.get(sessionId);
+    if (existing !== undefined) {
+      clearTimeout(existing);
+    }
+
+    const timer = setTimeout(() => {
+      inactivityTimers.delete(sessionId);
+      if (!registry.has(sessionId)) return;
+
+      log.warn('Session exceeded inactivity timeout, terminating', {
+        sessionId,
+        inactivityMinutes: timeout.inactivityMinutes,
+      });
+
+      // Record reason in meta before kill
+      try {
+        sessionFiles.updateMeta(sessionId, {
+          status: 'failed',
+          completed_at: Math.floor(Date.now() / 1000),
+          termination_reason: 'timeout_inactivity',
+        });
+      } catch {
+        // Meta may already be in terminal state
+      }
+
+      try {
+        sessionFiles.appendStream(sessionId, {
+          ts: new Date().toISOString(),
+          source: 'router',
+          type: 'session_ended',
+          reason: 'timeout_inactivity',
+        });
+      } catch {
+        // Best effort
+      }
+
+      // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
+      registry.remove(sessionId);
+      clearSessionTimers(sessionId);
+      completionFlags.delete(sessionId);
+
+      acp.kill().catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error('Failed to kill inactivity-timed-out session', { sessionId, error: msg });
+      });
+    }, inactivityMs);
+
+    inactivityTimers.set(sessionId, timer);
+  }
 
   /**
    * Start a background notification consumer for a session.
@@ -114,6 +191,9 @@ export function createSessionManager(deps: {
     const consume = async (): Promise<void> => {
       try {
         for await (const notification of acp.notifications) {
+          // Reset inactivity timer on every notification from the agent
+          resetInactivityTimer(sessionId, acp);
+
           const entry = translateNotification(notification);
           try {
             sessionFiles.appendStream(sessionId, entry);
@@ -146,12 +226,8 @@ export function createSessionManager(deps: {
   function monitorSubprocessExit(sessionId: string, acp: ACPClient): void {
     acp.sessionEnded
       .then(() => {
-        // Clear timeout timer
-        const timer = timeoutTimers.get(sessionId);
-        if (timer !== undefined) {
-          clearTimeout(timer);
-          timeoutTimers.delete(sessionId);
-        }
+        // Clear all timers
+        clearSessionTimers(sessionId);
 
         // Only update if session is still in registry (not already terminated)
         if (!registry.has(sessionId)) {
@@ -171,6 +247,7 @@ export function createSessionManager(deps: {
             sessionFiles.updateMeta(sessionId, {
               status: 'completed',
               completed_at: Math.floor(Date.now() / 1000),
+              termination_reason: 'completed',
             });
             sessionFiles.appendStream(sessionId, {
               ts: new Date().toISOString(),
@@ -184,6 +261,7 @@ export function createSessionManager(deps: {
             sessionFiles.updateMeta(sessionId, {
               status: 'failed',
               completed_at: Math.floor(Date.now() / 1000),
+              termination_reason: 'failed',
             });
             sessionFiles.appendStream(sessionId, {
               ts: new Date().toISOString(),
@@ -205,22 +283,53 @@ export function createSessionManager(deps: {
   }
 
   /**
-   * Set up a 10-minute timeout for a session. On expiry, SIGTERM → 5s → SIGKILL.
+   * Set up an absolute max-lifetime timer for a session.
+   * On expiry, SIGTERM → 5s → SIGKILL regardless of activity.
    */
-  function enforceTimeout(sessionId: string, acp: ACPClient): void {
+  function enforceMaxLifetime(sessionId: string, acp: ACPClient): void {
     const timer = setTimeout(() => {
-      timeoutTimers.delete(sessionId);
+      lifetimeTimers.delete(sessionId);
       if (!registry.has(sessionId)) return;
 
-      log.warn('Session exceeded max wake duration, terminating', { sessionId });
+      log.warn('Session exceeded max lifetime, terminating', {
+        sessionId,
+        maxLifetimeMinutes: timeout.maxLifetimeMinutes,
+      });
+
+      // Record reason in meta before kill
+      try {
+        sessionFiles.updateMeta(sessionId, {
+          status: 'failed',
+          completed_at: Math.floor(Date.now() / 1000),
+          termination_reason: 'timeout_max_lifetime',
+        });
+      } catch {
+        // Meta may already be in terminal state
+      }
+
+      try {
+        sessionFiles.appendStream(sessionId, {
+          ts: new Date().toISOString(),
+          source: 'router',
+          type: 'session_ended',
+          reason: 'timeout_max_lifetime',
+        });
+      } catch {
+        // Best effort
+      }
+
+      // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
+      registry.remove(sessionId);
+      clearSessionTimers(sessionId);
+      completionFlags.delete(sessionId);
 
       acp.kill().catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
-        log.error('Failed to kill timed-out session', { sessionId, error: msg });
+        log.error('Failed to kill max-lifetime session', { sessionId, error: msg });
       });
-    }, MAX_WAKE_DURATION_MS);
+    }, maxLifetimeMs);
 
-    timeoutTimers.set(sessionId, timer);
+    lifetimeTimers.set(sessionId, timer);
   }
 
   const manager: SessionManager = {
@@ -283,8 +392,9 @@ export function createSessionManager(deps: {
       // 9. Monitor subprocess exit for completion/failure detection
       monitorSubprocessExit(sessionId, acp);
 
-      // 10. Enforce 10-minute timeout
-      enforceTimeout(sessionId, acp);
+      // 10. Start inactivity timer and max-lifetime timer
+      resetInactivityTimer(sessionId, acp);
+      enforceMaxLifetime(sessionId, acp);
 
       sessionLog.info('Session created');
       return handle;
@@ -362,12 +472,8 @@ export function createSessionManager(deps: {
         throw new Error(`No active session found: ${sessionId}`);
       }
 
-      // Clear timeout timer
-      const timer = timeoutTimers.get(sessionId);
-      if (timer !== undefined) {
-        clearTimeout(timer);
-        timeoutTimers.delete(sessionId);
-      }
+      // Clear all timers
+      clearSessionTimers(sessionId);
 
       // Remove from registry first to prevent monitorSubprocessExit from double-updating
       registry.remove(sessionId);
@@ -381,6 +487,7 @@ export function createSessionManager(deps: {
         sessionFiles.updateMeta(sessionId, {
           status: 'abandoned',
           completed_at: Math.floor(Date.now() / 1000),
+          termination_reason: 'terminated',
         });
       } catch {
         // Meta may already be in terminal state if subprocess exited concurrently
@@ -412,11 +519,15 @@ export function createSessionManager(deps: {
       const activeSessions = registry.list();
       log.info('Shutting down session manager', { activeCount: activeSessions.length });
 
-      // Clear all timeout timers
-      for (const [, timer] of timeoutTimers) {
+      // Clear all timers
+      for (const [, timer] of inactivityTimers) {
         clearTimeout(timer);
       }
-      timeoutTimers.clear();
+      inactivityTimers.clear();
+      for (const [, timer] of lifetimeTimers) {
+        clearTimeout(timer);
+      }
+      lifetimeTimers.clear();
 
       // Update all active sessions to abandoned and terminate subprocesses
       const terminationPromises: Promise<void>[] = [];
@@ -431,6 +542,7 @@ export function createSessionManager(deps: {
           sessionFiles.updateMeta(sessionId, {
             status: 'abandoned',
             completed_at: Math.floor(Date.now() / 1000),
+            termination_reason: 'shutdown',
           });
         } catch {
           // Meta may already be in terminal state

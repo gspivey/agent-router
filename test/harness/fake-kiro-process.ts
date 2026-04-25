@@ -25,12 +25,20 @@ interface ACPNotification {
   params?: unknown;
 }
 
+interface PeriodicConfig {
+  notification: ACPNotification;
+  intervalMs: number;
+  count: number;
+  exitAfter?: number;
+}
+
 interface ScenarioStep {
   trigger: string;
   notifications?: ACPNotification[];
   result?: unknown;
   exitCode?: number;
   delayMs?: number;
+  periodic?: PeriodicConfig;
 }
 
 interface Scenario {
@@ -44,6 +52,20 @@ function send(msg: unknown): void {
 
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function startPeriodic(config: PeriodicConfig): void {
+  let sent = 0;
+  const timer = setInterval(() => {
+    send(config.notification);
+    sent++;
+    if (sent >= config.count) {
+      clearInterval(timer);
+      if (config.exitAfter !== undefined) {
+        setTimeout(() => process.exit(config.exitAfter!), 50);
+      }
+    }
+  }, config.intervalMs);
 }
 
 async function main(): Promise<void> {
@@ -95,6 +117,11 @@ async function main(): Promise<void> {
         send(notification);
       }
       send({ jsonrpc: '2.0', id: req.id, result: step.result ?? { ok: true } } satisfies ACPResponse);
+
+      // Start periodic notification emission if configured
+      if (step.periodic) {
+        startPeriodic(step.periodic);
+      }
 
       if (step.exitCode !== undefined) {
         process.exit(step.exitCode);

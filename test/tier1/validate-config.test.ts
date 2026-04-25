@@ -292,4 +292,115 @@ describe('validateConfig', () => {
       expect(() => validateConfig(cfg)).not.toThrow();
     }
   });
+
+  // --- sessionTimeout validation ---
+
+  it('defaults sessionTimeout to 5 min inactivity and 120 min lifetime when omitted', () => {
+    const cfg = validConfig();
+    const result = validateConfig(cfg);
+    expect(result.sessionTimeout.inactivityMinutes).toBe(5);
+    expect(result.sessionTimeout.maxLifetimeMinutes).toBe(120);
+  });
+
+  it('accepts valid sessionTimeout with both fields', () => {
+    const cfg = validConfig({
+      sessionTimeout: { inactivityMinutes: 10, maxLifetimeMinutes: 60 },
+    });
+    const result = validateConfig(cfg);
+    expect(result.sessionTimeout.inactivityMinutes).toBe(10);
+    expect(result.sessionTimeout.maxLifetimeMinutes).toBe(60);
+  });
+
+  it('accepts sessionTimeout with only inactivityMinutes', () => {
+    const cfg = validConfig({
+      sessionTimeout: { inactivityMinutes: 3 },
+    });
+    const result = validateConfig(cfg);
+    expect(result.sessionTimeout.inactivityMinutes).toBe(3);
+    expect(result.sessionTimeout.maxLifetimeMinutes).toBe(120);
+  });
+
+  it('accepts sessionTimeout with only maxLifetimeMinutes', () => {
+    const cfg = validConfig({
+      sessionTimeout: { maxLifetimeMinutes: 60 },
+    });
+    const result = validateConfig(cfg);
+    expect(result.sessionTimeout.inactivityMinutes).toBe(5);
+    expect(result.sessionTimeout.maxLifetimeMinutes).toBe(60);
+  });
+
+  it('throws FatalError when sessionTimeout is not an object', () => {
+    expect(() => validateConfig(validConfig({ sessionTimeout: 'bad' }))).toThrow(FatalError);
+    expect(() => validateConfig(validConfig({ sessionTimeout: 'bad' }))).toThrow(/sessionTimeout/i);
+  });
+
+  it('throws FatalError when inactivityMinutes is zero', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { inactivityMinutes: 0 } }))
+    ).toThrow(FatalError);
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { inactivityMinutes: 0 } }))
+    ).toThrow(/inactivityMinutes/i);
+  });
+
+  it('throws FatalError when inactivityMinutes is negative', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { inactivityMinutes: -1 } }))
+    ).toThrow(FatalError);
+  });
+
+  it('throws FatalError when inactivityMinutes is a float', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { inactivityMinutes: 2.5 } }))
+    ).toThrow(FatalError);
+  });
+
+  it('throws FatalError when inactivityMinutes is a string', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { inactivityMinutes: '5' } }))
+    ).toThrow(FatalError);
+  });
+
+  it('throws FatalError when maxLifetimeMinutes is zero', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { maxLifetimeMinutes: 0 } }))
+    ).toThrow(FatalError);
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { maxLifetimeMinutes: 0 } }))
+    ).toThrow(/maxLifetimeMinutes/i);
+  });
+
+  it('throws FatalError when maxLifetimeMinutes is negative', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { maxLifetimeMinutes: -10 } }))
+    ).toThrow(FatalError);
+  });
+
+  it('throws FatalError when maxLifetimeMinutes is a float', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { maxLifetimeMinutes: 1.5 } }))
+    ).toThrow(FatalError);
+  });
+
+  it('throws FatalError when inactivityMinutes exceeds maxLifetimeMinutes', () => {
+    expect(() =>
+      validateConfig(validConfig({
+        sessionTimeout: { inactivityMinutes: 10, maxLifetimeMinutes: 5 },
+      }))
+    ).toThrow(FatalError);
+    expect(() =>
+      validateConfig(validConfig({
+        sessionTimeout: { inactivityMinutes: 10, maxLifetimeMinutes: 5 },
+      }))
+    ).toThrow(/must not exceed/i);
+  });
+
+  it('accepts inactivityMinutes equal to maxLifetimeMinutes', () => {
+    const cfg = validConfig({
+      sessionTimeout: { inactivityMinutes: 30, maxLifetimeMinutes: 30 },
+    });
+    const result = validateConfig(cfg);
+    expect(result.sessionTimeout.inactivityMinutes).toBe(30);
+    expect(result.sessionTimeout.maxLifetimeMinutes).toBe(30);
+  });
 });

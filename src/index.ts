@@ -339,6 +339,7 @@ async function main(): Promise<void> {
       return spawnACPClient(config.kiroPath, ['acp']);
     },
     log,
+    sessionTimeout: config.sessionTimeout,
   });
   log.info('Session manager initialized');
 

@@ -1,0 +1,32 @@
+{
+  "name": "periodic-updates",
+  "steps": [
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "message",
+            "content": "Starting work..."
+          }
+        }
+      ],
+      "result": { "ok": true },
+      "periodic": {
+        "notification": {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "message",
+            "content": "Still working..."
+          }
+        },
+        "intervalMs": 500,
+        "count": 20,
+        "exitAfter": 0
+      }
+    }
+  ]
+}

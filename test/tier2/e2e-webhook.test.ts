@@ -103,6 +103,7 @@ describe('E2E: webhook → wake → session loop', () => {
     webhookSecret: WEBHOOK_SECRET,
     kiroPath: '',
     rateLimit: { perPRSeconds: 1 },
+    sessionTimeout: { inactivityMinutes: 5, maxLifetimeMinutes: 120 },
     repos: [{ owner: 'testowner', name: 'testrepo' }],
     cron: [],
   };

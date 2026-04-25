@@ -96,6 +96,8 @@ describe('loadConfig', () => {
     expect(result.repos[0]!.owner).toBe('org');
     expect(result.repos[0]!.name).toBe('repo');
     expect(result.cron).toHaveLength(0);
+    expect(result.sessionTimeout.inactivityMinutes).toBe(5);
+    expect(result.sessionTimeout.maxLifetimeMinutes).toBe(120);
   });
 
   it('resolves ENV: values before validation', () => {
