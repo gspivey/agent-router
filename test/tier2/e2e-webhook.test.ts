@@ -124,9 +124,12 @@ describe('E2E: webhook → wake → session loop', () => {
     sessionMgr = createSessionManager({
       db,
       sessionFiles,
-      acpSpawner: (_sessionId: string) => {
+      acpSpawner: (sessionId: string) => {
         const cfg = kiro.spawnConfig();
-        return spawnACPClient(cfg.command, cfg.args, cfg.env);
+        return spawnACPClient(cfg.command, cfg.args, {
+          ...cfg.env,
+          AGENT_ROUTER_SESSION_ID: sessionId,
+        });
       },
       log,
     });

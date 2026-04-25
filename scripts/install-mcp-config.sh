@@ -7,8 +7,13 @@ set -euo pipefail
 #   ./scripts/install-mcp-config.sh
 #
 # This script adds the agent-router MCP server to ~/.kiro/settings/mcp.json
-# without overwriting existing entries. It sets the required environment
-# variables AGENT_ROUTER_SESSION_ID and AGENT_ROUTER_SOCKET.
+# without overwriting existing entries. It sets the required static environment
+# variable AGENT_ROUTER_SOCKET. AGENT_ROUTER_SESSION_ID is inherited at runtime
+# from the daemon via the Kiro subprocess environment.
+#
+# Self-healing: if an existing config contains the stale literal
+# ${AGENT_ROUTER_SESSION_ID} in the env block, the entry is removed and
+# rewritten automatically.
 
 MCP_CONFIG_DIR="${HOME}/.kiro/settings"
 MCP_CONFIG_FILE="${MCP_CONFIG_DIR}/mcp.json"
@@ -58,9 +63,37 @@ if [ -f "$MCP_CONFIG_FILE" ]; then
   fi
 
   if [ "$EXISTS" = "yes" ]; then
-    warn "Entry '$SERVER_KEY' already exists in $MCP_CONFIG_FILE — skipping."
-    info "To update, remove the '$SERVER_KEY' entry and re-run this script."
-    exit 0
+    # ---------- Self-healing: detect stale ${AGENT_ROUTER_SESSION_ID} in env block ----------
+    STALE="no"
+    if command -v node &>/dev/null; then
+      STALE=$(node -e "
+        const cfg = JSON.parse(require('fs').readFileSync('$MCP_CONFIG_FILE', 'utf-8'));
+        const env = (cfg.mcpServers || {})['$SERVER_KEY']?.env || {};
+        console.log(env.AGENT_ROUTER_SESSION_ID !== undefined ? 'yes' : 'no');
+      " 2>/dev/null || echo "no")
+    elif grep -q 'AGENT_ROUTER_SESSION_ID' "$MCP_CONFIG_FILE" 2>/dev/null; then
+      STALE="yes"
+    fi
+
+    if [ "$STALE" = "yes" ]; then
+      warn "Stale AGENT_ROUTER_SESSION_ID found in '$SERVER_KEY' env block — rewriting entry."
+      if command -v node &>/dev/null; then
+        node -e "
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('$MCP_CONFIG_FILE', 'utf-8'));
+          delete cfg.mcpServers['$SERVER_KEY'];
+          fs.writeFileSync('$MCP_CONFIG_FILE', JSON.stringify(cfg, null, 2) + '\n');
+        "
+      else
+        error "Node.js is required to rewrite stale config."
+        exit 1
+      fi
+      # Fall through to re-add the entry below
+    else
+      warn "Entry '$SERVER_KEY' already exists in $MCP_CONFIG_FILE — skipping."
+      info "To update, remove the '$SERVER_KEY' entry and re-run this script."
+      exit 0
+    fi
   fi
 
   # Merge new entry into existing config
@@ -73,7 +106,6 @@ if [ -f "$MCP_CONFIG_FILE" ]; then
         command: 'npx',
         args: ['tsx', '$MCP_SERVER_PATH'],
         env: {
-          AGENT_ROUTER_SESSION_ID: '\${AGENT_ROUTER_SESSION_ID}',
           AGENT_ROUTER_SOCKET: '$SOCKET_PATH'
         }
       };
@@ -94,7 +126,6 @@ else
       "command": "npx",
       "args": ["tsx", "${MCP_SERVER_PATH}"],
       "env": {
-        "AGENT_ROUTER_SESSION_ID": "\${AGENT_ROUTER_SESSION_ID}",
         "AGENT_ROUTER_SOCKET": "${SOCKET_PATH}"
       }
     }
@@ -115,6 +146,6 @@ info "MCP server   : $MCP_SERVER_PATH"
 info "Socket path  : $SOCKET_PATH"
 info ""
 info "The MCP server will receive these env vars at runtime:"
-info "  AGENT_ROUTER_SESSION_ID — set per session by the daemon"
+info "  AGENT_ROUTER_SESSION_ID — inherited from daemon via Kiro subprocess"
 info "  AGENT_ROUTER_SOCKET     — $SOCKET_PATH"
 info "========================================="

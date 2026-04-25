@@ -335,8 +335,10 @@ async function main(): Promise<void> {
   const sessionMgr = createSessionManager({
     db,
     sessionFiles,
-    acpSpawner: (_sessionId: string) => {
-      return spawnACPClient(config.kiroPath, ['acp']);
+    acpSpawner: (sessionId: string) => {
+      return spawnACPClient(config.kiroPath, ['acp'], {
+        AGENT_ROUTER_SESSION_ID: sessionId,
+      });
     },
     log,
     sessionTimeout: config.sessionTimeout,
