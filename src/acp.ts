@@ -43,10 +43,10 @@ interface JsonRpcNotification {
   params?: unknown;
 }
 
-type JsonRpcMessage = JsonRpcResponse | JsonRpcNotification;
+type JsonRpcMessage = JsonRpcResponse | JsonRpcRequest | JsonRpcNotification;
 
 function isResponse(msg: JsonRpcMessage): msg is JsonRpcResponse {
-  return 'id' in msg && typeof (msg as JsonRpcResponse).id === 'number';
+  return 'id' in msg && !('method' in msg);
 }
 
 /**
@@ -107,45 +107,35 @@ export interface SpawnACPClientOptions {
   onStderr?: (entry: StreamEntry) => void;
 }
 
-export function spawnACPClient(
-  kiroPath: string,
-  args: string[],
-  env?: Record<string, string>,
-  options?: SpawnACPClientOptions,
+/**
+ * Build an ACPClient from pre-existing streams. Used directly by spawnACPClient
+ * and also exported for unit testing with mock/PassThrough streams.
+ */
+export function createACPClientFromStreams(
+  stdin: NodeJS.WritableStream,
+  stdout: NodeJS.ReadableStream,
+  sessionEnded: Promise<void>,
+  options?: SpawnACPClientOptions & { stderr?: NodeJS.ReadableStream },
 ): ACPClient {
-  const child: ChildProcess = spawn(kiroPath, args, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: env ? { ...process.env, ...env } : undefined,
-  });
-
-  const stdin = child.stdin!;
-  const stdout = child.stdout!;
-  const stderr = child.stderr!;
-
   let nextId = 1;
   const pending = new Map<number, PendingRequest>();
   const notificationQueue = new NotificationQueue();
 
-  // --- sessionEnded promise: resolves when subprocess exits ---
-  const sessionEnded = new Promise<void>((resolve) => {
-    child.on('close', () => {
-      resolve();
-    });
-  });
-
   // --- stderr line capture ---
-  const stderrRl = createInterface({ input: stderr, terminal: false });
-  stderrRl.on('line', (line: string) => {
-    if (options?.onStderr) {
-      const entry: StreamEntry = {
-        ts: new Date().toISOString(),
-        source: 'agent',
-        type: 'stderr',
-        content: line,
-      };
-      options.onStderr(entry);
-    }
-  });
+  if (options?.stderr) {
+    const stderrRl = createInterface({ input: options.stderr, terminal: false });
+    stderrRl.on('line', (line: string) => {
+      if (options?.onStderr) {
+        const entry: StreamEntry = {
+          ts: new Date().toISOString(),
+          source: 'agent',
+          type: 'stderr',
+          content: line,
+        };
+        options.onStderr(entry);
+      }
+    });
+  }
 
   // --- JSON-RPC framing: read newline-delimited JSON from stdout ---
   const stdoutRl = createInterface({ input: stdout, terminal: false });
@@ -170,16 +160,18 @@ export function spawnACPClient(
           req.resolve(msg.result);
         }
       }
-    } else {
-      // It's a notification (no id field)
-      const notification = msg as JsonRpcNotification;
+    } else if ('id' in msg && 'method' in msg) {
+      // It's a JSON-RPC request from the agent (needs a response)
+      const request = msg as unknown as JsonRpcRequest;
 
-      // Auto-approve session/request_permission
-      if (notification.method === 'session/request_permission') {
-        autoApprovePermission(notification);
+      if (request.method === 'session/request_permission') {
+        autoApprovePermission(request);
         return;
       }
-
+      // Unknown request type — log and continue
+    } else {
+      // It's a notification (method but no id)
+      const notification = msg as JsonRpcNotification;
       notificationQueue.push({
         method: notification.method,
         params: notification.params,
@@ -207,7 +199,7 @@ export function spawnACPClient(
     };
     return new Promise<unknown>((resolve, reject) => {
       pending.set(id, { resolve, reject });
-      stdin.write(JSON.stringify(request) + '\n', (err) => {
+      stdin.write(JSON.stringify(request) + '\n', (err?: Error | null) => {
         if (err) {
           pending.delete(id);
           reject(new Error(`Failed to write to subprocess stdin: ${err.message}`));
@@ -217,23 +209,42 @@ export function spawnACPClient(
   }
 
   // --- Auto-approve session/request_permission ---
-  function autoApprovePermission(notification: JsonRpcNotification): void {
-    // Permission requests come as notifications with an id-like field in params
-    // We send back a JSON-RPC response approving the request
-    const params = notification.params as Record<string, unknown> | undefined;
-    const requestId = params?.['id'];
-    if (typeof requestId === 'number') {
-      const response: JsonRpcResponse = {
+  function autoApprovePermission(request: JsonRpcRequest): void {
+    const params = request.params as
+      | { options?: Array<{ optionId: string; kind?: string }> }
+      | undefined;
+    const options = params?.options ?? [];
+    const preferred =
+      options.find((o) => o.kind === 'allow_always')?.optionId ??
+      options.find((o) => o.kind === 'allow_once')?.optionId ??
+      options[0]?.optionId;
+
+    if (!preferred) {
+      const errResponse: JsonRpcResponse = {
         jsonrpc: '2.0',
-        id: requestId,
-        result: { approved: true },
+        id: request.id,
+        error: { code: -32602, message: 'No selectable permission option' },
       };
-      stdin.write(JSON.stringify(response) + '\n');
+      stdin.write(JSON.stringify(errResponse) + '\n');
+      return;
     }
-    // Also push it as a notification so consumers can observe it
+
+    const response: JsonRpcResponse = {
+      jsonrpc: '2.0',
+      id: request.id,
+      result: {
+        outcome: {
+          outcome: 'selected',
+          optionId: preferred,
+        },
+      },
+    };
+    stdin.write(JSON.stringify(response) + '\n');
+
+    // Emit observable notification for stream consumers
     notificationQueue.push({
-      method: notification.method,
-      params: notification.params,
+      method: request.method,
+      params: request.params,
     });
   }
 
@@ -319,9 +330,36 @@ export function spawnACPClient(
     },
 
     async kill(): Promise<void> {
-      // SIGTERM first
+      // No-op when there is no child process (test context); real impl overrides below.
+      await sessionEnded;
+    },
+  };
+}
+
+export function spawnACPClient(
+  kiroPath: string,
+  args: string[],
+  env?: Record<string, string>,
+  options?: SpawnACPClientOptions,
+): ACPClient {
+  const child: ChildProcess = spawn(kiroPath, args, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: env ? { ...process.env, ...env } : undefined,
+  });
+
+  const sessionEnded = new Promise<void>((resolve) => {
+    child.on('close', () => resolve());
+  });
+
+  const client = createACPClientFromStreams(child.stdin!, child.stdout!, sessionEnded, {
+    ...options,
+    stderr: child.stderr!,
+  });
+
+  return {
+    ...client,
+    async kill(): Promise<void> {
       child.kill('SIGTERM');
-      // Wait up to 5 seconds for exit
       const timeout = new Promise<'timeout'>((resolve) =>
         setTimeout(() => resolve('timeout'), 5000),
       );
