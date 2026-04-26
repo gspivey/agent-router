@@ -1,85 +1,110 @@
 # Agent Router
 
-A single-user TypeScript daemon that bridges GitHub events to ACP-compatible coding agents. It listens for GitHub webhooks, applies a multi-stage wake policy to decide whether an event warrants agent attention, and spawns a Kiro CLI subprocess over stdio using the Agent Client Protocol (JSON-RPC 2.0).
+A daemon that bridges GitHub events to AI coding agents.
 
-Runs on the developer's own machine behind a cloudflared tunnel. This is an MVP proof of concept; once validated, it will be rewritten in Rust.
+When a check fails, when someone leaves a review comment, when CI returns red — Agent Router catches the webhook, decides whether it's worth waking an agent, and routes it to a persistent agent session bound to that PR. The agent fixes things, pushes commits, and merges when CI is green. You watch from a terminal, or check on it from your phone.
 
-## Why Not Hermes?
+It's TypeScript, single-user, runs on your own machine behind a Cloudflare tunnel. MVP today; will be rewritten in Rust once the architecture is validated.
 
-[Hermes Agent](https://hermes-agent.nousresearch.com/) by Nous Research is a general-purpose AI agent platform with a [webhook adapter](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks) that can receive GitHub events, filter by event type, compose prompts from payloads, and deliver responses to 18+ messaging platforms. It also supports zero-LLM direct delivery, dynamic subscriptions, HMAC verification, rate limiting, and idempotency. On paper, it covers a lot of the same ground.
+## What it does for you
 
-We evaluated building on top of Hermes and decided against it. Here's why:
+**Catches GitHub events you'd otherwise have to triage.** Failed CI, review comments, `/agent` commands in PR threads. Each event flows through a wake policy that decides whether it's actionable and whether the author is trusted enough to direct an agent.
 
-**Hermes is a Swiss army knife. Agent Router is a scalpel.**
+**Maintains persistent agent sessions per PR.** When a session is bound to a PR, every event for that PR routes back to the same conversation. Context accumulates. The agent remembers what it's been working on across days of intermittent feedback.
 
-Hermes wants to be your everything-agent — 18 messaging adapters, a skill marketplace, voice mode, RL training, memory systems, context compression, 47 tools across 19 toolsets. Agent Router wants to do one thing well: route GitHub events to persistent coding agent sessions.
+**Trust-tiered wake policy out of the box.** Repository owners and CI bots wake the agent on any event. Collaborators wake the agent only when they prefix a comment with `/agent`. Untrusted commenters never wake the agent. No allowlist to maintain — trust comes from `comment.author_association` on every webhook payload.
 
-**What Hermes can do that overlaps:**
-- Receive webhooks with HMAC-SHA256 verification
-- Filter by event type
-- Compose prompts from payloads via templates
-- Rate limit and deduplicate
-- Deliver responses to chat platforms or GitHub PR comments
+**Observable everything.** Every session writes append-only NDJSON to `~/.agent-router/sessions/<id>/stream.log`. Plain `tail -f` works. Multiple terminals can watch the same session. No special client, no auth, no API.
 
-**What Hermes cannot do that Agent Router needs:**
-- **PR-scoped persistent sessions** — Hermes creates a fresh agent per webhook event. Agent Router maintains a `(repo, PR) → session` mapping so multiple events for the same PR accumulate context in the same session.
-- **Session-aware wake policy** — Agent Router only wakes an agent if a session is already registered for that PR. Hermes fires an agent run for every matching webhook.
-- **Per-session event queuing** — Multiple events for the same PR are processed sequentially in order. Hermes processes each webhook independently.
-- **ACP lifecycle management** — Agent Router drives Kiro CLI over stdio with full subprocess lifecycle control: spawn, initialize, load session, inject prompt, stream notifications, enforce timeouts, handle crashes.
-- **File-based session streaming** — Append-only NDJSON logs (`stream.log`, `prompts.log`) designed for `tail -f` from multiple terminals. Hermes persists sessions in SQLite but doesn't expose a tailable stream.
+**Agent-agnostic.** Drives Kiro CLI today via the Agent Client Protocol over stdio. Anything that speaks ACP can be swapped in.
 
-Trying to bolt these onto Hermes via plugins or skills would mean fighting its architecture. Hermes' webhook adapter is an intake layer that feeds into a general-purpose agent loop. Agent Router's value is everything *after* intake: the session registry, wake policy, ACP client, per-session queuing, and observable file streaming.
+![Agent Router architecture](docs/architecture.jpg)
 
-**They're orthogonal, not competing.** You could run both — Hermes for general-purpose agent work and notifications, Agent Router for deterministic GitHub-to-coding-agent routing. They don't need to talk to each other.
+## Quick start
 
-## How It Works
+You need: Node.js 20+, git, a GitHub repo you control, a personal access token, and Kiro CLI installed somewhere.
+
+```bash
+# 1. Install
+git clone https://github.com/gspivey/agent-router && cd agent-router
+npm install
+
+# 2. Configure
+cp config.example.json config.json
+# Edit config.json — set kiroPath and your repos
+
+export GITHUB_WEBHOOK_SECRET="your-secret-here"
+
+# 3. Set up the cloudflared tunnel
+./scripts/setup-tunnel.sh
+# In another terminal:
+cloudflared tunnel run agent-router
+
+# 4. Add the webhook on your GitHub repo
+# Settings → Webhooks → Add webhook
+#   Payload URL: https://<tunnel-id>.cfargotunnel.com/webhook
+#   Content type: application/json
+#   Secret: same value as GITHUB_WEBHOOK_SECRET
+#   Events: Check runs, Issue comments, Pull request review comments
+
+# 5. Install the MCP config so Kiro can talk back to the daemon
+./scripts/install-mcp-config.sh
+
+# 6. Run it
+npm run dev
+```
+
+You're now listening for webhooks. Test it:
+
+```bash
+echo "Look at PR #1 and fix the failing CI check" | agent-router prompt --new
+```
+
+Or fire one quietly and tail it:
+
+```bash
+SESSION_ID=$(echo "Fix CI" | agent-router prompt --new --quiet)
+agent-router tail "$SESSION_ID"
+```
+
+## Day-to-day commands
+
+```bash
+agent-router ls                          # List sessions
+agent-router tail <session_id>           # Follow session output (pretty)
+agent-router tail <session_id> --raw     # Raw NDJSON stream
+agent-router tail <session_id> --prompts # Follow prompts log
+```
+
+`agent-router ls` truncates session IDs to their first 8 characters for column width. Other commands accept the truncated form as a prefix when there's no ambiguity.
+
+## How it works
 
 ```
 GitHub webhook → POST /webhook → HMAC verify → event log (SQLite)
-    → wake policy: event type filter → PR resolution → session lookup → rate limit
+    → wake policy: event type filter → PR resolution → session lookup → trust tier check → rate limit
     → compose prompt → spawn Kiro CLI via ACP → stream output to session files
 ```
 
-The daemon exposes a Unix domain socket for CLI communication:
+The daemon exposes a Unix domain socket for the CLI. Sessions are managed in-memory with NDJSON state on disk. Each session gets its own working directory under `~/.agent-router/sessions/`. The MCP server (one instance per session) lets the agent call back to the daemon to register PRs and signal completion.
 
-```
-agent-router prompt --new < prompt.txt    # Create a session
-agent-router ls                           # List sessions
-agent-router tail <session_id>            # Follow session output
-agent-router tail <session_id> --raw      # Raw NDJSON
-```
+## Supported events
 
-## Supported Events
-
-| Event | Condition | Action |
+| Event | Trust tier check | Action |
 |---|---|---|
-| `check_run` | `completed` + `failure` | Wake agent to fix CI |
-| `pull_request_review_comment` | `created` | Wake agent to address review feedback |
-| `issue_comment` | `created` + starts with `/agent` | Wake agent with user command |
+| `check_run` (completed) | none — always wake | Wake agent for any conclusion (success/failure/etc.) |
+| `pull_request_review_comment` (created) | applied | Wake by trust tier rules |
+| `issue_comment` (created) | applied | Wake by trust tier rules |
 
-All other events are logged and ignored.
+**Trust tier rules for comment events:**
 
-## Quick Start
+- **Tier 1** (repo owner OR `github-actions[bot]`): wake on any comment body
+- **Tier 2** (MEMBER / COLLABORATOR): wake only when body starts with `/agent`
+- **Tier 3** (everyone else): never wake
 
-```bash
-# Install dependencies
-npm install
+All other event types are logged and ignored.
 
-# Configure
-cp config.example.json config.json
-# Edit config.json with your webhook secret, kiro path, and repos
-
-# Run
-npm run dev
-
-# Type check
-npm run typecheck
-
-# Test (Tier 1 + Tier 2)
-npm test
-```
-
-## Project Structure
+## Project structure
 
 ```
 src/
@@ -88,7 +113,7 @@ src/
 ├── db.ts             # SQLite schema, prepared statements, query helpers
 ├── log.ts            # Structured NDJSON logger
 ├── server.ts         # Hono HTTP: POST /webhook, HMAC verification
-├── router.ts         # Wake policy pipeline
+├── router.ts         # Wake policy pipeline, trust tier computation
 ├── queue.ts          # Per-session FIFO event queues
 ├── prompt.ts         # Prompt composition per event type
 ├── acp.ts            # ACP client: spawn Kiro CLI, JSON-RPC over stdio
@@ -110,181 +135,67 @@ npm run test:integration  # Tier 3 (real GitHub + real Kiro) — minutes
 npm run test:all          # All three tiers
 ```
 
-Tier 2 tests exercise the full daemon against fake backends (FakeGitHubBackend with a real local git repo, FakeKiroBackend with scriptable ACP scenarios). No network access, no real API tokens required.
+Tier 1 covers pure logic with property tests via `fast-check`. Tier 2 exercises the full daemon against fake backends (`FakeGitHubBackend` with a real local git repo, `FakeKiroBackend` with scriptable ACP scenarios). No network access, no real API tokens required for either.
 
-### Tier 3 Setup (Real GitHub + Real Kiro)
-
-Tier 3 tests run against real GitHub and a real Kiro CLI installation. They require the following environment variables:
+Tier 3 runs against real GitHub and a real Kiro CLI installation. Set these environment variables:
 
 | Variable | Description |
 |---|---|
-| `GITHUB_TOKEN` | A GitHub personal access token with `repo` scope for the scratch test repository |
-| `GITHUB_TEST_REPO` | The scratch repository in `owner/repo` format (e.g., `myorg/agent-router-test`) |
-| `GITHUB_WEBHOOK_SECRET` | The webhook secret configured on the scratch repository |
-| `WEBHOOK_URL` | The public URL for webhook delivery (e.g., your cloudflared tunnel URL + `/webhook`) |
+| `GITHUB_TOKEN` | A GitHub PAT with `repo` scope for the scratch test repo |
+| `GITHUB_TEST_REPO` | The scratch repo in `owner/repo` format |
+| `GITHUB_WEBHOOK_SECRET` | The webhook secret configured on the scratch repo |
+| `WEBHOOK_URL` | The public URL for webhook delivery (your tunnel + `/webhook`) |
 | `KIRO_PATH` | Absolute path to the Kiro CLI executable |
 
-#### Prerequisites
-
-1. Create a dedicated scratch repository on GitHub for testing. Do not use a production repository.
-2. Configure a webhook on the scratch repository pointing to your tunnel URL with the secret.
-3. Set up a cloudflared tunnel (see `scripts/setup-tunnel.sh` if available) to expose your local daemon.
-4. Install Kiro CLI and note its path.
-
-#### Running Tier 3 Tests
-
-```bash
-# Set required env vars
-export GITHUB_TOKEN="ghp_..."
-export GITHUB_TEST_REPO="myorg/agent-router-test"
-export GITHUB_WEBHOOK_SECRET="your-webhook-secret"
-export WEBHOOK_URL="https://your-tunnel.trycloudflare.com/webhook"
-export KIRO_PATH="/usr/local/bin/kiro"
-
-# Run Tier 3 only
-npm run test:integration
-
-# Run all tiers
-npm run test:all
-```
-
-Tests skip gracefully if the required environment variables are not set. Tier 3 tests are slow (minutes) and consume real API quota — run them before shipping, not on every change.
-
-#### CI Configuration
-
-- Tier 1 + Tier 2 run on every push (fast, no credentials needed)
-- Tier 3 runs as a nightly scheduled job (requires GitHub secrets)
-
-## First-Run Guide
-
-Step-by-step setup from a fresh clone to a running daemon receiving GitHub webhooks.
-
-### Prerequisites
-
-- Node.js 20+
-- Git
-- A GitHub repository you control (for webhook configuration)
-- A GitHub personal access token with `repo` scope
-- Kiro CLI installed (note the absolute path)
-
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Create config.json
-
-```bash
-cp config.example.json config.json
-```
-
-Edit `config.json`:
-
-```json
-{
-  "port": 3000,
-  "webhookSecret": "ENV:GITHUB_WEBHOOK_SECRET",
-  "kiroPath": "/path/to/kiro",
-  "rateLimit": { "perPRSeconds": 60 },
-  "sessionTimeout": {
-    "inactivityMinutes": 5,
-    "maxLifetimeMinutes": 120
-  },
-  "repos": [
-    { "owner": "your-org", "name": "your-repo" }
-  ],
-  "cron": []
-}
-```
-
-Set the environment variable:
-
-```bash
-export GITHUB_WEBHOOK_SECRET="your-secret-here"
-```
-
-### 3. Set up the cloudflared tunnel
-
-```bash
-./scripts/setup-tunnel.sh
-```
-
-This detects your platform, installs `cloudflared` if needed, creates a named tunnel (`agent-router` by default), and prints the stable HTTPS URL. You can customize the tunnel name and port:
-
-```bash
-./scripts/setup-tunnel.sh my-tunnel 3000
-```
-
-Start the tunnel in a separate terminal:
-
-```bash
-cloudflared tunnel run agent-router
-```
-
-### 4. Configure the GitHub webhook
-
-1. Go to your repository's Settings → Webhooks → Add webhook
-2. Set Payload URL to `https://<tunnel-id>.cfargotunnel.com/webhook`
-3. Set Content type to `application/json`
-4. Set Secret to the same value as `GITHUB_WEBHOOK_SECRET`
-5. Select individual events: `Check runs`, `Issue comments`, `Pull request review comments`
-
-### 5. Install the MCP config
-
-```bash
-./scripts/install-mcp-config.sh
-```
-
-This adds the Agent Router MCP server entry to `~/.kiro/settings/mcp.json` so Kiro can communicate back to the daemon during sessions.
-
-### 6. Start the daemon
-
-```bash
-npm run dev
-```
-
-The daemon binds to the configured port and starts listening for webhooks. Logs are structured NDJSON on stdout.
-
-### 7. Create your first session
-
-In another terminal:
-
-```bash
-echo "Fix the failing CI check on PR #1" | agent-router prompt --new
-```
-
-Or create a session quietly and tail it separately:
-
-```bash
-SESSION_ID=$(echo "Fix CI" | agent-router prompt --new --quiet)
-agent-router tail "$SESSION_ID"
-```
-
-### 8. Monitor sessions
-
-```bash
-agent-router ls                          # List all sessions
-agent-router tail <session_id>           # Follow session output
-agent-router tail <session_id> --raw     # Raw NDJSON stream
-agent-router tail <session_id> --prompts # Follow prompts log
-```
+Tests skip gracefully if the required environment variables are not set. Tier 3 tests are slow (minutes) and consume real API quota — run before shipping, not on every change.
 
 ## Maintenance
 
-### Session cleanup
-
-Session directories accumulate under `~/.agent-router/sessions/`. To prune sessions older than 30 days:
+**Session cleanup.** Session directories accumulate under `~/.agent-router/sessions/`. To prune sessions older than 30 days:
 
 ```bash
 find ~/.agent-router/sessions -maxdepth 1 -mtime +30 -exec rm -rf {} +
 ```
 
-Run this periodically (e.g., via cron) to reclaim disk space. Active sessions are not affected — only directories whose modification time is older than 30 days are removed.
+Run periodically via cron. Active sessions are not affected — only directories whose modification time is older than 30 days are removed.
 
-### Database
+**Database.** SQLite at `~/.agent-router/agent-router.db`, WAL mode. No manual maintenance required. The daemon checkpoints WAL on graceful shutdown.
 
-The SQLite database at `~/.agent-router/agent-router.db` uses WAL mode. It does not require manual maintenance. The daemon performs a WAL checkpoint on graceful shutdown.
+**Logs.** The daemon logs structured NDJSON to stdout, captured by systemd journal in production. Per-session logs live in the session directory and are cleaned up alongside the session.
+
+## Where things are going
+
+- **`PRODUCT.md`** — what the product is and the open architecture questions.
+- **`ROADMAP.md`** — phased plan: production stability → ACP server → web dashboard → multi-repo sandboxing → swappable agent backends.
+- **`BACKLOG.md`** — tactical near-term bug list and small specs (kept separate from the strategic roadmap).
+- **`AGENTS.md`** — conventions for agents (and humans) working in this codebase.
+
+## Why not [Hermes](https://hermes-agent.nousresearch.com/)?
+
+Reasonable question for anyone in the agent-platform space. Hermes is a general-purpose AI agent platform with a [GitHub webhook adapter](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks). On paper, it covers a lot of the same ground.
+
+Hermes is a Swiss army knife — 18 messaging adapters, a skill marketplace, voice mode, RL training, memory systems, 47 tools across 19 toolsets. Agent Router is a scalpel: route GitHub events to persistent coding agent sessions, period.
+
+What Hermes does that overlaps:
+
+- Webhook intake with HMAC-SHA256 verification
+- Filter by event type
+- Compose prompts from payloads via templates
+- Rate limiting and idempotency
+- Deliver responses to chat platforms or GitHub PR comments
+
+What Hermes can't do that Agent Router needs:
+
+- **PR-scoped persistent sessions.** Hermes creates a fresh agent per webhook event. Agent Router maintains a `(repo, PR) → session` mapping so events accumulate context.
+- **Session-aware wake policy.** Agent Router only wakes if a session is registered for the PR. Hermes fires for every matching webhook.
+- **Trust-tiered wake.** Author-association-based filtering against prompt injection from untrusted commenters.
+- **Per-session event queuing.** Multiple events for the same PR processed sequentially in order.
+- **ACP lifecycle management.** Full Kiro subprocess control: spawn, init, load session, inject, stream, timeout, crash recovery.
+- **File-based session streaming.** Append-only NDJSON for `tail -f` from any terminal.
+
+Bolting these onto Hermes via plugins would mean fighting its architecture. Hermes' webhook adapter is intake feeding a general-purpose agent loop; Agent Router's value is everything *after* intake.
+
+The two are orthogonal. You could run both — Hermes for general agent work and notifications, Agent Router for deterministic GitHub-to-coding-agent routing. They don't need to talk to each other.
 
 ## License
 
