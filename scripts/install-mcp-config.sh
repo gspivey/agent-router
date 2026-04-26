@@ -78,6 +78,14 @@ if [ -f "$MCP_CONFIG_FILE" ]; then
     if [ "$STALE" = "yes" ]; then
       warn "Stale AGENT_ROUTER_SESSION_ID found in '$SERVER_KEY' env block — rewriting entry."
       if command -v node &>/dev/null; then
+        # Preserve existing autoApprove (if any) before deleting the stale entry
+        EXISTING_AUTO_APPROVE=$(node -e "
+          const cfg = JSON.parse(require('fs').readFileSync('$MCP_CONFIG_FILE', 'utf-8'));
+          const entry = (cfg.mcpServers || {})['$SERVER_KEY'] || {};
+          if (Array.isArray(entry.autoApprove) && entry.autoApprove.length > 0) {
+            console.log(JSON.stringify(entry.autoApprove));
+          }
+        " 2>/dev/null || true)
         node -e "
           const fs = require('fs');
           const cfg = JSON.parse(fs.readFileSync('$MCP_CONFIG_FILE', 'utf-8'));
@@ -96,18 +104,32 @@ if [ -f "$MCP_CONFIG_FILE" ]; then
     fi
   fi
 
+  # Pass preserved autoApprove (from self-healing) to the merge step
+  export __AR_EXISTING_AUTO_APPROVE="${EXISTING_AUTO_APPROVE:-}"
+
   # Merge new entry into existing config
   if command -v node &>/dev/null; then
     node -e "
       const fs = require('fs');
       const cfg = JSON.parse(fs.readFileSync('$MCP_CONFIG_FILE', 'utf-8'));
       if (!cfg.mcpServers) cfg.mcpServers = {};
+      const defaultAutoApprove = [
+        '@agent-router/session_status',
+        '@agent-router/register_pr',
+        '@agent-router/complete_session',
+        'session_status',
+        'register_pr',
+        'complete_session'
+      ];
+      const preserved = process.env.__AR_EXISTING_AUTO_APPROVE;
+      const autoApprove = preserved ? JSON.parse(preserved) : defaultAutoApprove;
       cfg.mcpServers['$SERVER_KEY'] = {
         command: 'npx',
         args: ['tsx', '$MCP_SERVER_PATH'],
         env: {
           AGENT_ROUTER_SOCKET: '$SOCKET_PATH'
-        }
+        },
+        autoApprove
       };
       fs.writeFileSync('$MCP_CONFIG_FILE', JSON.stringify(cfg, null, 2) + '\n');
     "
@@ -127,7 +149,15 @@ else
       "args": ["tsx", "${MCP_SERVER_PATH}"],
       "env": {
         "AGENT_ROUTER_SOCKET": "${SOCKET_PATH}"
-      }
+      },
+      "autoApprove": [
+        "@agent-router/session_status",
+        "@agent-router/register_pr",
+        "@agent-router/complete_session",
+        "session_status",
+        "register_pr",
+        "complete_session"
+      ]
     }
   }
 }
