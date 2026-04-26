@@ -155,10 +155,13 @@ export class FakeGitHubBackend implements GitHubBackend {
     repo: string,
     prNumber: number,
     body: string,
-    actor: string
+    actor: string,
+    options?: { actorType?: string; authorAssociation?: string },
   ): Promise<void> {
     const id = this.commentCounter++;
     this.comments.push({ id, body, actor, prNumber });
+
+    const [owner] = repo.split('/');
 
     await this.sendWebhookToRepo(repo, prNumber, 'issue_comment', {
       action: 'created',
@@ -166,8 +169,19 @@ export class FakeGitHubBackend implements GitHubBackend {
         number: prNumber,
         pull_request: { url: `https://github.com/${repo}/pull/${prNumber}` },
       },
-      comment: { id, body, user: { login: actor } },
-      repository: { full_name: repo },
+      comment: {
+        id,
+        body,
+        user: {
+          login: actor,
+          type: options?.actorType ?? 'User',
+        },
+        author_association: options?.authorAssociation ?? 'OWNER',
+      },
+      repository: {
+        full_name: repo,
+        owner: { login: owner },
+      },
     });
   }
 

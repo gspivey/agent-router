@@ -16,6 +16,7 @@ describe('composeCheckRunPrompt', () => {
     const payload: CheckRunPayload = {
       check_run: {
         name: 'ci/build',
+        conclusion: 'failure',
         output: { summary: 'Build failed: missing dependency' },
         pull_requests: [{ number: 42 }],
       },
@@ -26,12 +27,30 @@ describe('composeCheckRunPrompt', () => {
     expect(result).toContain('myorg/myrepo');
     expect(result).toContain('#42');
     expect(result).toContain('Build failed: missing dependency');
+    expect(result).toContain('failed');
+    expect(result).toContain('conclusion: failure');
+  });
+
+  it('produces "passed" for successful check runs', () => {
+    const payload: CheckRunPayload = {
+      check_run: {
+        name: 'ci/build',
+        conclusion: 'success',
+        output: { summary: 'All checks passed' },
+        pull_requests: [{ number: 42 }],
+      },
+      repository: { full_name: 'myorg/myrepo' },
+    };
+    const result = composeCheckRunPrompt(payload);
+    expect(result).toContain('passed');
+    expect(result).toContain('conclusion: success');
   });
 
   it('handles null output summary gracefully', () => {
     const payload: CheckRunPayload = {
       check_run: {
         name: 'lint',
+        conclusion: 'failure',
         output: { summary: null },
         pull_requests: [{ number: 7 }],
       },
@@ -48,6 +67,7 @@ describe('composeCheckRunPrompt', () => {
     const payload: CheckRunPayload = {
       check_run: {
         name: 'test-suite',
+        conclusion: 'failure',
         output: { summary: 'Tests failed' },
         pull_requests: [],
       },
@@ -56,6 +76,20 @@ describe('composeCheckRunPrompt', () => {
     const result = composeCheckRunPrompt(payload);
     expect(result).toContain('test-suite');
     expect(result).toContain('unknown');
+  });
+
+  it('handles null conclusion', () => {
+    const payload: CheckRunPayload = {
+      check_run: {
+        name: 'pending-check',
+        conclusion: null,
+        output: { summary: 'Still running' },
+        pull_requests: [{ number: 1 }],
+      },
+      repository: { full_name: 'org/repo' },
+    };
+    const result = composeCheckRunPrompt(payload);
+    expect(result).toContain('conclusion: unknown');
   });
 });
 

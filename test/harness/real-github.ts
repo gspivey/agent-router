@@ -205,6 +205,7 @@ export class RealGitHubBackend implements GitHubBackend {
     prNumber: number,
     body: string,
     _actor: string,
+    _options?: { actorType?: string; authorAssociation?: string },
   ): Promise<void> {
     const ok = this.requireOctokit();
     await this.wrapRateLimit(() =>

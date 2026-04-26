@@ -4,10 +4,43 @@ import {
   isCommandTrigger,
   resolvePRNumber,
   evaluateWakePolicy,
+  computeTrustTier,
+  extractCommentAuthor,
+  extractRepoOwnerLogin,
 } from '../../src/router.js';
+import type { CommentAuthor } from '../../src/router.js';
 import type { QueuedEvent } from '../../src/queue.js';
 import type { Database, Session } from '../../src/db.js';
 import type { AgentRouterConfig } from '../../src/config.js';
+
+// ---------------------------------------------------------------------------
+// Helper: build a comment payload with trust fields
+// ---------------------------------------------------------------------------
+
+function commentPayload(opts: {
+  body: string;
+  login: string;
+  userType?: string;
+  authorAssociation?: string;
+  repoOwner?: string;
+  action?: string;
+}): Record<string, unknown> {
+  return {
+    action: opts.action ?? 'created',
+    comment: {
+      body: opts.body,
+      user: {
+        login: opts.login,
+        type: opts.userType ?? 'User',
+      },
+      author_association: opts.authorAssociation ?? 'NONE',
+    },
+    repository: {
+      full_name: `${opts.repoOwner ?? 'owner'}/repo`,
+      owner: { login: opts.repoOwner ?? 'owner' },
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // isCommandTrigger
@@ -48,101 +81,236 @@ describe('isCommandTrigger', () => {
 });
 
 // ---------------------------------------------------------------------------
+// computeTrustTier
+// ---------------------------------------------------------------------------
+
+describe('computeTrustTier', () => {
+  it('returns tier_1 when login matches repo owner', () => {
+    const author: CommentAuthor = { login: 'alice', type: 'User', authorAssociation: 'NONE' };
+    expect(computeTrustTier(author, 'alice')).toBe('tier_1');
+  });
+
+  it('returns tier_1 when author_association is OWNER', () => {
+    const author: CommentAuthor = { login: 'alice', type: 'User', authorAssociation: 'OWNER' };
+    expect(computeTrustTier(author, 'someone-else')).toBe('tier_1');
+  });
+
+  it('returns tier_1 for github-actions[bot]', () => {
+    const author: CommentAuthor = { login: 'github-actions[bot]', type: 'Bot', authorAssociation: 'NONE' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_1');
+  });
+
+  it('returns tier_3 for a non-github-actions bot (e.g. dependabot)', () => {
+    const author: CommentAuthor = { login: 'dependabot[bot]', type: 'Bot', authorAssociation: 'NONE' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_3');
+  });
+
+  it('returns tier_3 for an arbitrary bot', () => {
+    const author: CommentAuthor = { login: 'my-app[bot]', type: 'Bot', authorAssociation: 'NONE' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_3');
+  });
+
+  it('returns tier_2 for MEMBER', () => {
+    const author: CommentAuthor = { login: 'bob', type: 'User', authorAssociation: 'MEMBER' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_2');
+  });
+
+  it('returns tier_2 for COLLABORATOR', () => {
+    const author: CommentAuthor = { login: 'carol', type: 'User', authorAssociation: 'COLLABORATOR' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_2');
+  });
+
+  it('returns tier_3 for CONTRIBUTOR', () => {
+    const author: CommentAuthor = { login: 'dave', type: 'User', authorAssociation: 'CONTRIBUTOR' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_3');
+  });
+
+  it('returns tier_3 for FIRST_TIME_CONTRIBUTOR', () => {
+    const author: CommentAuthor = { login: 'eve', type: 'User', authorAssociation: 'FIRST_TIME_CONTRIBUTOR' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_3');
+  });
+
+  it('returns tier_3 for NONE', () => {
+    const author: CommentAuthor = { login: 'frank', type: 'User', authorAssociation: 'NONE' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_3');
+  });
+
+  it('returns tier_3 for MANNEQUIN', () => {
+    const author: CommentAuthor = { login: 'ghost', type: 'User', authorAssociation: 'MANNEQUIN' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_3');
+  });
+
+  it('returns tier_3 for unknown association value', () => {
+    const author: CommentAuthor = { login: 'x', type: 'User', authorAssociation: 'SOMETHING_NEW' };
+    expect(computeTrustTier(author, 'owner')).toBe('tier_3');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractCommentAuthor
+// ---------------------------------------------------------------------------
+
+describe('extractCommentAuthor', () => {
+  it('extracts author from a well-formed payload', () => {
+    const payload = commentPayload({ body: 'hi', login: 'alice', userType: 'User', authorAssociation: 'OWNER', repoOwner: 'alice' });
+    const author = extractCommentAuthor(payload);
+    expect(author).toEqual({ login: 'alice', type: 'User', authorAssociation: 'OWNER' });
+  });
+
+  it('returns null when comment is missing', () => {
+    expect(extractCommentAuthor({ action: 'created' })).toBeNull();
+  });
+
+  it('returns null when comment.user is missing', () => {
+    expect(extractCommentAuthor({ comment: { body: 'hi', author_association: 'NONE' } })).toBeNull();
+  });
+
+  it('returns null when author_association is missing', () => {
+    expect(extractCommentAuthor({ comment: { body: 'hi', user: { login: 'a', type: 'User' } } })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractRepoOwnerLogin
+// ---------------------------------------------------------------------------
+
+describe('extractRepoOwnerLogin', () => {
+  it('extracts owner login from a well-formed payload', () => {
+    const payload = commentPayload({ body: 'hi', login: 'alice', repoOwner: 'bob' });
+    expect(extractRepoOwnerLogin(payload)).toBe('bob');
+  });
+
+  it('returns null when repository is missing', () => {
+    expect(extractRepoOwnerLogin({})).toBeNull();
+  });
+
+  it('returns null when repository.owner is missing', () => {
+    expect(extractRepoOwnerLogin({ repository: { full_name: 'a/b' } })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // filterEventType
 // ---------------------------------------------------------------------------
 
 describe('filterEventType', () => {
   describe('check_run events', () => {
-    it('classifies check_run completed+failure as wakeable', () => {
-      const payload = {
-        action: 'completed',
-        check_run: { conclusion: 'failure' },
-      };
-      expect(filterEventType('check_run', payload)).toBe(true);
+    it('wakes on check_run completed+failure', () => {
+      const payload = { action: 'completed', check_run: { conclusion: 'failure' } };
+      expect(filterEventType('check_run', payload)).toEqual({ wakeable: true, trustTier: 'n/a' });
     });
 
-    it('rejects check_run completed+success', () => {
-      const payload = {
-        action: 'completed',
-        check_run: { conclusion: 'success' },
-      };
-      expect(filterEventType('check_run', payload)).toBe(false);
+    it('wakes on check_run completed+success', () => {
+      const payload = { action: 'completed', check_run: { conclusion: 'success' } };
+      expect(filterEventType('check_run', payload)).toEqual({ wakeable: true, trustTier: 'n/a' });
+    });
+
+    it('wakes on check_run completed+neutral', () => {
+      const payload = { action: 'completed', check_run: { conclusion: 'neutral' } };
+      expect(filterEventType('check_run', payload)).toEqual({ wakeable: true, trustTier: 'n/a' });
     });
 
     it('rejects check_run with action != completed', () => {
-      const payload = {
-        action: 'created',
-        check_run: { conclusion: 'failure' },
-      };
-      expect(filterEventType('check_run', payload)).toBe(false);
+      const payload = { action: 'created', check_run: { conclusion: 'failure' } };
+      expect(filterEventType('check_run', payload).wakeable).toBe(false);
     });
   });
 
-  describe('pull_request_review_comment events', () => {
-    it('classifies pull_request_review_comment created as wakeable', () => {
-      const payload = { action: 'created' };
-      expect(filterEventType('pull_request_review_comment', payload)).toBe(true);
+  describe('tier 1 — repo owner comments', () => {
+    it('wakes on issue_comment from repo owner (any body)', () => {
+      const payload = commentPayload({ body: 'looks good', login: 'owner', authorAssociation: 'OWNER', repoOwner: 'owner' });
+      const result = filterEventType('issue_comment', payload);
+      expect(result).toEqual({ wakeable: true, trustTier: 'tier_1' });
     });
 
-    it('rejects pull_request_review_comment with action != created', () => {
-      const payload = { action: 'edited' };
-      expect(filterEventType('pull_request_review_comment', payload)).toBe(false);
-    });
-  });
-
-  describe('issue_comment events', () => {
-    it('classifies issue_comment created with /agent trigger as wakeable', () => {
-      const payload = {
-        action: 'created',
-        comment: { body: '/agent fix this' },
-      };
-      expect(filterEventType('issue_comment', payload)).toBe(true);
+    it('wakes on pull_request_review_comment from repo owner', () => {
+      const payload = commentPayload({ body: 'nit: rename this', login: 'owner', authorAssociation: 'OWNER', repoOwner: 'owner' });
+      const result = filterEventType('pull_request_review_comment', payload);
+      expect(result).toEqual({ wakeable: true, trustTier: 'tier_1' });
     });
 
-    it('classifies issue_comment created with bare /agent as wakeable', () => {
-      const payload = {
-        action: 'created',
-        comment: { body: '/agent' },
-      };
-      expect(filterEventType('issue_comment', payload)).toBe(true);
-    });
-
-    it('rejects issue_comment created without /agent trigger', () => {
-      const payload = {
-        action: 'created',
-        comment: { body: 'looks good to me' },
-      };
-      expect(filterEventType('issue_comment', payload)).toBe(false);
-    });
-
-    it('rejects issue_comment created with /agentsmith (no boundary)', () => {
-      const payload = {
-        action: 'created',
-        comment: { body: '/agentsmith' },
-      };
-      expect(filterEventType('issue_comment', payload)).toBe(false);
-    });
-
-    it('rejects issue_comment with action != created', () => {
-      const payload = {
-        action: 'deleted',
-        comment: { body: '/agent fix' },
-      };
-      expect(filterEventType('issue_comment', payload)).toBe(false);
+    it('wakes on comment from github-actions[bot]', () => {
+      const payload = commentPayload({ body: 'CI summary', login: 'github-actions[bot]', userType: 'Bot', authorAssociation: 'NONE', repoOwner: 'owner' });
+      const result = filterEventType('issue_comment', payload);
+      expect(result).toEqual({ wakeable: true, trustTier: 'tier_1' });
     });
   });
 
-  describe('non-wakeable event types', () => {
+  describe('tier 2 — collaborator comments', () => {
+    it('wakes on MEMBER comment with /agent prefix', () => {
+      const payload = commentPayload({ body: '/agent fix tests', login: 'bob', authorAssociation: 'MEMBER', repoOwner: 'owner' });
+      const result = filterEventType('issue_comment', payload);
+      expect(result).toEqual({ wakeable: true, trustTier: 'tier_2' });
+    });
+
+    it('wakes on COLLABORATOR comment with /agent prefix', () => {
+      const payload = commentPayload({ body: '/agent deploy', login: 'carol', authorAssociation: 'COLLABORATOR', repoOwner: 'owner' });
+      const result = filterEventType('pull_request_review_comment', payload);
+      expect(result).toEqual({ wakeable: true, trustTier: 'tier_2' });
+    });
+
+    it('does NOT wake on MEMBER comment without /agent prefix', () => {
+      const payload = commentPayload({ body: 'looks good to me', login: 'bob', authorAssociation: 'MEMBER', repoOwner: 'owner' });
+      const result = filterEventType('issue_comment', payload);
+      expect(result).toEqual({ wakeable: false, trustTier: 'tier_2' });
+    });
+
+    it('does NOT wake on COLLABORATOR comment without /agent prefix', () => {
+      const payload = commentPayload({ body: 'nice work', login: 'carol', authorAssociation: 'COLLABORATOR', repoOwner: 'owner' });
+      const result = filterEventType('pull_request_review_comment', payload);
+      expect(result).toEqual({ wakeable: false, trustTier: 'tier_2' });
+    });
+  });
+
+  describe('tier 3 — untrusted comments', () => {
+    it('does NOT wake on CONTRIBUTOR comment even with /agent', () => {
+      const payload = commentPayload({ body: '/agent hack', login: 'dave', authorAssociation: 'CONTRIBUTOR', repoOwner: 'owner' });
+      expect(filterEventType('issue_comment', payload)).toEqual({ wakeable: false, trustTier: 'tier_3' });
+    });
+
+    it('does NOT wake on FIRST_TIME_CONTRIBUTOR comment', () => {
+      const payload = commentPayload({ body: '/agent inject', login: 'eve', authorAssociation: 'FIRST_TIME_CONTRIBUTOR', repoOwner: 'owner' });
+      expect(filterEventType('issue_comment', payload)).toEqual({ wakeable: false, trustTier: 'tier_3' });
+    });
+
+    it('does NOT wake on NONE comment', () => {
+      const payload = commentPayload({ body: '/agent do stuff', login: 'frank', authorAssociation: 'NONE', repoOwner: 'owner' });
+      expect(filterEventType('issue_comment', payload)).toEqual({ wakeable: false, trustTier: 'tier_3' });
+    });
+
+    it('does NOT wake on MANNEQUIN comment', () => {
+      const payload = commentPayload({ body: '/agent', login: 'ghost', authorAssociation: 'MANNEQUIN', repoOwner: 'owner' });
+      expect(filterEventType('issue_comment', payload)).toEqual({ wakeable: false, trustTier: 'tier_3' });
+    });
+
+    it('does NOT wake on non-github-actions bot (dependabot)', () => {
+      const payload = commentPayload({ body: 'bump deps', login: 'dependabot[bot]', userType: 'Bot', authorAssociation: 'NONE', repoOwner: 'owner' });
+      expect(filterEventType('issue_comment', payload)).toEqual({ wakeable: false, trustTier: 'tier_3' });
+    });
+  });
+
+  describe('edge cases', () => {
+    it('rejects comment with action != created', () => {
+      const payload = commentPayload({ body: '/agent fix', login: 'owner', authorAssociation: 'OWNER', repoOwner: 'owner', action: 'deleted' });
+      expect(filterEventType('issue_comment', payload).wakeable).toBe(false);
+    });
+
+    it('returns tier_3 when trust fields are missing from comment', () => {
+      const payload = { action: 'created', comment: { body: '/agent fix' }, repository: { full_name: 'a/b' } };
+      const result = filterEventType('issue_comment', payload);
+      expect(result).toEqual({ wakeable: false, trustTier: 'tier_3' });
+    });
+
     it('rejects push events', () => {
-      expect(filterEventType('push', { action: 'completed' })).toBe(false);
+      expect(filterEventType('push', { action: 'completed' }).wakeable).toBe(false);
     });
 
     it('rejects pull_request events', () => {
-      expect(filterEventType('pull_request', { action: 'opened' })).toBe(false);
+      expect(filterEventType('pull_request', { action: 'opened' }).wakeable).toBe(false);
     });
 
     it('rejects null payload', () => {
-      expect(filterEventType('check_run', null)).toBe(false);
+      expect(filterEventType('check_run', null).wakeable).toBe(false);
     });
   });
 });
@@ -265,11 +433,27 @@ describe('evaluateWakePolicy', () => {
     cron: [],
   };
 
-  it('returns wake=true when all checks pass', () => {
+  it('returns wake=true for check_run with trustTier=n/a', () => {
     const result = evaluateWakePolicy(makeEvent(), makeDb(), config);
     expect(result.wake).toBe(true);
     expect(result.sessionId).toBe('sess-abc');
     expect(result.prNumber).toBe(42);
+    expect(result.trustTier).toBe('n/a');
+  });
+
+  it('returns wake=true for check_run success (not just failure)', () => {
+    const event = makeEvent({
+      payload: JSON.stringify({
+        action: 'completed',
+        check_run: {
+          conclusion: 'success',
+          pull_requests: [{ number: 42 }],
+        },
+      }),
+    });
+    const result = evaluateWakePolicy(event, makeDb(), config);
+    expect(result.wake).toBe(true);
+    expect(result.trustTier).toBe('n/a');
   });
 
   it('returns wake=false for non-wakeable event type', () => {
@@ -319,16 +503,12 @@ describe('evaluateWakePolicy', () => {
     expect(result.reason).toContain('Invalid JSON');
   });
 
-  it('works for issue_comment with /agent trigger', () => {
+  it('wakes for tier 1 issue_comment (owner, any body)', () => {
     const event = makeEvent({
       eventType: 'issue_comment',
       payload: JSON.stringify({
-        action: 'created',
-        comment: { body: '/agent fix tests' },
-        issue: {
-          number: 10,
-          pull_request: { url: 'https://api.github.com/...' },
-        },
+        ...commentPayload({ body: 'just a note', login: 'owner', authorAssociation: 'OWNER', repoOwner: 'owner' }),
+        issue: { number: 10, pull_request: { url: 'https://api.github.com/...' } },
       }),
     });
     const db = makeDb({
@@ -341,15 +521,49 @@ describe('evaluateWakePolicy', () => {
     });
     const result = evaluateWakePolicy(event, db, config);
     expect(result.wake).toBe(true);
+    expect(result.trustTier).toBe('tier_1');
     expect(result.prNumber).toBe(10);
-    expect(result.sessionId).toBe('sess-xyz');
   });
 
-  it('works for pull_request_review_comment', () => {
+  it('wakes for tier 2 issue_comment with /agent trigger', () => {
+    const event = makeEvent({
+      eventType: 'issue_comment',
+      payload: JSON.stringify({
+        ...commentPayload({ body: '/agent fix tests', login: 'bob', authorAssociation: 'MEMBER', repoOwner: 'owner' }),
+        issue: { number: 10, pull_request: { url: 'https://api.github.com/...' } },
+      }),
+    });
+    const db = makeDb({
+      findSession: (_repo: string, prNumber: number) => ({
+        sessionId: 'sess-xyz',
+        repo: 'myorg/myrepo',
+        prNumber,
+        lastWakedAt: null,
+      }),
+    });
+    const result = evaluateWakePolicy(event, db, config);
+    expect(result.wake).toBe(true);
+    expect(result.trustTier).toBe('tier_2');
+  });
+
+  it('does NOT wake for tier 3 issue_comment even with /agent', () => {
+    const event = makeEvent({
+      eventType: 'issue_comment',
+      payload: JSON.stringify({
+        ...commentPayload({ body: '/agent hack', login: 'stranger', authorAssociation: 'NONE', repoOwner: 'owner' }),
+        issue: { number: 10, pull_request: { url: 'https://api.github.com/...' } },
+      }),
+    });
+    const result = evaluateWakePolicy(event, makeDb(), config);
+    expect(result.wake).toBe(false);
+    expect(result.trustTier).toBe('tier_3');
+  });
+
+  it('works for pull_request_review_comment from owner', () => {
     const event = makeEvent({
       eventType: 'pull_request_review_comment',
       payload: JSON.stringify({
-        action: 'created',
+        ...commentPayload({ body: 'fix this', login: 'owner', authorAssociation: 'OWNER', repoOwner: 'owner' }),
         pull_request: { number: 55 },
       }),
     });
@@ -364,5 +578,6 @@ describe('evaluateWakePolicy', () => {
     const result = evaluateWakePolicy(event, db, config);
     expect(result.wake).toBe(true);
     expect(result.prNumber).toBe(55);
+    expect(result.trustTier).toBe('tier_1');
   });
 });

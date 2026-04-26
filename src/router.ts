@@ -2,11 +2,14 @@ import type { Database } from './db.js';
 import type { AgentRouterConfig } from './config.js';
 import type { QueuedEvent } from './queue.js';
 
+export type TrustTier = 'tier_1' | 'tier_2' | 'tier_3' | 'n/a';
+
 export interface WakeDecision {
   wake: boolean;
   reason: string;
   sessionId?: string;
   prNumber?: number;
+  trustTier?: TrustTier;
 }
 
 /**
@@ -18,40 +21,147 @@ export function isCommandTrigger(commentBody: string): boolean {
 }
 
 /**
- * Classify an event as wakeable based on event type + payload fields.
+ * Comment author info extracted from a webhook payload.
+ */
+export interface CommentAuthor {
+  login: string;
+  type: string;
+  authorAssociation: string;
+}
+
+/**
+ * Compute the trust tier for a comment author relative to the repository.
+ *
+ * Tier 1 — full trust:
+ *   - Author is the repository owner (login match OR author_association == "OWNER")
+ *   - Author is github-actions[bot] (type == "Bot" AND login == "github-actions[bot]")
+ *
+ * Tier 2 — partial trust:
+ *   - author_association is "MEMBER" or "COLLABORATOR"
+ *
+ * Tier 3 — untrusted:
+ *   - Everything else (CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR, NONE, MANNEQUIN, unknown)
+ */
+export function computeTrustTier(
+  author: CommentAuthor,
+  repoOwnerLogin: string,
+): TrustTier {
+  // Tier 1: repo owner
+  if (author.login === repoOwnerLogin || author.authorAssociation === 'OWNER') {
+    return 'tier_1';
+  }
+
+  // Tier 1: github-actions[bot] specifically
+  if (author.type === 'Bot' && author.login === 'github-actions[bot]') {
+    return 'tier_1';
+  }
+
+  // Tier 2: collaborators with write access
+  if (author.authorAssociation === 'MEMBER' || author.authorAssociation === 'COLLABORATOR') {
+    return 'tier_2';
+  }
+
+  return 'tier_3';
+}
+
+/**
+ * Extract comment author info from a parsed webhook payload.
+ * Works for both issue_comment and pull_request_review_comment payloads.
+ * Returns null if the required fields are missing.
+ */
+export function extractCommentAuthor(payload: Record<string, unknown>): CommentAuthor | null {
+  const comment = payload['comment'];
+  if (typeof comment !== 'object' || comment === null) return null;
+  const commentObj = comment as Record<string, unknown>;
+
+  const user = commentObj['user'];
+  if (typeof user !== 'object' || user === null) return null;
+  const userObj = user as Record<string, unknown>;
+
+  const login = userObj['login'];
+  const type = userObj['type'];
+  if (typeof login !== 'string' || typeof type !== 'string') return null;
+
+  const authorAssociation = commentObj['author_association'];
+  if (typeof authorAssociation !== 'string') return null;
+
+  return { login, type, authorAssociation };
+}
+
+/**
+ * Extract the repository owner login from a parsed webhook payload.
+ */
+export function extractRepoOwnerLogin(payload: Record<string, unknown>): string | null {
+  const repo = payload['repository'];
+  if (typeof repo !== 'object' || repo === null) return null;
+  const repoObj = repo as Record<string, unknown>;
+
+  const owner = repoObj['owner'];
+  if (typeof owner !== 'object' || owner === null) return null;
+  const ownerObj = owner as Record<string, unknown>;
+
+  const login = ownerObj['login'];
+  return typeof login === 'string' ? login : null;
+}
+
+/**
+ * Classify an event as wakeable based on event type, payload fields, and trust tier.
  *
  * Wakeable patterns:
- *  1. check_run  with action=completed, conclusion=failure
- *  2. pull_request_review_comment  with action=created
- *  3. issue_comment  with action=created and body matching /^\/agent(\s|$)/
+ *  1. check_run with action=completed (any conclusion) — trust tier n/a
+ *  2. issue_comment / pull_request_review_comment with action=created:
+ *     - Tier 1: wake unconditionally
+ *     - Tier 2: wake only if body starts with /agent
+ *     - Tier 3: never wake
+ *
+ * Returns the trust tier alongside the wake decision so callers can log it.
  */
-export function filterEventType(eventType: string, payload: unknown): boolean {
+export function filterEventType(
+  eventType: string,
+  payload: unknown,
+): { wakeable: boolean; trustTier: TrustTier } {
   if (typeof payload !== 'object' || payload === null) {
-    return false;
+    return { wakeable: false, trustTier: 'n/a' };
   }
   const p = payload as Record<string, unknown>;
 
   if (eventType === 'check_run') {
-    if (p['action'] !== 'completed') return false;
-    const checkRun = p['check_run'];
-    if (typeof checkRun !== 'object' || checkRun === null) return false;
-    return (checkRun as Record<string, unknown>)['conclusion'] === 'failure';
+    if (p['action'] !== 'completed') return { wakeable: false, trustTier: 'n/a' };
+    return { wakeable: true, trustTier: 'n/a' };
   }
 
-  if (eventType === 'pull_request_review_comment') {
-    return p['action'] === 'created';
+  if (eventType === 'pull_request_review_comment' || eventType === 'issue_comment') {
+    if (p['action'] !== 'created') return { wakeable: false, trustTier: 'n/a' };
+
+    const author = extractCommentAuthor(p);
+    const repoOwnerLogin = extractRepoOwnerLogin(p);
+
+    if (author === null || repoOwnerLogin === null) {
+      // Missing trust fields — treat as tier 3 (untrusted)
+      return { wakeable: false, trustTier: 'tier_3' };
+    }
+
+    const tier = computeTrustTier(author, repoOwnerLogin);
+
+    if (tier === 'tier_1') {
+      return { wakeable: true, trustTier: 'tier_1' };
+    }
+
+    if (tier === 'tier_2') {
+      // Tier 2 requires /agent prefix
+      const comment = p['comment'] as Record<string, unknown>;
+      const body = comment['body'];
+      if (typeof body === 'string' && isCommandTrigger(body)) {
+        return { wakeable: true, trustTier: 'tier_2' };
+      }
+      return { wakeable: false, trustTier: 'tier_2' };
+    }
+
+    // Tier 3: never wake
+    return { wakeable: false, trustTier: 'tier_3' };
   }
 
-  if (eventType === 'issue_comment') {
-    if (p['action'] !== 'created') return false;
-    const comment = p['comment'];
-    if (typeof comment !== 'object' || comment === null) return false;
-    const body = (comment as Record<string, unknown>)['body'];
-    if (typeof body !== 'string') return false;
-    return isCommandTrigger(body);
-  }
-
-  return false;
+  return { wakeable: false, trustTier: 'n/a' };
 }
 
 /**
@@ -97,7 +207,7 @@ export function resolvePRNumber(eventType: string, payload: unknown): number | n
 
 /**
  * Orchestrate the full wake policy pipeline:
- *   1. Filter event type
+ *   1. Filter event type + compute trust tier
  *   2. Resolve PR number
  *   3. Lookup session in DB
  *   4. Check rate limit via db.tryAcquireWakeSlot
@@ -114,18 +224,23 @@ export function evaluateWakePolicy(
   try {
     payload = JSON.parse(event.payload);
   } catch {
-    return { wake: false, reason: 'Invalid JSON payload' };
+    return { wake: false, reason: 'Invalid JSON payload', trustTier: 'n/a' };
   }
 
-  // Step 1: Filter event type
-  if (!filterEventType(event.eventType, payload)) {
-    return { wake: false, reason: `Event type "${event.eventType}" is not wakeable` };
+  // Step 1: Filter event type + trust tier
+  const { wakeable, trustTier } = filterEventType(event.eventType, payload);
+  if (!wakeable) {
+    return {
+      wake: false,
+      reason: `Event type "${event.eventType}" is not wakeable`,
+      trustTier,
+    };
   }
 
   // Step 2: Resolve PR number
   const prNumber = resolvePRNumber(event.eventType, payload);
   if (prNumber === null) {
-    return { wake: false, reason: 'Could not resolve PR number from payload' };
+    return { wake: false, reason: 'Could not resolve PR number from payload', trustTier };
   }
 
   // Step 3: Lookup session in DB
@@ -135,6 +250,7 @@ export function evaluateWakePolicy(
       wake: false,
       reason: `No session registered for ${event.repo}#${prNumber}`,
       prNumber,
+      trustTier,
     };
   }
 
@@ -152,6 +268,7 @@ export function evaluateWakePolicy(
       reason: `Rate limited: ${event.repo}#${prNumber} was waked too recently`,
       sessionId: session.sessionId,
       prNumber,
+      trustTier,
     };
   }
 
@@ -160,5 +277,6 @@ export function evaluateWakePolicy(
     reason: `Wake approved for ${event.repo}#${prNumber}`,
     sessionId: session.sessionId,
     prNumber,
+    trustTier,
   };
 }

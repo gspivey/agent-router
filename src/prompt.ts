@@ -1,6 +1,7 @@
 export interface CheckRunPayload {
   check_run: {
     name: string;
+    conclusion: string | null;
     output: { summary: string | null };
     pull_requests: Array<{ number: number }>;
   };
@@ -26,8 +27,10 @@ export interface IssueCommentPayload {
 export function composeCheckRunPrompt(payload: CheckRunPayload): string {
   const prNumber = payload.check_run.pull_requests[0]?.number;
   const summary = payload.check_run.output.summary ?? '(no output summary)';
+  const conclusion = payload.check_run.conclusion ?? 'unknown';
+  const verb = conclusion === 'success' ? 'passed' : 'failed';
   return [
-    `Check run "${payload.check_run.name}" failed.`,
+    `Check run "${payload.check_run.name}" ${verb} (conclusion: ${conclusion}).`,
     `Repository: ${payload.repository.full_name}`,
     `PR: #${prNumber ?? 'unknown'}`,
     `Output summary:`,

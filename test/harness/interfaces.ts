@@ -45,7 +45,8 @@ export interface GitHubBackend {
     repo: string,
     prNumber: number,
     body: string,
-    actor: string
+    actor: string,
+    options?: { actorType?: string; authorAssociation?: string },
   ): Promise<void>;
   reportCheckRun(
     repo: string,
