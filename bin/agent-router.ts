@@ -1,4 +1,4 @@
-#!/usr/bin/env node --import tsx/esm
+#!/usr/bin/env -S node --import tsx/esm
 /**
  * CLI client binary for Agent Router.
  *
