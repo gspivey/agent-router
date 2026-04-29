@@ -17,7 +17,7 @@ The forcing function on prioritization is **cron mode** — running agent-router
 
 These must ship before agent-router can run autonomously on a timer. Each represents a failure mode that becomes catastrophic without a human watching the loop in real time.
 
-### P0.1 — Auto-completion on terminal merge (deterministic completion via Kiro hooks)
+### P0.1 — Auto-completion on terminal merge (deterministic completion via Kiro hooks) ✅ DONE
 
 **Maps to PRODUCT.md Phase 1:** "Failure detection: agent crash → meta.json status 'failed' → no retry loop." Different angle on the same problem space — failure detection covers crashes; this covers successful-completion detection. Both needed.
 

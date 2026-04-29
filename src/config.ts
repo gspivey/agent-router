@@ -5,6 +5,7 @@ import { FatalError } from './errors.js';
 export interface SessionTimeoutConfig {
   inactivityMinutes: number;
   maxLifetimeMinutes: number;
+  gracePeriodAfterMergeSeconds: number;
 }
 
 export interface AgentRouterConfig {
@@ -107,6 +108,7 @@ export function validateConfig(config: unknown): AgentRouterConfig {
   const rawSessionTimeout = config['sessionTimeout'];
   let inactivityMinutes = 5;
   let maxLifetimeMinutes = 120;
+  let gracePeriodAfterMergeSeconds = 60;
   if (rawSessionTimeout !== undefined) {
     if (!isRecord(rawSessionTimeout)) {
       throw new FatalError('Invalid "sessionTimeout": must be an object');
@@ -129,6 +131,13 @@ export function validateConfig(config: unknown): AgentRouterConfig {
       throw new FatalError(
         `Invalid "sessionTimeout": inactivityMinutes (${inactivityMinutes}) must not exceed maxLifetimeMinutes (${maxLifetimeMinutes})`
       );
+    }
+    if (rawSessionTimeout['gracePeriodAfterMergeSeconds'] !== undefined) {
+      const val = rawSessionTimeout['gracePeriodAfterMergeSeconds'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 0) {
+        throw new FatalError('Invalid "sessionTimeout.gracePeriodAfterMergeSeconds": must be a non-negative integer');
+      }
+      gracePeriodAfterMergeSeconds = val;
     }
   }
 
@@ -200,7 +209,7 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     webhookSecret,
     kiroPath,
     rateLimit: { perPRSeconds },
-    sessionTimeout: { inactivityMinutes, maxLifetimeMinutes },
+    sessionTimeout: { inactivityMinutes, maxLifetimeMinutes, gracePeriodAfterMergeSeconds },
     repos,
     cron: cronEntries,
   };

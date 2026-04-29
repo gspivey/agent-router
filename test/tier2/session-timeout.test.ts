@@ -47,6 +47,7 @@ function makeManager(opts: {
     sessionTimeout: {
       inactivityMinutes: opts.inactivityMinutes,
       maxLifetimeMinutes: opts.maxLifetimeMinutes,
+      gracePeriodAfterMergeSeconds: 60,
     },
   });
 }

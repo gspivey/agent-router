@@ -110,16 +110,7 @@ export function createCliServer(deps: {
       if (typeof reason !== 'string' || reason.length === 0) {
         throw new Error('Missing or empty "reason" parameter');
       }
-      sessionFiles.updateMeta(sessionId, {
-        status: 'completed',
-        completed_at: Math.floor(Date.now() / 1000),
-      });
-      sessionFiles.appendStream(sessionId, {
-        ts: new Date().toISOString(),
-        source: 'router',
-        type: 'session_ended',
-        reason,
-      });
+      sessionMgr.completeSession(sessionId, reason);
       return { ok: true };
     },
   };

@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import type { Database } from './db.js';
 import type { Logger } from './log.js';
-import type { SessionFiles, SessionPaths, PromptSource, StreamEntry } from './session-files.js';
+import type { SessionFiles, SessionPaths, PromptSource, StreamEntry, SessionMeta } from './session-files.js';
 import type { EventQueue } from './queue.js';
 import { createEventQueue } from './queue.js';
 import type { ACPClient, ACPNotification } from './acp.js';
@@ -19,6 +19,7 @@ export interface SessionManager {
   createSession(originalPrompt: string): Promise<SessionHandle>;
   injectPrompt(sessionId: string, prompt: string, source: PromptSource): Promise<void>;
   registerPR(sessionId: string, repo: string, prNumber: number): Promise<void>;
+  completeSession(sessionId: string, reason: string): void;
   terminateSession(sessionId: string): Promise<void>;
   getActiveSession(sessionId: string): SessionHandle | null;
   shutdown(): Promise<void>;
@@ -28,6 +29,7 @@ export interface SessionManager {
 const DEFAULT_SESSION_TIMEOUT: SessionTimeoutConfig = {
   inactivityMinutes: 5,
   maxLifetimeMinutes: 120,
+  gracePeriodAfterMergeSeconds: 60,
 };
 
 // ---------------------------------------------------------------------------
@@ -105,6 +107,7 @@ export function createSessionManager(deps: {
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
   const maxLifetimeMs = timeout.maxLifetimeMinutes * 60 * 1000;
+  const gracePeriodMs = timeout.gracePeriodAfterMergeSeconds * 1000;
   const registry = createSessionRegistry();
 
   // Track per-session inactivity timers
@@ -112,6 +115,9 @@ export function createSessionManager(deps: {
 
   // Track per-session max-lifetime timers
   const lifetimeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  // Track per-session grace period timers (set when auto-completion fires)
+  const graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   // Track per-session completion flags (set when complete_session MCP call is received)
   const completionFlags = new Set<string>();
@@ -127,6 +133,11 @@ export function createSessionManager(deps: {
     if (lifeTimer !== undefined) {
       clearTimeout(lifeTimer);
       lifetimeTimers.delete(sessionId);
+    }
+    const graceTimer = graceTimers.get(sessionId);
+    if (graceTimer !== undefined) {
+      clearTimeout(graceTimer);
+      graceTimers.delete(sessionId);
     }
   }
 
@@ -466,6 +477,73 @@ export function createSessionManager(deps: {
       log.info('PR registered', { sessionId, repo, prNumber });
     },
 
+    completeSession(sessionId: string, reason: string): void {
+      const handle = registry.get(sessionId);
+      if (handle === undefined) {
+        throw new Error(`No active session found: ${sessionId}`);
+      }
+
+      // Mark completion so monitorSubprocessExit knows this was intentional
+      completionFlags.add(sessionId);
+
+      // Update meta immediately with the provided reason
+      try {
+        const terminationReason = reason as NonNullable<SessionMeta['termination_reason']>;
+        sessionFiles.updateMeta(sessionId, {
+          status: 'completed',
+          completed_at: Math.floor(Date.now() / 1000),
+          termination_reason: terminationReason,
+        });
+      } catch {
+        // Meta may already be in terminal state
+      }
+
+      // Append stream entry
+      try {
+        sessionFiles.appendStream(sessionId, {
+          ts: new Date().toISOString(),
+          source: 'router',
+          type: 'session_ended',
+          reason,
+        });
+      } catch {
+        // Best effort
+      }
+
+      // Suppress inactivity timer — replace with grace period timer
+      const inactTimer = inactivityTimers.get(sessionId);
+      if (inactTimer !== undefined) {
+        clearTimeout(inactTimer);
+        inactivityTimers.delete(sessionId);
+      }
+
+      log.info('Session auto-completed, starting grace period', {
+        sessionId,
+        reason,
+        gracePeriodSeconds: timeout.gracePeriodAfterMergeSeconds,
+      });
+
+      // Start grace period timer — after it expires, kill the subprocess cleanly
+      const graceTimer = setTimeout(() => {
+        graceTimers.delete(sessionId);
+        if (!registry.has(sessionId)) return;
+
+        log.info('Grace period expired, terminating session', { sessionId });
+
+        // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
+        registry.remove(sessionId);
+        clearSessionTimers(sessionId);
+        completionFlags.delete(sessionId);
+
+        handle.acp.kill().catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.error('Failed to kill session after grace period', { sessionId, error: msg });
+        });
+      }, gracePeriodMs);
+
+      graceTimers.set(sessionId, graceTimer);
+    },
+
     async terminateSession(sessionId: string): Promise<void> {
       const handle = registry.get(sessionId);
       if (handle === undefined) {
@@ -528,6 +606,10 @@ export function createSessionManager(deps: {
         clearTimeout(timer);
       }
       lifetimeTimers.clear();
+      for (const [, timer] of graceTimers) {
+        clearTimeout(timer);
+      }
+      graceTimers.clear();
 
       // Update all active sessions to abandoned and terminate subprocesses
       const terminationPromises: Promise<void>[] = [];

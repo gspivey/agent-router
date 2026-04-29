@@ -428,7 +428,7 @@ describe('evaluateWakePolicy', () => {
     webhookSecret: 'secret',
     kiroPath: '/usr/bin/kiro',
     rateLimit: { perPRSeconds: 60 },
-    sessionTimeout: { inactivityMinutes: 5, maxLifetimeMinutes: 120 },
+    sessionTimeout: { inactivityMinutes: 5, maxLifetimeMinutes: 120, gracePeriodAfterMergeSeconds: 60 },
     repos: [{ owner: 'myorg', name: 'myrepo' }],
     cron: [],
   };

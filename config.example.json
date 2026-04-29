@@ -7,7 +7,8 @@
   },
   "sessionTimeout": {
     "inactivityMinutes": 5,
-    "maxLifetimeMinutes": 120
+    "maxLifetimeMinutes": 120,
+    "gracePeriodAfterMergeSeconds": 60
   },
   "repos": [
     { "owner": "your-org", "name": "your-repo" }

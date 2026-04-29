@@ -453,6 +453,49 @@ async function cmdTerminate(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: complete-session
+// ---------------------------------------------------------------------------
+
+async function cmdCompleteSession(args: string[]): Promise<void> {
+  let sessionId: string | undefined;
+  let reason: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--session-id') {
+      sessionId = args[++i];
+    } else if (arg === '--reason') {
+      reason = args[++i];
+    } else if (sessionId === undefined && !arg?.startsWith('--')) {
+      sessionId = arg;
+    }
+  }
+
+  if (sessionId === undefined) {
+    process.stderr.write('Usage: agent-router complete-session --session-id <id> --reason <reason>\n');
+    process.exit(1);
+  }
+  if (reason === undefined || reason.length === 0) {
+    process.stderr.write('Error: --reason is required\n');
+    process.exit(1);
+  }
+
+  const socketPath = resolveSocketPath();
+  const result = await sendToDaemon(socketPath, {
+    op: 'complete_session',
+    session_id: sessionId,
+    reason,
+  });
+
+  if (result['error'] !== undefined) {
+    process.stderr.write(`Error: ${result['error'] as string}\n`);
+    process.exit(1);
+  }
+
+  process.stderr.write(`Session completed (reason: ${reason}).\n`);
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatch
 // ---------------------------------------------------------------------------
 
@@ -465,6 +508,8 @@ Commands:
   ls                                       List sessions
   tail <session_id> [--raw] [--prompts]    Tail session output
   terminate <session_id>                   Terminate a session
+  complete-session --session-id <id> --reason <reason>
+                                           Signal session completion
 `);
 }
 
@@ -491,6 +536,9 @@ async function main(): Promise<void> {
       break;
     case 'terminate':
       await cmdTerminate(subArgs);
+      break;
+    case 'complete-session':
+      await cmdCompleteSession(subArgs);
       break;
     default:
       process.stderr.write(`Unknown command: ${command}\n`);

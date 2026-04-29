@@ -166,6 +166,70 @@ describe('terminate_session (Req 21.5)', () => {
   });
 });
 
+describe('complete_session (P0.1)', () => {
+  it('completes an active session with reason merged', async () => {
+    const session = await cli.newSession('Task to merge');
+    const result = await cli.completeSession(session.session_id, 'merged');
+
+    expect(result.ok).toBe(true);
+
+    // meta.json should show completed with termination_reason merged
+    const metaPath = path.join(rootDir, 'sessions', session.session_id, 'meta.json');
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as Record<string, unknown>;
+    expect(meta['status']).toBe('completed');
+    expect(meta['termination_reason']).toBe('merged');
+    expect(meta['completed_at']).toBeTypeOf('number');
+  }, 15_000);
+
+  it('completes an active session with reason completed', async () => {
+    const session = await cli.newSession('Task to complete');
+    const result = await cli.completeSession(session.session_id, 'completed');
+
+    expect(result.ok).toBe(true);
+
+    const metaPath = path.join(rootDir, 'sessions', session.session_id, 'meta.json');
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as Record<string, unknown>;
+    expect(meta['status']).toBe('completed');
+    expect(meta['termination_reason']).toBe('completed');
+  }, 15_000);
+
+  it('writes session_ended stream entry with reason', async () => {
+    const session = await cli.newSession('Task to merge');
+    await cli.completeSession(session.session_id, 'merged');
+
+    // Check stream.log for session_ended entry
+    const streamContent = fs.readFileSync(session.stream_path, 'utf-8').trim();
+    const lines = streamContent.split('\n').filter((l) => l.length > 0);
+    const endedEntries = lines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .filter((e) => e['type'] === 'session_ended');
+
+    expect(endedEntries.length).toBeGreaterThanOrEqual(1);
+    const lastEnded = endedEntries[endedEntries.length - 1]!;
+    expect(lastEnded['reason']).toBe('merged');
+    expect(lastEnded['source']).toBe('router');
+  }, 15_000);
+
+  it('returns error for missing session_id', async () => {
+    const result = await sendRaw(socketPath, { op: 'complete_session', reason: 'merged' });
+    expect(result['error']).toMatch(/session_id/i);
+  });
+
+  it('returns error for missing reason', async () => {
+    const result = await sendRaw(socketPath, { op: 'complete_session', session_id: 'some-id' });
+    expect(result['error']).toMatch(/reason/i);
+  });
+
+  it('returns error for nonexistent session', async () => {
+    const result = await sendRaw(socketPath, {
+      op: 'complete_session',
+      session_id: 'nonexistent',
+      reason: 'merged',
+    });
+    expect(result['error']).toBeDefined();
+  });
+});
+
 describe('error handling (Req 21.2)', () => {
   it('returns error for unknown op', async () => {
     const result = await sendRaw(socketPath, { op: 'unknown_op' });

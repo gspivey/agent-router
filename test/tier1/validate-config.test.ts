@@ -403,4 +403,49 @@ describe('validateConfig', () => {
     expect(result.sessionTimeout.inactivityMinutes).toBe(30);
     expect(result.sessionTimeout.maxLifetimeMinutes).toBe(30);
   });
+
+  // --- gracePeriodAfterMergeSeconds validation ---
+
+  it('defaults gracePeriodAfterMergeSeconds to 60 when omitted', () => {
+    const cfg = validConfig();
+    const result = validateConfig(cfg);
+    expect(result.sessionTimeout.gracePeriodAfterMergeSeconds).toBe(60);
+  });
+
+  it('accepts gracePeriodAfterMergeSeconds of 0', () => {
+    const cfg = validConfig({
+      sessionTimeout: { gracePeriodAfterMergeSeconds: 0 },
+    });
+    const result = validateConfig(cfg);
+    expect(result.sessionTimeout.gracePeriodAfterMergeSeconds).toBe(0);
+  });
+
+  it('accepts gracePeriodAfterMergeSeconds of 120', () => {
+    const cfg = validConfig({
+      sessionTimeout: { gracePeriodAfterMergeSeconds: 120 },
+    });
+    const result = validateConfig(cfg);
+    expect(result.sessionTimeout.gracePeriodAfterMergeSeconds).toBe(120);
+  });
+
+  it('throws FatalError when gracePeriodAfterMergeSeconds is negative', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { gracePeriodAfterMergeSeconds: -1 } }))
+    ).toThrow(FatalError);
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { gracePeriodAfterMergeSeconds: -1 } }))
+    ).toThrow(/gracePeriodAfterMergeSeconds/i);
+  });
+
+  it('throws FatalError when gracePeriodAfterMergeSeconds is a float', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { gracePeriodAfterMergeSeconds: 1.5 } }))
+    ).toThrow(FatalError);
+  });
+
+  it('throws FatalError when gracePeriodAfterMergeSeconds is a string', () => {
+    expect(() =>
+      validateConfig(validConfig({ sessionTimeout: { gracePeriodAfterMergeSeconds: '60' } }))
+    ).toThrow(FatalError);
+  });
 });

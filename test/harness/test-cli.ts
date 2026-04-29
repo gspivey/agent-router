@@ -38,6 +38,10 @@ export class TestCli {
     return this.send<{ ok: boolean }>({ op: 'terminate_session', session_id: sessionId });
   }
 
+  async completeSession(sessionId: string, reason: string): Promise<{ ok: boolean }> {
+    return this.send<{ ok: boolean }>({ op: 'complete_session', session_id: sessionId, reason });
+  }
+
   private send<T>(msg: Record<string, unknown>): Promise<T> {
     return new Promise((resolve, reject) => {
       const socket = net.createConnection(this.socketPath);
