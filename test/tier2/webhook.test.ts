@@ -41,6 +41,9 @@ function makeDb(): Database {
     findSession: vi.fn(() => null),
     tryAcquireWakeSlot: vi.fn(() => false),
     insertSession: vi.fn(),
+    insertOutboundComment: vi.fn(),
+    isOutboundComment: vi.fn(() => false),
+    pruneOutboundComments: vi.fn(),
     walCheckpoint: vi.fn(),
     shutdown: vi.fn(() => Promise.resolve()),
   };

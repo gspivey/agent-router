@@ -325,6 +325,11 @@ async function main(): Promise<void> {
   db.markStaleEvents(300);
   log.info('Stale events marked');
 
+  // Prune outbound comments older than 7 days
+  const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
+  db.pruneOutboundComments(SEVEN_DAYS_SECONDS);
+  log.info('Outbound comments pruned');
+
   // ---- Task 19.1b: Session infrastructure startup ----
 
   // Create session files root

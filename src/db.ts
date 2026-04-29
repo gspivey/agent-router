@@ -27,6 +27,9 @@ export interface Database {
     nowSeconds: number
   ): boolean;
   insertSession(repo: string, prNumber: number, sessionId: string): void;
+  insertOutboundComment(commentId: number, sessionId: string, repo: string, prNumber: number): void;
+  isOutboundComment(commentId: number): boolean;
+  pruneOutboundComments(olderThanSeconds: number): void;
   walCheckpoint(): void;
   shutdown(): Promise<void>;
 }
@@ -71,6 +74,21 @@ CREATE INDEX IF NOT EXISTS idx_events_repo_pr
   ON events(repo, pr_number);
 `;
 
+const OUTBOUND_COMMENTS_DDL = `
+CREATE TABLE IF NOT EXISTS daemon_outbound_comments (
+  comment_id  INTEGER PRIMARY KEY,
+  session_id  TEXT NOT NULL,
+  repo        TEXT NOT NULL,
+  pr_number   INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+`;
+
+const OUTBOUND_COMMENTS_INDEX = `
+CREATE INDEX IF NOT EXISTS idx_outbound_comments_created
+  ON daemon_outbound_comments(created_at);
+`;
+
 export function initDatabase(dbPath: string): Database {
   const db = new BetterSqlite3(dbPath);
 
@@ -83,6 +101,8 @@ export function initDatabase(dbPath: string): Database {
   db.exec(EVENTS_DDL);
   db.exec(EVENTS_INDEX_UNPROCESSED);
   db.exec(EVENTS_INDEX_REPO_PR);
+  db.exec(OUTBOUND_COMMENTS_DDL);
+  db.exec(OUTBOUND_COMMENTS_INDEX);
 
   // Prepared statements
   const insertEventStmt = db.prepare<{
@@ -150,6 +170,26 @@ export function initDatabase(dbPath: string): Database {
   }>(
     `SELECT last_waked_at FROM sessions
      WHERE repo = @repo AND pr_number = @pr_number`
+  );
+
+  // Outbound comment tracking prepared statements
+  const insertOutboundCommentStmt = db.prepare<{
+    comment_id: number;
+    session_id: string;
+    repo: string;
+    pr_number: number;
+    created_at: number;
+  }>(
+    `INSERT OR IGNORE INTO daemon_outbound_comments (comment_id, session_id, repo, pr_number, created_at)
+     VALUES (@comment_id, @session_id, @repo, @pr_number, @created_at)`
+  );
+
+  const isOutboundCommentStmt = db.prepare<{ comment_id: number }>(
+    `SELECT 1 FROM daemon_outbound_comments WHERE comment_id = @comment_id`
+  );
+
+  const pruneOutboundCommentsStmt = db.prepare<{ cutoff: number }>(
+    `DELETE FROM daemon_outbound_comments WHERE created_at < @cutoff`
   );
 
   // Atomic rate-limit transaction
@@ -232,6 +272,26 @@ export function initDatabase(dbPath: string): Database {
         session_id: sessionId,
         created_at: Math.floor(Date.now() / 1000),
       });
+    },
+
+    insertOutboundComment(commentId: number, sessionId: string, repo: string, prNumber: number): void {
+      insertOutboundCommentStmt.run({
+        comment_id: commentId,
+        session_id: sessionId,
+        repo,
+        pr_number: prNumber,
+        created_at: Math.floor(Date.now() / 1000),
+      });
+    },
+
+    isOutboundComment(commentId: number): boolean {
+      const row = isOutboundCommentStmt.get({ comment_id: commentId });
+      return row !== undefined;
+    },
+
+    pruneOutboundComments(olderThanSeconds: number): void {
+      const cutoff = Math.floor(Date.now() / 1000) - olderThanSeconds;
+      pruneOutboundCommentsStmt.run({ cutoff });
     },
 
     walCheckpoint(): void {

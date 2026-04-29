@@ -47,7 +47,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P0.2 — Self-wake prevention
+### P0.2 — Self-wake prevention ✅ DONE
 
 **New (not in existing PRODUCT.md).** Surfaced by trust-tier wake policy that landed in this session.
 

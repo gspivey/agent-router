@@ -206,7 +206,22 @@ export function resolvePRNumber(eventType: string, payload: unknown): number | n
 }
 
 /**
+ * Extract the comment ID from a parsed webhook payload.
+ * Works for issue_comment and pull_request_review_comment events.
+ * Returns null if the payload doesn't contain a comment ID.
+ */
+export function extractWebhookCommentId(payload: unknown): number | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const p = payload as Record<string, unknown>;
+  const comment = p['comment'];
+  if (typeof comment !== 'object' || comment === null) return null;
+  const id = (comment as Record<string, unknown>)['id'];
+  return typeof id === 'number' && Number.isInteger(id) ? id : null;
+}
+
+/**
  * Orchestrate the full wake policy pipeline:
+ *   0. Check if comment is self-authored (outbound comment tracking)
  *   1. Filter event type + compute trust tier
  *   2. Resolve PR number
  *   3. Lookup session in DB
@@ -225,6 +240,16 @@ export function evaluateWakePolicy(
     payload = JSON.parse(event.payload);
   } catch {
     return { wake: false, reason: 'Invalid JSON payload', trustTier: 'n/a' };
+  }
+
+  // Step 0: Self-authored comment check
+  // For comment events, check if the comment ID is in our outbound tracking table.
+  // If so, this is a comment the daemon's agent posted — skip it to prevent self-wake loops.
+  if (event.eventType === 'issue_comment' || event.eventType === 'pull_request_review_comment') {
+    const commentId = extractWebhookCommentId(payload);
+    if (commentId !== null && db.isOutboundComment(commentId)) {
+      return { wake: false, reason: 'self_authored', trustTier: 'n/a' };
+    }
   }
 
   // Step 1: Filter event type + trust tier

@@ -6,6 +6,7 @@ import type { EventQueue } from './queue.js';
 import { createEventQueue } from './queue.js';
 import type { ACPClient, ACPNotification } from './acp.js';
 import type { SessionTimeoutConfig } from './config.js';
+import { isCommentCommand, extractCommentIds } from './comment-tracker.js';
 
 export interface SessionHandle {
   sessionId: string;
@@ -218,6 +219,36 @@ export function createSessionManager(deps: {
             const params = notification.params as Record<string, unknown> | undefined;
             if (params?.['type'] === 'mcp_call' && params?.['tool'] === 'complete_session') {
               completionFlags.add(sessionId);
+            }
+
+            // Track outbound comments from tool call results.
+            // When the agent runs a shell command that produces a GitHub comment,
+            // record the comment ID so the wake policy can filter self-authored webhooks.
+            if (params?.['type'] === 'tool_result' || params?.['type'] === 'tool_call_update') {
+              const command = params?.['command'] as string | undefined;
+              const output = params?.['output'] as string | undefined
+                ?? params?.['content'] as string | undefined
+                ?? params?.['stdout'] as string | undefined;
+
+              if (typeof command === 'string' && isCommentCommand(command) && typeof output === 'string') {
+                const comments = extractCommentIds(output);
+                for (const parsed of comments) {
+                  try {
+                    const repo = parsed.repo || '';
+                    const prNumber = parsed.prNumber || 0;
+                    db.insertOutboundComment(parsed.commentId, sessionId, repo, prNumber);
+                    log.info('Tracked outbound comment', {
+                      sessionId,
+                      commentId: parsed.commentId,
+                      repo,
+                      prNumber,
+                    });
+                  } catch (err: unknown) {
+                    const errMsg = err instanceof Error ? err.message : String(err);
+                    log.warn('Failed to track outbound comment', { sessionId, error: errMsg });
+                  }
+                }
+              }
             }
           }
         }

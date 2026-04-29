@@ -65,6 +65,40 @@ Don't invent new error classes without a clear new failure mode.
 
 **Tier 2 coverage is required for any meaningful behavioral change.** A new wake policy rule, a new termination reason, a new MCP tool — all need Tier 2 coverage in addition to Tier 1.
 
+## Commits
+
+Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+
+**Format:** `<type>[optional scope]: <description>`
+
+**Types:**
+
+- `feat` — new feature or capability
+- `fix` — bug fix
+- `refactor` — code change that neither fixes a bug nor adds a feature
+- `test` — adding or updating tests only
+- `docs` — documentation only
+- `chore` — maintenance (deps, scripts, CI config)
+
+**Scope** is optional but encouraged. Use the module name or backlog ID when it fits: `feat(session-mgr): ...`, `fix(P2.4): ...`.
+
+**Body** is optional. Use it for context that doesn't fit in the subject line. Separate from subject with a blank line.
+
+**Footer** `BREAKING CHANGE: <description>` if the commit introduces a breaking change.
+
+**Examples:**
+
+```
+feat(cli): add complete-session subcommand
+fix(config): template literal bug in sessionTimeout error
+refactor(router): extract self-wake check into pure function
+test(hook-parser): add property tests for merge detection
+docs: update AGENTS.md with conventional commits guide
+chore: bump vitest to 3.2.4
+```
+
+Keep the subject line under 72 characters. Use imperative mood ("add", not "added" or "adds").
+
 ## Style
 
 - ESM imports with `.js` extensions in import paths (TypeScript with ESM resolution).
@@ -105,3 +139,4 @@ Each step has a pure function exported for direct testing. When changing the wak
 - **Don't add features that aren't in `BACKLOG.md` or `ROADMAP.md`** without first adding them there. Keeps the project's scope clear and prevents drive-by feature creep.
 - **Don't merge a PR unless tests are green.** Including new tests that exercise the new behavior. Including Tier 2 if the change is behavioral.
 - **Don't update documentation as a separate PR from the code change.** Docs land alongside the code that justifies them.
+- **Don't merge before documentation is on the feature branch.** For dpdk prompts and any feature workflow: perf-log entries, README roadmap updates, and other doc changes must be committed and pushed to the feature branch *before* the squash-merge. The merge commit must include everything. Post-merge doc fixups go directly to `development`, bypassing PR review — that's the bug this rule prevents.

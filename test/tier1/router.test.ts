@@ -7,6 +7,7 @@ import {
   computeTrustTier,
   extractCommentAuthor,
   extractRepoOwnerLogin,
+  extractWebhookCommentId,
 } from '../../src/router.js';
 import type { CommentAuthor } from '../../src/router.js';
 import type { QueuedEvent } from '../../src/queue.js';
@@ -417,6 +418,9 @@ describe('evaluateWakePolicy', () => {
       }),
       tryAcquireWakeSlot: () => true,
       insertSession: () => undefined,
+      insertOutboundComment: () => undefined,
+      isOutboundComment: () => false,
+      pruneOutboundComments: () => undefined,
       walCheckpoint: () => undefined,
       shutdown: () => Promise.resolve(),
       ...overrides,
@@ -579,5 +583,166 @@ describe('evaluateWakePolicy', () => {
     expect(result.wake).toBe(true);
     expect(result.prNumber).toBe(55);
     expect(result.trustTier).toBe('tier_1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractWebhookCommentId
+// ---------------------------------------------------------------------------
+
+describe('extractWebhookCommentId', () => {
+  it('extracts comment id from issue_comment payload', () => {
+    const payload = {
+      action: 'created',
+      comment: { id: 1234567890, body: 'hello', user: { login: 'alice', type: 'User' } },
+    };
+    expect(extractWebhookCommentId(payload)).toBe(1234567890);
+  });
+
+  it('returns null when comment is missing', () => {
+    expect(extractWebhookCommentId({ action: 'created' })).toBeNull();
+  });
+
+  it('returns null when comment.id is missing', () => {
+    expect(extractWebhookCommentId({ comment: { body: 'hi' } })).toBeNull();
+  });
+
+  it('returns null when comment.id is a string', () => {
+    expect(extractWebhookCommentId({ comment: { id: 'abc' } })).toBeNull();
+  });
+
+  it('returns null when comment.id is a float', () => {
+    expect(extractWebhookCommentId({ comment: { id: 1.5 } })).toBeNull();
+  });
+
+  it('returns null for null payload', () => {
+    expect(extractWebhookCommentId(null)).toBeNull();
+  });
+
+  it('returns null for non-object payload', () => {
+    expect(extractWebhookCommentId('string')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluateWakePolicy — self-authored comment prevention
+// ---------------------------------------------------------------------------
+
+describe('evaluateWakePolicy — self-wake prevention', () => {
+  function commentPayloadWithId(commentId: number): Record<string, unknown> {
+    return {
+      action: 'created',
+      comment: {
+        id: commentId,
+        body: 'looks good',
+        user: { login: 'owner', type: 'User' },
+        author_association: 'OWNER',
+      },
+      issue: { number: 10, pull_request: { url: 'https://api.github.com/...' } },
+      repository: {
+        full_name: 'myorg/myrepo',
+        owner: { login: 'owner' },
+      },
+    };
+  }
+
+  function makeEvent(commentId: number): QueuedEvent {
+    return {
+      id: 1,
+      repo: 'myorg/myrepo',
+      prNumber: 10,
+      eventType: 'issue_comment',
+      payload: JSON.stringify(commentPayloadWithId(commentId)),
+      source: 'webhook',
+    };
+  }
+
+  function makeDb(overrides: Partial<Database> = {}): Database {
+    return {
+      insertEvent: () => 0,
+      updateEventProcessed: () => undefined,
+      markStaleEvents: () => undefined,
+      findSession: () => ({
+        sessionId: 'sess-abc',
+        repo: 'myorg/myrepo',
+        prNumber: 10,
+        lastWakedAt: null,
+      }),
+      tryAcquireWakeSlot: () => true,
+      insertSession: () => undefined,
+      insertOutboundComment: () => undefined,
+      isOutboundComment: () => false,
+      pruneOutboundComments: () => undefined,
+      walCheckpoint: () => undefined,
+      shutdown: () => Promise.resolve(),
+      ...overrides,
+    };
+  }
+
+  const config: AgentRouterConfig = {
+    port: 3000,
+    webhookSecret: 'secret',
+    kiroPath: '/usr/bin/kiro',
+    rateLimit: { perPRSeconds: 60 },
+    sessionTimeout: { inactivityMinutes: 5, maxLifetimeMinutes: 120, gracePeriodAfterMergeSeconds: 60 },
+    repos: [{ owner: 'myorg', name: 'myrepo' }],
+    cron: [],
+  };
+
+  it('blocks wake when comment is self-authored (in outbound table)', () => {
+    const db = makeDb({ isOutboundComment: (id: number) => id === 42 });
+    const result = evaluateWakePolicy(makeEvent(42), db, config);
+    expect(result.wake).toBe(false);
+    expect(result.reason).toBe('self_authored');
+  });
+
+  it('allows wake when comment is NOT self-authored', () => {
+    const db = makeDb({ isOutboundComment: () => false });
+    const result = evaluateWakePolicy(makeEvent(42), db, config);
+    expect(result.wake).toBe(true);
+    expect(result.trustTier).toBe('tier_1');
+  });
+
+  it('skips self-authored check for check_run events (no comment.id)', () => {
+    const event: QueuedEvent = {
+      id: 1,
+      repo: 'myorg/myrepo',
+      prNumber: null,
+      eventType: 'check_run',
+      payload: JSON.stringify({
+        action: 'completed',
+        check_run: { conclusion: 'failure', pull_requests: [{ number: 10 }] },
+      }),
+      source: 'webhook',
+    };
+    // isOutboundComment always returns true, but check_run should bypass the check
+    const db = makeDb({ isOutboundComment: () => true });
+    const result = evaluateWakePolicy(event, db, config);
+    expect(result.wake).toBe(true);
+  });
+
+  it('allows wake when comment has no id field', () => {
+    const payload = {
+      action: 'created',
+      comment: {
+        body: 'hello',
+        user: { login: 'owner', type: 'User' },
+        author_association: 'OWNER',
+      },
+      issue: { number: 10, pull_request: { url: 'https://...' } },
+      repository: { full_name: 'myorg/myrepo', owner: { login: 'owner' } },
+    };
+    const event: QueuedEvent = {
+      id: 1,
+      repo: 'myorg/myrepo',
+      prNumber: 10,
+      eventType: 'issue_comment',
+      payload: JSON.stringify(payload),
+      source: 'webhook',
+    };
+    const db = makeDb({ isOutboundComment: () => true });
+    const result = evaluateWakePolicy(event, db, config);
+    // No comment.id → extractWebhookCommentId returns null → skip self-authored check
+    expect(result.wake).toBe(true);
   });
 });
