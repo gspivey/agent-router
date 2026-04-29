@@ -109,23 +109,6 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P0.5 — Token expiry alerting
-
-**Subset of credential proxy spec (PRODUCT.md Phase 4/6 territory).** Stripped down to just the alerting piece for cron-mode survival.
-
-**Problem.** GitHub fine-grained PATs cap at 1-year expiry. With cron running daily, the day a PAT expires, every cron run fails silently for days before anyone notices.
-
-**Approach.** Lightweight version of the credential proxy spec's monitoring. Skip the full project-scoped tokens migration; just add expiry tracking to the existing single-token model.
-
-**Mini spec.**
-
-- Add `token_expires_at` field to the daemon config (optional ISO 8601 date).
-- On startup and every 24 hours, evaluate days-to-expiry. Log `warn` at 14 days, `warn` at 7 days, `error` at 2 days, `error` after expiry.
-- Document the rotation procedure in README.
-- Optional: integrate with notification webhook from P1.3 once that exists.
-
-**Acceptance.** Daemon configured with `token_expires_at: 2027-04-25` logs a warn entry every 24h starting 2027-04-11, an error entry starting 2027-04-23, and continues to error daily after expiry.
-
 ---
 
 ## Priority 1: Supports cron mode
@@ -240,6 +223,23 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 ---
 
 ## Priority 2: Quality and bug fixes
+
+### P2.0 — Token expiry alerting
+
+**Moved from P0.5.** Useful but not blocking cron mode — PAT expiry is months away and can be monitored manually until this ships.
+
+**Problem.** GitHub fine-grained PATs cap at 1-year expiry. With cron running daily, the day a PAT expires, every cron run fails silently for days before anyone notices.
+
+**Approach.** Lightweight version of the credential proxy spec's monitoring. Skip the full project-scoped tokens migration; just add expiry tracking to the existing single-token model.
+
+**Mini spec.**
+
+- Add `token_expires_at` field to the daemon config (optional ISO 8601 date).
+- On startup and every 24 hours, evaluate days-to-expiry. Log `warn` at 14 days, `warn` at 7 days, `error` at 2 days, `error` after expiry.
+- Document the rotation procedure in README.
+- Optional: integrate with notification webhook from P1.3 once that exists.
+
+**Acceptance.** Daemon configured with `token_expires_at: 2027-04-25` logs a warn entry every 24h starting 2027-04-11, an error entry starting 2027-04-23, and continues to error daily after expiry.
 
 ### P2.1 — Session persistence across daemon restarts
 
