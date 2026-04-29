@@ -89,7 +89,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P0.4 — Session collision detection (interim)
+### P0.4 — Session collision detection (interim) ✅ DONE
 
 **Maps to PRODUCT.md Phase 1 ("git worktree per feature") indirectly.** Worktrees would obviate the need for collision detection entirely; this is the cheap interim fix. P1.7 below is the architectural follow-up.
 

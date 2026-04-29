@@ -172,6 +172,14 @@ async function handleCronFire(
 ): Promise<void> {
   const cronLog = log.child({ cron_name: cronEntry.name, repo: cronEntry.repo });
 
+  // Check for active session collision
+  if (sessionMgr.hasActiveSessionForRepo(cronEntry.repo)) {
+    cronLog.warn('Active session already exists for repo, skipping cron trigger', {
+      repo: cronEntry.repo,
+    });
+    return;
+  }
+
   const roadmapPath = repoConfig.roadmapPath;
   if (!roadmapPath) {
     cronLog.warn('No roadmapPath configured for repo, skipping cron trigger');
@@ -199,7 +207,7 @@ async function handleCronFire(
   // Compose prompt and create a new session
   const prompt = composeCronTaskPrompt(nextTask.text, cronEntry.repo, roadmapPath);
   try {
-    const handle = await sessionMgr.createSession(prompt);
+    const handle = await sessionMgr.createSession(prompt, cronEntry.repo);
     cronLog.info('Cron session created', { session_id: handle.sessionId, task: nextTask.text });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -22,8 +22,11 @@ export interface ListSessionsResponse {
 export class TestCli {
   constructor(private socketPath: string) {}
 
-  async newSession(prompt: string): Promise<NewSessionResponse> {
-    return this.send<NewSessionResponse>({ op: 'new_session', prompt });
+  async newSession(prompt: string, opts?: { repo?: string; force?: boolean }): Promise<NewSessionResponse> {
+    const msg: Record<string, unknown> = { op: 'new_session', prompt };
+    if (opts?.repo !== undefined) msg['repo'] = opts.repo;
+    if (opts?.force === true) msg['force'] = true;
+    return this.send<NewSessionResponse>(msg);
   }
 
   async listSessions(): Promise<ListSessionsResponse> {

@@ -217,8 +217,10 @@ async function cmdPrompt(args: string[]): Promise<void> {
 
   let isNew = false;
   let quiet = false;
+  let force = false;
   let sessionId: string | undefined;
   let filePath: string | undefined;
+  let repo: string | undefined;
 
   // Parse flags
   for (let i = 0; i < args.length; i++) {
@@ -227,15 +229,19 @@ async function cmdPrompt(args: string[]): Promise<void> {
       isNew = true;
     } else if (arg === '--quiet') {
       quiet = true;
+    } else if (arg === '--force') {
+      force = true;
     } else if (arg === '--session-id') {
       sessionId = args[++i];
     } else if (arg === '--file') {
       filePath = args[++i];
+    } else if (arg === '--repo') {
+      repo = args[++i];
     }
   }
 
   if (!isNew && sessionId === undefined) {
-    process.stderr.write('Usage: agent-router prompt --new [--quiet] [--file <path>]\n');
+    process.stderr.write('Usage: agent-router prompt --new [--quiet] [--force] [--repo <owner/name>] [--file <path>]\n');
     process.stderr.write('       agent-router prompt --session-id <id>\n');
     process.exit(1);
   }
@@ -259,7 +265,10 @@ async function cmdPrompt(args: string[]): Promise<void> {
 
   if (isNew) {
     // Create new session
-    const result = await sendToDaemon(socketPath, { op: 'new_session', prompt: promptText });
+    const msg: Record<string, unknown> = { op: 'new_session', prompt: promptText };
+    if (repo !== undefined) msg['repo'] = repo;
+    if (force) msg['force'] = true;
+    const result = await sendToDaemon(socketPath, msg);
 
     if (result['error'] !== undefined) {
       process.stderr.write(`Error: ${result['error'] as string}\n`);
@@ -503,7 +512,8 @@ function printUsage(): void {
   process.stderr.write(`Usage: agent-router <command> [options]
 
 Commands:
-  prompt --new [--quiet] [--file <path>]   Create a new session
+  prompt --new [--quiet] [--force] [--repo <owner/name>] [--file <path>]
+                                           Create a new session
   prompt --session-id <id>                 Inject prompt into existing session
   ls                                       List sessions
   tail <session_id> [--raw] [--prompts]    Tail session output

@@ -230,6 +230,53 @@ describe('complete_session (P0.1)', () => {
   });
 });
 
+describe('session collision detection (P0.4)', () => {
+  it('rejects new session when active session exists for same repo', async () => {
+    // Create first session with repo
+    await cli.newSession('First task', { repo: 'myorg/myrepo' });
+
+    // Attempt second session on same repo — should fail
+    const result = await sendRaw(socketPath, {
+      op: 'new_session',
+      prompt: 'Second task',
+      repo: 'myorg/myrepo',
+    });
+    expect(result['error']).toMatch(/active session already exists/i);
+  }, 15_000);
+
+  it('allows new session on a different repo', async () => {
+    await cli.newSession('First task', { repo: 'myorg/repo-a' });
+
+    // Different repo — should succeed
+    const session2 = await cli.newSession('Second task', { repo: 'myorg/repo-b' });
+    expect(session2.session_id).toBeDefined();
+  }, 15_000);
+
+  it('allows new session with --force even when collision exists', async () => {
+    await cli.newSession('First task', { repo: 'myorg/myrepo' });
+
+    // Force bypass
+    const session2 = await cli.newSession('Forced task', { repo: 'myorg/myrepo', force: true });
+    expect(session2.session_id).toBeDefined();
+  }, 15_000);
+
+  it('allows new session without repo (no collision check)', async () => {
+    await cli.newSession('First task', { repo: 'myorg/myrepo' });
+
+    // No repo specified — no collision check
+    const session2 = await cli.newSession('Unscoped task');
+    expect(session2.session_id).toBeDefined();
+  }, 15_000);
+
+  it('stores repo in session meta when provided', async () => {
+    const session = await cli.newSession('Task with repo', { repo: 'myorg/myrepo' });
+
+    const metaPath = path.join(rootDir, 'sessions', session.session_id, 'meta.json');
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as Record<string, unknown>;
+    expect(meta['repo']).toBe('myorg/myrepo');
+  }, 15_000);
+});
+
 describe('error handling (Req 21.2)', () => {
   it('returns error for unknown op', async () => {
     const result = await sendRaw(socketPath, { op: 'unknown_op' });

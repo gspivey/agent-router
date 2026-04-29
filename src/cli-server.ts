@@ -40,7 +40,17 @@ export function createCliServer(deps: {
       if (typeof prompt !== 'string' || prompt.length === 0) {
         throw new Error('Missing or empty "prompt" parameter');
       }
-      const handle = await sessionMgr.createSession(prompt);
+      const repo = typeof req['repo'] === 'string' ? req['repo'] : undefined;
+      const force = req['force'] === true;
+
+      // Collision detection: refuse if an active session exists for this repo
+      if (repo !== undefined && !force && sessionMgr.hasActiveSessionForRepo(repo)) {
+        throw new Error(
+          `Active session already exists for repo "${repo}". Use --force to bypass.`,
+        );
+      }
+
+      const handle = await sessionMgr.createSession(prompt, repo);
       return {
         session_id: handle.sessionId,
         stream_path: handle.paths.stream,

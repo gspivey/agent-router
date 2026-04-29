@@ -10,6 +10,7 @@ import { isCommentCommand, extractCommentIds } from './comment-tracker.js';
 
 export interface SessionHandle {
   sessionId: string;
+  repo?: string | undefined;
   paths: SessionPaths;
   acp: ACPClient;
   eventQueue: EventQueue;
@@ -17,7 +18,8 @@ export interface SessionHandle {
 }
 
 export interface SessionManager {
-  createSession(originalPrompt: string): Promise<SessionHandle>;
+  createSession(originalPrompt: string, repo?: string): Promise<SessionHandle>;
+  hasActiveSessionForRepo(repo: string): boolean;
   injectPrompt(sessionId: string, prompt: string, source: PromptSource): Promise<void>;
   registerPR(sessionId: string, repo: string, prNumber: number): Promise<void>;
   completeSession(sessionId: string, reason: string): void;
@@ -375,12 +377,15 @@ export function createSessionManager(deps: {
   }
 
   const manager: SessionManager = {
-    async createSession(originalPrompt: string): Promise<SessionHandle> {
+    async createSession(originalPrompt: string, repo?: string): Promise<SessionHandle> {
       const sessionId = crypto.randomUUID();
       const sessionLog = log.child({ sessionId });
 
       // 1. Create session files on disk
       const paths = sessionFiles.createSession(sessionId, originalPrompt);
+      if (repo !== undefined) {
+        sessionFiles.updateMeta(sessionId, { repo });
+      }
       sessionLog.info('Session files created');
 
       // 2. Spawn ACP client
@@ -402,6 +407,7 @@ export function createSessionManager(deps: {
       // 5. Build handle
       const handle: SessionHandle = {
         sessionId,
+        repo,
         paths,
         acp,
         eventQueue,
@@ -622,6 +628,10 @@ export function createSessionManager(deps: {
 
     getActiveSession(sessionId: string): SessionHandle | null {
       return registry.get(sessionId) ?? null;
+    },
+
+    hasActiveSessionForRepo(repo: string): boolean {
+      return registry.list().some((h) => h.repo === repo);
     },
 
     async shutdown(): Promise<void> {

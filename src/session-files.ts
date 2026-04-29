@@ -13,6 +13,7 @@ export interface StreamEntry {
 export interface SessionMeta {
   session_id: string;
   original_prompt: string;
+  repo?: string;
   status: 'active' | 'completed' | 'abandoned' | 'failed';
   created_at: number;
   completed_at: number | null;
