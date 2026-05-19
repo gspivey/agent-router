@@ -1,8 +1,30 @@
 import { Hono } from 'hono';
 import crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { Database } from './db.js';
 import type { QueuedEvent } from './queue.js';
 import type { Logger } from './log.js';
+
+/**
+ * If AGENT_ROUTER_CAPTURE_PAYLOADS is set to a directory path, write the raw
+ * verified webhook body to that directory as `<unix-ms>-<event-type>.json`.
+ * Used to capture authentic GitHub payloads from tier 3 runs for fixture use.
+ * Silently no-ops on any error so capture never breaks the webhook path.
+ */
+function capturePayload(rawBody: Buffer, eventType: string, log: Logger): void {
+  const dir = process.env['AGENT_ROUTER_CAPTURE_PAYLOADS'];
+  if (!dir) return;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const fname = `${Date.now()}-${eventType.replace(/[^a-z0-9_-]/gi, '_')}.json`;
+    fs.writeFileSync(path.join(dir, fname), rawBody);
+    log.debug('Webhook payload captured', { file: fname, dir });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn('Payload capture failed', { error: msg });
+  }
+}
 
 /**
  * Verify a GitHub webhook HMAC-SHA256 signature.
@@ -131,6 +153,9 @@ export function createApp(deps: {
 
     // Extract event type from header
     const eventType = c.req.header('x-github-event') ?? 'unknown';
+
+    // Optional payload capture (no-op unless AGENT_ROUTER_CAPTURE_PAYLOADS is set)
+    capturePayload(rawBody, eventType, deps.log);
 
     // Parse JSON payload
     let payload: unknown;

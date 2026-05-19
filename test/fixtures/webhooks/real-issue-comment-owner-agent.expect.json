@@ -1,0 +1,14 @@
+{
+  "eventType": "issue_comment",
+  "expectedCode": "wake",
+  "expectedWake": true,
+  "expectedTier": "tier_1",
+  "dbState": {
+    "session": {
+      "sessionId": "real-test-session",
+      "repo": "gspivey/agent-router-test",
+      "prNumber": 41,
+      "lastWakedAt": null
+    }
+  }
+}
