@@ -4,12 +4,47 @@ import type { QueuedEvent } from './queue.js';
 
 export type TrustTier = 'tier_1' | 'tier_2' | 'tier_3' | 'n/a';
 
+/**
+ * Why filterEventType decided the event was or wasn't wakeable.
+ * Closed union — extend by adding a value and updating every consumer.
+ */
+export type FilterReason =
+  | 'wakeable'
+  | 'wrong_event_type'
+  | 'wrong_action'
+  | 'missing_trust_fields'
+  | 'tier_3_blocked'
+  | 'tier_2_no_command';
+
+/**
+ * Why evaluateWakePolicy reached its final decision.
+ * Closed union — every return site sets one.
+ *
+ * Order roughly follows the pipeline:
+ *  invalid_payload → self_authored → (filter reasons) → pr_unresolved → no_session → rate_limited → wake
+ */
+export type WakeDecisionCode =
+  | 'invalid_payload'
+  | 'self_authored'
+  | 'wrong_event_type'
+  | 'wrong_action'
+  | 'missing_trust_fields'
+  | 'tier_3_blocked'
+  | 'tier_2_no_command'
+  | 'pr_unresolved'
+  | 'no_session'
+  | 'rate_limited'
+  | 'wake';
+
 export interface WakeDecision {
   wake: boolean;
+  decisionCode: WakeDecisionCode;
   reason: string;
   sessionId?: string;
   prNumber?: number;
   trustTier?: TrustTier;
+  commentId?: number;
+  commentAuthor?: string;
 }
 
 /**
@@ -119,32 +154,36 @@ export function extractRepoOwnerLogin(payload: Record<string, unknown>): string 
 export function filterEventType(
   eventType: string,
   payload: unknown,
-): { wakeable: boolean; trustTier: TrustTier } {
+): { wakeable: boolean; trustTier: TrustTier; filterReason: FilterReason } {
   if (typeof payload !== 'object' || payload === null) {
-    return { wakeable: false, trustTier: 'n/a' };
+    return { wakeable: false, trustTier: 'n/a', filterReason: 'wrong_event_type' };
   }
   const p = payload as Record<string, unknown>;
 
   if (eventType === 'check_run') {
-    if (p['action'] !== 'completed') return { wakeable: false, trustTier: 'n/a' };
-    return { wakeable: true, trustTier: 'n/a' };
+    if (p['action'] !== 'completed') {
+      return { wakeable: false, trustTier: 'n/a', filterReason: 'wrong_action' };
+    }
+    return { wakeable: true, trustTier: 'n/a', filterReason: 'wakeable' };
   }
 
   if (eventType === 'pull_request_review_comment' || eventType === 'issue_comment') {
-    if (p['action'] !== 'created') return { wakeable: false, trustTier: 'n/a' };
+    if (p['action'] !== 'created') {
+      return { wakeable: false, trustTier: 'n/a', filterReason: 'wrong_action' };
+    }
 
     const author = extractCommentAuthor(p);
     const repoOwnerLogin = extractRepoOwnerLogin(p);
 
     if (author === null || repoOwnerLogin === null) {
       // Missing trust fields — treat as tier 3 (untrusted)
-      return { wakeable: false, trustTier: 'tier_3' };
+      return { wakeable: false, trustTier: 'tier_3', filterReason: 'missing_trust_fields' };
     }
 
     const tier = computeTrustTier(author, repoOwnerLogin);
 
     if (tier === 'tier_1') {
-      return { wakeable: true, trustTier: 'tier_1' };
+      return { wakeable: true, trustTier: 'tier_1', filterReason: 'wakeable' };
     }
 
     if (tier === 'tier_2') {
@@ -152,16 +191,16 @@ export function filterEventType(
       const comment = p['comment'] as Record<string, unknown>;
       const body = comment['body'];
       if (typeof body === 'string' && isCommandTrigger(body)) {
-        return { wakeable: true, trustTier: 'tier_2' };
+        return { wakeable: true, trustTier: 'tier_2', filterReason: 'wakeable' };
       }
-      return { wakeable: false, trustTier: 'tier_2' };
+      return { wakeable: false, trustTier: 'tier_2', filterReason: 'tier_2_no_command' };
     }
 
     // Tier 3: never wake
-    return { wakeable: false, trustTier: 'tier_3' };
+    return { wakeable: false, trustTier: 'tier_3', filterReason: 'tier_3_blocked' };
   }
 
-  return { wakeable: false, trustTier: 'n/a' };
+  return { wakeable: false, trustTier: 'n/a', filterReason: 'wrong_event_type' };
 }
 
 /**
@@ -239,33 +278,65 @@ export function evaluateWakePolicy(
   try {
     payload = JSON.parse(event.payload);
   } catch {
-    return { wake: false, reason: 'Invalid JSON payload', trustTier: 'n/a' };
+    return {
+      wake: false,
+      decisionCode: 'invalid_payload',
+      reason: 'Invalid JSON payload',
+      trustTier: 'n/a',
+    };
   }
+
+  // Diagnostic fields — surfaced on every decision so logs can show what we
+  // extracted regardless of which filter step rejected the event. Built as a
+  // partial so we can spread into return objects without violating
+  // exactOptionalPropertyTypes.
+  const commentIdVal = extractWebhookCommentId(payload);
+  const commentAuthorVal = extractCommentAuthor(
+    typeof payload === 'object' && payload !== null
+      ? (payload as Record<string, unknown>)
+      : {},
+  )?.login;
+  const diag: { commentId?: number; commentAuthor?: string } = {};
+  if (commentIdVal !== null) diag.commentId = commentIdVal;
+  if (commentAuthorVal !== undefined) diag.commentAuthor = commentAuthorVal;
 
   // Step 0: Self-authored comment check
   // For comment events, check if the comment ID is in our outbound tracking table.
   // If so, this is a comment the daemon's agent posted — skip it to prevent self-wake loops.
   if (event.eventType === 'issue_comment' || event.eventType === 'pull_request_review_comment') {
-    const commentId = extractWebhookCommentId(payload);
-    if (commentId !== null && db.isOutboundComment(commentId)) {
-      return { wake: false, reason: 'self_authored', trustTier: 'n/a' };
+    if (commentIdVal !== null && db.isOutboundComment(commentIdVal)) {
+      return {
+        wake: false,
+        decisionCode: 'self_authored',
+        reason: 'self_authored',
+        trustTier: 'n/a',
+        ...diag,
+      };
     }
   }
 
   // Step 1: Filter event type + trust tier
-  const { wakeable, trustTier } = filterEventType(event.eventType, payload);
+  const { wakeable, trustTier, filterReason } = filterEventType(event.eventType, payload);
   if (!wakeable) {
     return {
       wake: false,
-      reason: `Event type "${event.eventType}" is not wakeable`,
+      decisionCode: filterReason as WakeDecisionCode,
+      reason: `Event type "${event.eventType}" is not wakeable (${filterReason})`,
       trustTier,
+      ...diag,
     };
   }
 
   // Step 2: Resolve PR number
   const prNumber = resolvePRNumber(event.eventType, payload);
   if (prNumber === null) {
-    return { wake: false, reason: 'Could not resolve PR number from payload', trustTier };
+    return {
+      wake: false,
+      decisionCode: 'pr_unresolved',
+      reason: 'Could not resolve PR number from payload',
+      trustTier,
+      ...diag,
+    };
   }
 
   // Step 3: Lookup session in DB
@@ -273,9 +344,11 @@ export function evaluateWakePolicy(
   if (session === null) {
     return {
       wake: false,
+      decisionCode: 'no_session',
       reason: `No session registered for ${event.repo}#${prNumber}`,
       prNumber,
       trustTier,
+      ...diag,
     };
   }
 
@@ -290,18 +363,22 @@ export function evaluateWakePolicy(
   if (!acquired) {
     return {
       wake: false,
+      decisionCode: 'rate_limited',
       reason: `Rate limited: ${event.repo}#${prNumber} was waked too recently`,
       sessionId: session.sessionId,
       prNumber,
       trustTier,
+      ...diag,
     };
   }
 
   return {
     wake: true,
+    decisionCode: 'wake',
     reason: `Wake approved for ${event.repo}#${prNumber}`,
     sessionId: session.sessionId,
     prNumber,
     trustTier,
+    ...diag,
   };
 }

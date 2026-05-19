@@ -83,8 +83,13 @@ function createEventProcessor(deps: {
       const decision = evaluateWakePolicy(event, db, config);
       eventLog.info('Wake policy evaluated', {
         wake: decision.wake,
+        decision_code: decision.decisionCode,
         reason: decision.reason,
         pr_number: decision.prNumber,
+        trust_tier: decision.trustTier,
+        session_id: decision.sessionId,
+        comment_author: decision.commentAuthor,
+        comment_id: decision.commentId,
       });
 
       if (!decision.wake) {
