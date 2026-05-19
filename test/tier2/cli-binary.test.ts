@@ -18,7 +18,7 @@ import { FakeKiroBackend } from '../harness/fake-kiro.js';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const SIMPLE_ECHO_SCENARIO = path.resolve(__dirname, '../scenarios/simple-echo.json');
-const CLI_BIN = path.resolve(__dirname, '../../bin/agent-router.ts');
+const CLI_BIN = path.resolve(__dirname, '../../bin/agent-router.mjs');
 
 let rootDir: string;
 let dbPath: string;
@@ -73,7 +73,12 @@ function runCli(
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve, reject) => {
     const timeout = opts?.timeoutMs ?? 15_000;
-    const child = cp.spawn('node', ['--import', 'tsx/esm', CLI_BIN, ...args], {
+    // Invoke the launcher directly via its shebang, with cwd set to a temp
+    // dir (not the project root). This exercises the same path as the
+    // installed binary, and would catch any future regression in tsx
+    // resolution that depends on cwd.
+    const child = cp.spawn(CLI_BIN, args, {
+      cwd: rootDir,
       env: {
         ...process.env,
         AGENT_ROUTER_HOME: rootDir,
@@ -115,6 +120,23 @@ function runCli(
     });
   });
 }
+
+describe('cwd-independent launcher', () => {
+  it('runs --help from a non-project cwd without ERR_MODULE_NOT_FOUND', async () => {
+    // Regression: the previous bin/agent-router.ts shebang
+    //   `#!/usr/bin/env -S node --import tsx/esm`
+    // resolved tsx relative to cwd, breaking the installed binary anywhere
+    // outside the project root. The .mjs launcher must not depend on cwd.
+    const result = await runCli(['--help']);
+    expect(result.code).toBe(0);
+    // printUsage() writes to stderr in the CLI, so the help text appears there.
+    // What matters here is that the launcher booted at all — no module-resolve
+    // failure means tsx loaded successfully despite cwd != project root.
+    expect(result.stderr).toContain('Usage: agent-router');
+    expect(result.stderr).not.toContain('ERR_MODULE_NOT_FOUND');
+    expect(result.stderr).not.toContain("Cannot find package 'tsx'");
+  }, 15_000);
+});
 
 describe('prompt --new --quiet (Req 21.12)', () => {
   it('creates a session and prints session_id to stdout', async () => {
