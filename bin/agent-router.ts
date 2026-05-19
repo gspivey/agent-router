@@ -1,6 +1,10 @@
-#!/usr/bin/env -S node --import tsx/esm
 /**
  * CLI client binary for Agent Router.
+ *
+ * Entrypoint is `bin/agent-router.mjs`, which boots tsx and then imports
+ * this file. Do not invoke this `.ts` file directly — `node --import tsx/esm`
+ * resolves the tsx specifier relative to cwd, which breaks the CLI when
+ * invoked from any directory outside the project root.
  *
  * Subcommands:
  *   prompt --new [--quiet] [--file <path>]   Create a new session
