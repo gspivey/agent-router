@@ -1,0 +1,6 @@
+{
+  "eventType": "pull_request_review",
+  "expectedCode": "wrong_event_type",
+  "expectedWake": false,
+  "expectedTier": "n/a"
+}
