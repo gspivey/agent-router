@@ -62,7 +62,21 @@ function createFakeGitHubClient(): FakeGitHubClient {
         nextMergeError = null;
         throw err;
       }
-      states.set(`${owner}/${repo}#${prNumber}`, { number: prNumber, state: 'closed', merged: true, mergeCommitSha: 'fake-merge-sha' });
+      // Mirror real-GitHub behavior empirically confirmed in tier3:
+      // a second PUT /merge on an already-merged PR returns 200 with the
+      // ORIGINAL merge commit details, not a fresh SHA. Without this branch
+      // the fake silently "re-merges" with a new SHA every call, masking
+      // bugs where production code calls mergePullRequest twice.
+      const key = `${owner}/${repo}#${prNumber}`;
+      const existing = states.get(key);
+      if (existing !== undefined && existing.merged) {
+        return {
+          sha: existing.mergeCommitSha ?? 'fake-merge-sha',
+          merged: true,
+          message: 'Pull Request successfully merged',
+        };
+      }
+      states.set(key, { number: prNumber, state: 'closed', merged: true, mergeCommitSha: 'fake-merge-sha' });
       return { sha: 'fake-merge-sha', merged: true, message: 'Squashed and merged' };
     },
   };

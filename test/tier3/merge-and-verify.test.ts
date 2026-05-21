@@ -150,11 +150,14 @@ describe.skipIf(!hasEnv)('Tier 3: merge_pr + verifySession against real GitHub',
     const prNumber = await freshPR('merge');
     await waitForMergeable(prNumber);
 
-    // Pre-state: unmerged, mergeCommitSha null
+    // Pre-state: open and unmerged. mergeCommitSha may be a non-null
+    // "speculative merge" SHA — GitHub computes a hypothetical merge
+    // commit to test mergeability and exposes its SHA on the open PR.
+    // The discriminator for "is this PR merged" is `merged`, not whether
+    // the SHA field is populated.
     const before = await github.getPullState(owner, repoName, prNumber);
     expect(before.state).toBe('open');
     expect(before.merged).toBe(false);
-    expect(before.mergeCommitSha).toBeNull();
 
     const result = await github.mergePullRequest(owner, repoName, prNumber);
 
