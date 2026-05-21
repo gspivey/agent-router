@@ -98,6 +98,37 @@ describe.skipIf(!hasEnv)('Tier 3: merge_pr + verifySession against real GitHub',
     return backend.createInitialPR('ignored', branch, `tier3 ${label}`, 'tier3 merge-and-verify test');
   }
 
+  /**
+   * Wait until GitHub has computed mergeability for the PR.
+   *
+   * After `pulls.create`, GitHub takes 1-3 seconds (occasionally longer)
+   * to compute the `mergeable` field. During that window, `pulls.get`
+   * returns `mergeable: null` AND `PUT /merge` returns 405 "Pull request
+   * is not mergeable" — not because the PR is unmergeable, but because
+   * GitHub doesn't know yet. Production agents never hit this race
+   * because they do work between creating a PR and merging it; tests
+   * that create-and-immediately-merge need this poll.
+   */
+  async function waitForMergeable(prNumber: number, timeoutMs = 30_000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const { data: pr } = await octokit.pulls.get({
+        owner,
+        repo: repoName,
+        pull_number: prNumber,
+      });
+      if (pr.mergeable === true) return;
+      if (pr.mergeable === false) {
+        throw new Error(
+          `PR ${prNumber} reports mergeable=false (mergeable_state=${pr.mergeable_state})`,
+        );
+      }
+      // mergeable === null → still computing; retry
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error(`Timed out waiting for PR ${prNumber} mergeability after ${timeoutMs}ms`);
+  }
+
   function registerPR(sessionId: string, prNumber: number): void {
     sessionFiles.createSession(sessionId, `tier3 ${sessionId}`);
     sessionFiles.updateMeta(sessionId, {
@@ -117,6 +148,7 @@ describe.skipIf(!hasEnv)('Tier 3: merge_pr + verifySession against real GitHub',
 
   it('merge_pr squash-merges a real PR and reports mergeCommitSha populated', async () => {
     const prNumber = await freshPR('merge');
+    await waitForMergeable(prNumber);
 
     // Pre-state: unmerged, mergeCommitSha null
     const before = await github.getPullState(owner, repoName, prNumber);
@@ -140,6 +172,7 @@ describe.skipIf(!hasEnv)('Tier 3: merge_pr + verifySession against real GitHub',
 
   it('merge_pr is idempotent on an already-merged PR', async () => {
     const prNumber = await freshPR('idemp');
+    await waitForMergeable(prNumber);
 
     // First merge — happy path
     const first = await github.mergePullRequest(owner, repoName, prNumber);
@@ -173,6 +206,7 @@ describe.skipIf(!hasEnv)('Tier 3: merge_pr + verifySession against real GitHub',
     registerPR(sessionId, prNumber);
 
     // Actually merge it
+    await waitForMergeable(prNumber);
     await github.mergePullRequest(owner, repoName, prNumber);
 
     const result = await verifySession(sessionId);
