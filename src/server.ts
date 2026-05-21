@@ -5,6 +5,8 @@ import * as path from 'node:path';
 import type { Database } from './db.js';
 import type { QueuedEvent } from './queue.js';
 import type { Logger } from './log.js';
+import type { DaemonTokenStore } from './daemon-token.js';
+import type { VerifySessionFn } from './verify-session.js';
 
 /**
  * If AGENT_ROUTER_CAPTURE_PAYLOADS is set to a directory path, write the raw
@@ -130,8 +132,72 @@ export function createApp(deps: {
   db: Database;
   enqueue: (event: QueuedEvent) => void;
   log: Logger;
+  /**
+   * Optional: when set, registers POST /hooks/event for adapter-driven
+   * verification triggers. Authenticated via bearer token from tokenStore.
+   */
+  tokenStore?: DaemonTokenStore;
+  /**
+   * Optional: verification fn for /hooks/event. Required if tokenStore is set.
+   */
+  verifySession?: VerifySessionFn;
 }): Hono {
   const app = new Hono();
+
+  // POST /hooks/event — adapter / hand-installed hook trigger for verifySession.
+  // Authenticated via daemon-issued bearer token. Body must include session_id.
+  // Always responds within ~10ms by deferring the verifySession work.
+  if (deps.tokenStore !== undefined && deps.verifySession !== undefined) {
+    const tokenStore = deps.tokenStore;
+    const verifySession = deps.verifySession;
+    app.post('/hooks/event', async (c) => {
+      const auth = c.req.header('authorization');
+      const expected = `Bearer ${tokenStore.read()}`;
+      if (auth !== expected) {
+        deps.log.warn('Hook event unauthorized', { hasAuth: auth !== undefined });
+        return c.json({ error: 'unauthorized' }, 401);
+      }
+
+      let body: Record<string, unknown>;
+      try {
+        body = (await c.req.json()) as Record<string, unknown>;
+      } catch {
+        return c.json({ error: 'invalid json' }, 400);
+      }
+
+      const sessionId = body['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        return c.json({ error: 'missing or invalid session_id' }, 400);
+      }
+
+      const eventType = body['event_type'];
+      const knownEventTypes = new Set(['session.start', 'tool.post', 'turn.end', 'session.end']);
+      if (typeof eventType === 'string' && !knownEventTypes.has(eventType)) {
+        deps.log.warn('Hook event with unknown event_type', { event_type: eventType });
+      }
+
+      deps.log.info('Hook event received', {
+        event_type: typeof eventType === 'string' ? eventType : 'unspecified',
+        session_id: sessionId,
+        agent_name: typeof body['agent_name'] === 'string' ? body['agent_name'] : undefined,
+        tool_name: typeof body['tool_name'] === 'string' ? body['tool_name'] : undefined,
+      });
+
+      // Fire-and-forget — endpoint responds immediately
+      void verifySession(sessionId).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        deps.log.error('verifySession from hook failed', { session_id: sessionId, error: msg });
+      });
+
+      return c.json({ accepted: true }, 202);
+    });
+
+    // Non-POST on /hooks/event → 405 (must be registered before the catch-all)
+    app.all('/hooks/event', (c) => {
+      c.header('Allow', 'POST');
+      return c.text('Method Not Allowed', 405);
+    });
+  }
 
   // POST /webhook — the main handler
   app.post('/webhook', async (c) => {

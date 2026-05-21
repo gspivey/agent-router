@@ -18,7 +18,10 @@ import type { EventQueue, QueuedEvent } from './queue.js';
 import { createApp } from './server.js';
 import { createCliServer } from './cli-server.js';
 import type { CliServer } from './cli-server.js';
-import { spawnACPClient } from './acp.js';
+import { createGitHubClient } from './github.js';
+import { createDaemonTokenStore } from './daemon-token.js';
+import { createVerifier } from './verify-session.js';
+import { createKiroAdapter } from './adapters/kiro.js';
 import { evaluateWakePolicy } from './router.js';
 import {
   composeCheckRunPrompt,
@@ -349,17 +352,31 @@ async function main(): Promise<void> {
   const sessionFiles = createSessionFiles(rootDir, log);
   log.info('Session files root created', { rootDir });
 
-  // Create session manager with ACP spawner
+  // Daemon hook token — generated on every start, written to $rootDir/daemon-token.
+  // Adapters and hand-installed Kiro hooks read it from disk at fire time.
+  const tokenStore = createDaemonTokenStore({ rootDir, log });
+
+  // GitHub client + verifySession + agent adapter.
+  // The GitHub client is wired in for the verifier (which checks PR state)
+  // and for the merge_pr MCP tool. The verifier is the single terminal-state
+  // authority for every trigger path (HTTP /hooks/event, ACP fallback,
+  // complete_session MCP call). The adapter abstracts the agent harness —
+  // today only Kiro; future adapters slot in here.
+  const github = createGitHubClient();
+  const verifySession = createVerifier({ sessionFiles, github, log });
+  log.info('Verification core initialized');
+
+  const adapter = createKiroAdapter({ kiroPath: config.kiroPath, log });
+  log.info('Agent adapter initialized', { adapter: adapter.name });
+
   const sessionMgr = createSessionManager({
     db,
     sessionFiles,
-    acpSpawner: (sessionId: string) => {
-      return spawnACPClient(config.kiroPath, ['acp'], {
-        AGENT_ROUTER_SESSION_ID: sessionId,
-      });
-    },
+    acpSpawner: (sessionId: string) => adapter.spawn({ sessionId }),
     log,
     sessionTimeout: config.sessionTimeout,
+    github,
+    verify: verifySession,
   });
   log.info('Session manager initialized');
 
@@ -373,12 +390,14 @@ async function main(): Promise<void> {
 
   // ---- Task 19.1c: Server surfaces startup ----
 
-  // Create and bind Hono HTTP server
+  // Create and bind Hono HTTP server (now also serves /hooks/event)
   const app = createApp({
     webhookSecret: config.webhookSecret,
     db,
     enqueue: (event: QueuedEvent) => { globalQueue.enqueue(event); },
     log,
+    tokenStore,
+    verifySession,
   });
 
   const httpServer = serve({

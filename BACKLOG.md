@@ -372,6 +372,24 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P2.9 — Self-dogfooding: tier3 in CI with agent-router closing the loop
+
+**Why this exists.** Today running tier3 means: sit at terminal, run, copy failure output, paste to agent, fix, repeat. Multiple cycles per debugging session (we just did three rounds in a row for the GitHub-API quirks during the agent-adapter-completion PR). agent-router exists precisely to eliminate this human-relay loop. The pieces are now in place — `structured-ci-feedback` (CI failures posted as PR comments) and the `agent-adapter-completion` work (agent can drive a PR to merged autonomously). What's missing is wiring tier3 to run on PRs against agent-router itself and the existing wake-on-CI-comment loop will close the cycle.
+
+**Mini spec.**
+
+- Add `.github/workflows/tier3-pr.yml` that runs tier3 on `pull_request` against agent-router.
+- Needs the same secrets `tier3-nightly.yml` already has: `GITHUB_TOKEN` (or scoped PAT for the test repo), `GITHUB_TEST_REPO`, `GITHUB_WEBHOOK_SECRET`, `KIRO_PATH`, `WEBHOOK_URL`.
+- Open question on `WEBHOOK_URL`: tier3's e2e-real test requires a real public webhook URL pointing at a daemon. Either (a) run the daemon inside the runner with a Cloudflare-quick-tunnel, or (b) skip e2e-real in PR-mode and run only the non-tunnel tier3 files (`smoke`, `github-operations`, `merge-and-verify`). Option (b) is simpler; option (a) gives full coverage.
+- Reuse the `scripts/ci-report.sh` from structured-ci-feedback so the failure output is in the parseable format the agent already knows how to read.
+- Document in the PR description: this workflow is what makes agent-router self-correcting on its own PRs.
+
+**Acceptance.** A PR against agent-router that breaks tier3 gets a structured failure comment within ~60s of the run completing. If a session is bound to that PR, the agent wakes, reads the comment, fixes, pushes. Loop closes without human intervention.
+
+**Blocked on:** nothing — all prerequisites are in main now. Ready when someone has 2-3 hours to wire it up + validate against a deliberately-broken PR.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy spec implementation

@@ -61,6 +61,19 @@ const MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'merge_pr',
+    description:
+      'Squash-merge a pull request via the GitHub API. The PR must have been registered with this session via register_pr. Use this instead of running `git merge` + `git push` locally — branch protection rules may block direct pushes, and complete_session will refuse to mark the session done while the PR is still open on GitHub.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: { type: 'string', description: 'Repository in "owner/name" format' },
+        pr_number: { type: 'number', description: 'Pull request number' },
+      },
+      required: ['repo', 'pr_number'],
+    },
+  },
+  {
     name: 'complete_session',
     description: 'Signal that the session is complete.',
     inputSchema: {
@@ -187,6 +200,31 @@ export function createMcpServer(ctx: McpContext): McpServer {
           }
           result = await sendToDaemon(daemonSocket, {
             op: 'register_pr',
+            session_id: sessionId,
+            repo,
+            pr_number: prNumber,
+          });
+          break;
+        }
+        case 'merge_pr': {
+          const repo = toolArgs['repo'];
+          const prNumber = toolArgs['pr_number'];
+          if (typeof repo !== 'string' || repo.length === 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "repo" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+          if (typeof prNumber !== 'number' || !Number.isInteger(prNumber) || prNumber <= 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or invalid "pr_number" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+          result = await sendToDaemon(daemonSocket, {
+            op: 'merge_pr',
             session_id: sessionId,
             repo,
             pr_number: prNumber,

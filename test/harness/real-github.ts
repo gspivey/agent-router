@@ -384,22 +384,67 @@ function requireEnv(name: string): string {
   return value;
 }
 
+/**
+ * GitHub returns 403 for two distinct reasons:
+ *  - Rate limiting: message contains "rate limit" / "secondary rate limit".
+ *  - Insufficient permissions: message says "Resource not accessible by
+ *    personal access token" (or similar). Classic PATs cannot create
+ *    check-runs, for example — that's a GitHub policy, not a transient
+ *    cooldown.
+ *
+ * The original implementation flagged every 403 as a rate-limit error,
+ * which both produces misleading log output and prevents callers from
+ * disambiguating via instanceof — both kinds re-throw as a plain Error.
+ *
+ * This version raises a typed error for each so callers can branch on
+ * `err instanceof GitHubPermissionError` vs `GitHubRateLimitError`.
+ */
+export class GitHubPermissionError extends Error {
+  status = 403 as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'GitHubPermissionError';
+  }
+}
+
+export class GitHubRateLimitError extends Error {
+  status = 403 as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'GitHubRateLimitError';
+  }
+}
+
 function throwOnRateLimit(err: unknown): void {
   if (
-    err !== null &&
-    err !== undefined &&
-    typeof err === 'object' &&
-    'status' in err &&
-    (err as { status: number }).status === 403
+    err === null ||
+    err === undefined ||
+    typeof err !== 'object' ||
+    !('status' in err) ||
+    (err as { status: number }).status !== 403
   ) {
-    const message =
-      err instanceof Error ? err.message : 'GitHub API rate limit exceeded';
-    throw new Error(
+    return;
+  }
+  const message = err instanceof Error ? err.message : '';
+  // Permissions errors take precedence — match before the rate-limit substring
+  // (the actual GitHub message for a classic-PAT check-run create is
+  // "Resource not accessible by personal access token").
+  if (/resource not accessible|not accessible by|forbidden/i.test(message)) {
+    throw new GitHubPermissionError(
+      `GitHub API permission denied (403). The token does not have access ` +
+      `to this endpoint. This is NOT a rate-limit cooldown — check token ` +
+      `scopes / use a fine-grained PAT or GitHub App. Details: ${message}`,
+    );
+  }
+  if (/rate limit|abuse|secondary/i.test(message)) {
+    throw new GitHubRateLimitError(
       `GitHub API rate limit hit (403). ` +
       `Wait for the rate limit to reset before running Tier 3 tests. ` +
       `Details: ${message}`,
     );
   }
+  // 403 without a recognizable rate-limit or permissions phrase — let it bubble
+  // as the original error so callers see the raw GitHub message.
 }
 
 function sleep(ms: number): Promise<void> {
