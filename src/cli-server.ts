@@ -2,10 +2,19 @@ import * as net from 'node:net';
 import * as fs from 'node:fs';
 import type { Logger } from './log.js';
 import type { SessionManager } from './session-mgr.js';
+import { OpenPRsError } from './session-mgr.js';
 import type { SessionFiles } from './session-files.js';
 
 export interface CliRequest {
-  op: 'new_session' | 'list_sessions' | 'inject_prompt' | 'terminate_session' | 'register_pr' | 'session_status' | 'complete_session';
+  op:
+    | 'new_session'
+    | 'list_sessions'
+    | 'inject_prompt'
+    | 'terminate_session'
+    | 'register_pr'
+    | 'merge_pr'
+    | 'session_status'
+    | 'complete_session';
   [key: string]: unknown;
 }
 
@@ -98,6 +107,23 @@ export function createCliServer(deps: {
       return { ok: true };
     },
 
+    async merge_pr(req: CliRequest): Promise<Record<string, unknown>> {
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('Missing or empty "session_id" parameter');
+      }
+      const repo = req['repo'];
+      if (typeof repo !== 'string' || repo.length === 0) {
+        throw new Error('Missing or empty "repo" parameter');
+      }
+      const prNumber = req['pr_number'];
+      if (typeof prNumber !== 'number' || !Number.isInteger(prNumber) || prNumber <= 0) {
+        throw new Error('Missing or invalid "pr_number" parameter');
+      }
+      const result = await sessionMgr.mergePR(sessionId, repo, prNumber);
+      return { ok: true, sha: result.sha, message: result.message };
+    },
+
     async session_status(req: CliRequest): Promise<Record<string, unknown>> {
       const sessionId = req['session_id'];
       if (typeof sessionId !== 'string' || sessionId.length === 0) {
@@ -120,7 +146,16 @@ export function createCliServer(deps: {
       if (typeof reason !== 'string' || reason.length === 0) {
         throw new Error('Missing or empty "reason" parameter');
       }
-      sessionMgr.completeSession(sessionId, reason);
+      try {
+        await sessionMgr.completeSession(sessionId, reason);
+      } catch (err) {
+        if (err instanceof OpenPRsError) {
+          // Structured error so the MCP layer can pass the open-PR list back
+          // to the agent without losing the per-PR detail.
+          return { error: err.message, open_prs: err.openPRs };
+        }
+        throw err;
+      }
       return { ok: true };
     },
   };

@@ -41,8 +41,37 @@ export class TestCli {
     return this.send<{ ok: boolean }>({ op: 'terminate_session', session_id: sessionId });
   }
 
-  async completeSession(sessionId: string, reason: string): Promise<{ ok: boolean }> {
-    return this.send<{ ok: boolean }>({ op: 'complete_session', session_id: sessionId, reason });
+  async completeSession(
+    sessionId: string,
+    reason: string,
+  ): Promise<{ ok?: boolean; error?: string; open_prs?: Array<{ repo: string; pr_number: number }> }> {
+    return this.send<{ ok?: boolean; error?: string; open_prs?: Array<{ repo: string; pr_number: number }> }>({
+      op: 'complete_session',
+      session_id: sessionId,
+      reason,
+    });
+  }
+
+  async registerPR(sessionId: string, repo: string, prNumber: number): Promise<{ ok?: boolean; error?: string }> {
+    return this.send<{ ok?: boolean; error?: string }>({
+      op: 'register_pr',
+      session_id: sessionId,
+      repo,
+      pr_number: prNumber,
+    });
+  }
+
+  async mergePR(
+    sessionId: string,
+    repo: string,
+    prNumber: number,
+  ): Promise<{ ok?: boolean; sha?: string; message?: string; error?: string }> {
+    return this.send<{ ok?: boolean; sha?: string; message?: string; error?: string }>({
+      op: 'merge_pr',
+      session_id: sessionId,
+      repo,
+      pr_number: prNumber,
+    });
   }
 
   private send<T>(msg: Record<string, unknown>): Promise<T> {

@@ -7,6 +7,7 @@ import { createEventQueue } from './queue.js';
 import type { ACPClient, ACPNotification } from './acp.js';
 import type { SessionTimeoutConfig } from './config.js';
 import { isCommentCommand, extractCommentIds } from './comment-tracker.js';
+import type { GitHubClient } from './github.js';
 
 export interface SessionHandle {
   sessionId: string;
@@ -17,12 +18,31 @@ export interface SessionHandle {
   kiroPid: number;
 }
 
+/** Thrown by completeSession when one or more registered PRs are still open on GitHub. */
+export class OpenPRsError extends Error {
+  openPRs: Array<{ repo: string; pr_number: number }>;
+  constructor(openPRs: Array<{ repo: string; pr_number: number }>) {
+    super(
+      `Cannot complete session: ${openPRs.length} registered PR(s) still open: ` +
+        openPRs.map((p) => `${p.repo}#${p.pr_number}`).join(', '),
+    );
+    this.name = 'OpenPRsError';
+    this.openPRs = openPRs;
+  }
+}
+
+export interface MergePRResult {
+  sha: string;
+  message: string;
+}
+
 export interface SessionManager {
   createSession(originalPrompt: string, repo?: string): Promise<SessionHandle>;
   hasActiveSessionForRepo(repo: string): boolean;
   injectPrompt(sessionId: string, prompt: string, source: PromptSource): Promise<void>;
   registerPR(sessionId: string, repo: string, prNumber: number): Promise<void>;
-  completeSession(sessionId: string, reason: string): void;
+  mergePR(sessionId: string, repo: string, prNumber: number): Promise<MergePRResult>;
+  completeSession(sessionId: string, reason: string): Promise<void>;
   terminateSession(sessionId: string): Promise<void>;
   getActiveSession(sessionId: string): SessionHandle | null;
   shutdown(): Promise<void>;
@@ -105,8 +125,16 @@ export function createSessionManager(deps: {
   acpSpawner: (sessionId: string) => ACPClient;
   log: Logger;
   sessionTimeout?: SessionTimeoutConfig;
+  /**
+   * GitHub client used for PR state checks in completeSession and for
+   * mergePR. Optional — when omitted, completeSession skips the open-PR
+   * check (preserves prior behavior for tests that don't exercise the
+   * GitHub surface) and mergePR throws.
+   */
+  github?: GitHubClient;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
+  const github = deps.github;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
   const maxLifetimeMs = timeout.maxLifetimeMinutes * 60 * 1000;
@@ -514,10 +542,81 @@ export function createSessionManager(deps: {
       log.info('PR registered', { sessionId, repo, prNumber });
     },
 
-    completeSession(sessionId: string, reason: string): void {
+    async mergePR(sessionId: string, repo: string, prNumber: number): Promise<MergePRResult> {
       const handle = registry.get(sessionId);
       if (handle === undefined) {
         throw new Error(`No active session found: ${sessionId}`);
+      }
+      if (github === undefined) {
+        throw new Error('GitHub client not configured; cannot merge PR');
+      }
+
+      // Security: refuse to merge a PR that wasn't registered with this session.
+      const meta = sessionFiles.readMeta(sessionId);
+      const registered = meta.prs.some((pr) => pr.repo === repo && pr.pr_number === prNumber);
+      if (!registered) {
+        throw new Error(
+          `PR ${repo}#${prNumber} is not registered with session ${sessionId}; ` +
+            `call register_pr first`,
+        );
+      }
+
+      const slash = repo.indexOf('/');
+      if (slash < 1 || slash === repo.length - 1) {
+        throw new Error(`Invalid repo "${repo}": expected "owner/name"`);
+      }
+      const owner = repo.slice(0, slash);
+      const name = repo.slice(slash + 1);
+
+      const result = await github.mergePullRequest(owner, name, prNumber);
+
+      sessionFiles.appendStream(sessionId, {
+        ts: new Date().toISOString(),
+        source: 'router',
+        type: 'pr_merged',
+        repo,
+        pr_number: prNumber,
+        sha: result.sha,
+      });
+
+      log.info('PR merged', { sessionId, repo, prNumber, sha: result.sha });
+
+      return { sha: result.sha, message: result.message };
+    },
+
+    async completeSession(sessionId: string, reason: string): Promise<void> {
+      const handle = registry.get(sessionId);
+      if (handle === undefined) {
+        throw new Error(`No active session found: ${sessionId}`);
+      }
+
+      // Open-PR validation: if a GitHub client is wired up, refuse to mark
+      // the session completed while any registered PR is still open. This
+      // is the fix for the bug where an agent claimed merge via local
+      // `git push` while the PR remained open on GitHub.
+      if (github !== undefined) {
+        const meta = sessionFiles.readMeta(sessionId);
+        const openPRs: Array<{ repo: string; pr_number: number }> = [];
+        for (const pr of meta.prs) {
+          const slash = pr.repo.indexOf('/');
+          if (slash < 1 || slash === pr.repo.length - 1) {
+            log.warn('Skipping PR with malformed repo during completion check', {
+              sessionId,
+              repo: pr.repo,
+              pr_number: pr.pr_number,
+            });
+            continue;
+          }
+          const owner = pr.repo.slice(0, slash);
+          const name = pr.repo.slice(slash + 1);
+          const state = await github.getPullState(owner, name, pr.pr_number);
+          if (state.state === 'open') {
+            openPRs.push({ repo: pr.repo, pr_number: pr.pr_number });
+          }
+        }
+        if (openPRs.length > 0) {
+          throw new OpenPRsError(openPRs);
+        }
       }
 
       // Mark completion so monitorSubprocessExit knows this was intentional

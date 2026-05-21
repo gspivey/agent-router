@@ -19,6 +19,7 @@ import { createApp } from './server.js';
 import { createCliServer } from './cli-server.js';
 import type { CliServer } from './cli-server.js';
 import { spawnACPClient } from './acp.js';
+import { createGitHubClient } from './github.js';
 import { evaluateWakePolicy } from './router.js';
 import {
   composeCheckRunPrompt,
@@ -349,7 +350,11 @@ async function main(): Promise<void> {
   const sessionFiles = createSessionFiles(rootDir, log);
   log.info('Session files root created', { rootDir });
 
-  // Create session manager with ACP spawner
+  // Create session manager with ACP spawner and GitHub client.
+  // The GitHub client is wired in so completeSession can verify registered
+  // PRs are actually merged on GitHub (not just locally pushed), and so the
+  // merge_pr MCP tool can squash-merge via the API.
+  const github = createGitHubClient();
   const sessionMgr = createSessionManager({
     db,
     sessionFiles,
@@ -360,6 +365,7 @@ async function main(): Promise<void> {
     },
     log,
     sessionTimeout: config.sessionTimeout,
+    github,
   });
   log.info('Session manager initialized');
 
