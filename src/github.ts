@@ -18,6 +18,8 @@ export interface PullState {
   number: number;
   state: 'open' | 'closed';
   merged: boolean;
+  /** GitHub's merge_commit_sha. Null when not yet computed or PR was closed unmerged. */
+  mergeCommitSha: string | null;
 }
 
 export interface MergeResult {
@@ -41,6 +43,12 @@ export interface GitHubClientOptions {
   baseUrl?: string;
   /** Override fetch (for tests). Defaults to globalThis.fetch. */
   fetchImpl?: typeof fetch;
+  /** Per-request timeout in milliseconds. Default 5000 (5s). */
+  requestTimeoutMs?: number;
+  /** Number of post-merge state polls. Default 10. */
+  pollAttempts?: number;
+  /** Delay between polls in milliseconds. Default 300. */
+  pollIntervalMs?: number;
 }
 
 export class GitHubApiError extends Error {
@@ -62,9 +70,16 @@ function readToken(): string {
   return token;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient {
   const baseUrl = (opts.baseUrl ?? 'https://api.github.com').replace(/\/$/, '');
   const fetchImpl = opts.fetchImpl ?? fetch;
+  const requestTimeoutMs = opts.requestTimeoutMs ?? 5000;
+  const pollAttempts = opts.pollAttempts ?? 10;
+  const pollIntervalMs = opts.pollIntervalMs ?? 300;
 
   async function request(
     method: 'GET' | 'PUT',
@@ -81,11 +96,26 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
       headers['Content-Type'] = 'application/json';
     }
 
-    const init: RequestInit = { method, headers };
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), requestTimeoutMs);
+
+    const init: RequestInit = { method, headers, signal: ac.signal };
     if (body !== undefined) {
       init.body = JSON.stringify(body);
     }
-    const res = await fetchImpl(`${baseUrl}${path}`, init);
+
+    let res: Response;
+    try {
+      res = await fetchImpl(`${baseUrl}${path}`, init);
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'AbortError') {
+        throw new GitHubApiError(`GitHub API ${method} ${path} timeout after ${requestTimeoutMs}ms`, 0, '');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
 
     const text = await res.text();
     if (!res.ok) {
@@ -98,23 +128,25 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
     if (text.length === 0) return {};
     try {
       return JSON.parse(text);
-    } catch (err) {
+    } catch {
       throw new Error(`GitHub API ${method} ${path} returned non-JSON body: ${text.slice(0, 200)}`);
     }
   }
 
-  return {
+  const client: GitHubClient = {
     async getPullState(owner, repo, prNumber): Promise<PullState> {
       const data = (await request('GET', `/repos/${owner}/${repo}/pulls/${prNumber}`)) as Record<string, unknown>;
       const stateRaw = data['state'];
       const mergedRaw = data['merged'];
       const numberRaw = data['number'];
+      const shaRaw = data['merge_commit_sha'];
       // GitHub returns state='closed' for both merged and closed-unmerged PRs;
       // 'merged' is the boolean discriminator.
       const state: 'open' | 'closed' = stateRaw === 'open' ? 'open' : 'closed';
       const merged: boolean = mergedRaw === true;
       const number: number = typeof numberRaw === 'number' ? numberRaw : prNumber;
-      return { number, state, merged };
+      const mergeCommitSha: string | null = typeof shaRaw === 'string' && shaRaw.length > 0 ? shaRaw : null;
+      return { number, state, merged, mergeCommitSha };
     },
 
     async mergePullRequest(owner, repo, prNumber, options): Promise<MergeResult> {
@@ -122,11 +154,26 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
       if (options?.commitTitle !== undefined) body['commit_title'] = options.commitTitle;
       if (options?.commitMessage !== undefined) body['commit_message'] = options.commitMessage;
 
-      const data = (await request(
-        'PUT',
-        `/repos/${owner}/${repo}/pulls/${prNumber}/merge`,
-        body,
-      )) as Record<string, unknown>;
+      let data: Record<string, unknown>;
+      try {
+        data = (await request('PUT', `/repos/${owner}/${repo}/pulls/${prNumber}/merge`, body)) as Record<
+          string,
+          unknown
+        >;
+      } catch (err) {
+        // Idempotency: 405 may mean "already merged." Disambiguate via GET.
+        if (err instanceof GitHubApiError && err.status === 405) {
+          const state = await client.getPullState(owner, repo, prNumber);
+          if (state.merged) {
+            return {
+              sha: state.mergeCommitSha ?? '',
+              merged: true,
+              message: 'already merged',
+            };
+          }
+        }
+        throw err;
+      }
 
       const sha = typeof data['sha'] === 'string' ? data['sha'] : '';
       const merged = data['merged'] === true;
@@ -134,7 +181,24 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
       if (!merged) {
         throw new Error(`GitHub reported merge=false for ${owner}/${repo}#${prNumber}: ${message}`);
       }
+
+      // Post-merge polling: GitHub's merge response can race with the PR-state
+      // surface. Confirm via GET before returning so complete_session doesn't
+      // race against a not-yet-updated PR object.
+      for (let i = 0; i < pollAttempts; i++) {
+        const state = await client.getPullState(owner, repo, prNumber);
+        if (state.merged) {
+          return { sha: state.mergeCommitSha ?? sha, merged: true, message };
+        }
+        if (i < pollAttempts - 1) {
+          await sleep(pollIntervalMs);
+        }
+      }
+      // Best-effort: GitHub said 200 with merged=true, but the state hasn't
+      // caught up within the polling budget. Return the original response —
+      // session-level verification will retry later if needed.
       return { sha, merged: true, message };
     },
   };
+  return client;
 }

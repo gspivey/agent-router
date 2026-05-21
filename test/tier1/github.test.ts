@@ -91,7 +91,7 @@ describe('createGitHubClient', () => {
       }));
       const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl });
       const result = await client.getPullState('octocat', 'hello', 42);
-      expect(result).toEqual({ number: 42, state: 'open', merged: false });
+      expect(result).toEqual({ number: 42, state: 'open', merged: false, mergeCommitSha: null });
       expect(calls[0]!.url).toBe('http://stub/repos/octocat/hello/pulls/42');
       expect(calls[0]!.init.method).toBe('GET');
     });
@@ -103,7 +103,7 @@ describe('createGitHubClient', () => {
       }));
       const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl });
       const result = await client.getPullState('o', 'r', 7);
-      expect(result).toEqual({ number: 7, state: 'closed', merged: true });
+      expect(result).toEqual({ number: 7, state: 'closed', merged: true, mergeCommitSha: null });
     });
 
     it('reports state=closed, merged=false for a closed-unmerged PR', async () => {
@@ -113,7 +113,7 @@ describe('createGitHubClient', () => {
       }));
       const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl });
       const result = await client.getPullState('o', 'r', 7);
-      expect(result).toEqual({ number: 7, state: 'closed', merged: false });
+      expect(result).toEqual({ number: 7, state: 'closed', merged: false, mergeCommitSha: null });
     });
 
     it('throws GitHubApiError on 404', async () => {
@@ -193,6 +193,136 @@ describe('createGitHubClient', () => {
       const body = JSON.parse(calls[0]!.init.body as string) as Record<string, unknown>;
       expect(body['commit_title']).toBe('Custom title');
       expect(body['commit_message']).toBe('Custom body');
+    });
+  });
+
+  describe('merge_pr hardening (Phase 5)', () => {
+    it('getPullState populates mergeCommitSha from merge_commit_sha field', async () => {
+      const { fetchImpl } = makeStubFetch(() => ({
+        status: 200,
+        body: JSON.stringify({ number: 1, state: 'closed', merged: true, merge_commit_sha: 'deadbeef' }),
+      }));
+      const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl });
+      const result = await client.getPullState('o', 'r', 1);
+      expect(result.mergeCommitSha).toBe('deadbeef');
+    });
+
+    it('mergePullRequest: 405 → state.merged=true → returns success with mergeCommitSha', async () => {
+      let putCount = 0;
+      const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : '';
+        const method = init?.method ?? 'GET';
+        if (method === 'PUT' && url.includes('/merge')) {
+          putCount++;
+          return new Response('{"message":"Pull Request is not mergeable"}', { status: 405 });
+        }
+        // GET — return merged
+        return new Response(
+          JSON.stringify({ number: 1, state: 'closed', merged: true, merge_commit_sha: 'already-merged-sha' }),
+          { status: 200 },
+        );
+      }) as unknown as typeof fetch;
+      const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl, pollAttempts: 1 });
+      const result = await client.mergePullRequest('o', 'r', 1);
+      expect(result).toEqual({ sha: 'already-merged-sha', merged: true, message: 'already merged' });
+      expect(putCount).toBe(1);
+    });
+
+    it('mergePullRequest: 405 → state.merged=false → re-throws original 405', async () => {
+      const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (method === 'PUT') {
+          return new Response('{"message":"Required status check has not passed"}', { status: 405 });
+        }
+        return new Response(
+          JSON.stringify({ number: 1, state: 'open', merged: false }),
+          { status: 200 },
+        );
+      }) as unknown as typeof fetch;
+      const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl });
+      try {
+        await client.mergePullRequest('o', 'r', 1);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(GitHubApiError);
+        expect((err as GitHubApiError).status).toBe(405);
+      }
+    });
+
+    it('mergePullRequest: 200 → polls until merged=true, returns success', async () => {
+      let getCount = 0;
+      const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (method === 'PUT') {
+          return new Response(
+            JSON.stringify({ sha: 'put-sha', merged: true, message: 'Merged via API' }),
+            { status: 200 },
+          );
+        }
+        // GET — first call says not yet merged, second call says merged
+        getCount++;
+        if (getCount === 1) {
+          return new Response(
+            JSON.stringify({ number: 1, state: 'open', merged: false }),
+            { status: 200 },
+          );
+        }
+        return new Response(
+          JSON.stringify({ number: 1, state: 'closed', merged: true, merge_commit_sha: 'poll-sha' }),
+          { status: 200 },
+        );
+      }) as unknown as typeof fetch;
+      const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl, pollAttempts: 3, pollIntervalMs: 1 });
+      const result = await client.mergePullRequest('o', 'r', 1);
+      expect(result.merged).toBe(true);
+      // SHA comes from the poll that observed merged:true
+      expect(result.sha).toBe('poll-sha');
+      expect(getCount).toBe(2);
+    });
+
+    it('mergePullRequest: 200 → all polls say merged=false → returns original 200 response', async () => {
+      const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (method === 'PUT') {
+          return new Response(
+            JSON.stringify({ sha: 'put-sha', merged: true, message: 'Merged via API' }),
+            { status: 200 },
+          );
+        }
+        return new Response(
+          JSON.stringify({ number: 1, state: 'open', merged: false }),
+          { status: 200 },
+        );
+      }) as unknown as typeof fetch;
+      const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl, pollAttempts: 2, pollIntervalMs: 1 });
+      const result = await client.mergePullRequest('o', 'r', 1);
+      expect(result).toEqual({ sha: 'put-sha', merged: true, message: 'Merged via API' });
+    });
+
+    it('per-request timeout aborts a fetch that never resolves', async () => {
+      const fetchImpl = (async (_input: unknown, init?: RequestInit) => {
+        // Honor AbortSignal — that's how the timeout fires
+        const signal = init?.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          if (signal) {
+            signal.addEventListener('abort', () => {
+              const err = new Error('aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }
+          // never resolve otherwise
+        });
+      }) as unknown as typeof fetch;
+      const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl, requestTimeoutMs: 10 });
+      try {
+        await client.getPullState('o', 'r', 1);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(GitHubApiError);
+        expect((err as GitHubApiError).status).toBe(0);
+        expect((err as GitHubApiError).message).toMatch(/timeout/i);
+      }
     });
   });
 

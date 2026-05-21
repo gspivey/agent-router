@@ -8,6 +8,7 @@ import type { ACPClient, ACPNotification } from './acp.js';
 import type { SessionTimeoutConfig } from './config.js';
 import { isCommentCommand, extractCommentIds } from './comment-tracker.js';
 import type { GitHubClient } from './github.js';
+import type { VerifySessionFn, VerifyResult } from './verify-session.js';
 
 export interface SessionHandle {
   sessionId: string;
@@ -126,15 +127,24 @@ export function createSessionManager(deps: {
   log: Logger;
   sessionTimeout?: SessionTimeoutConfig;
   /**
-   * GitHub client used for PR state checks in completeSession and for
-   * mergePR. Optional — when omitted, completeSession skips the open-PR
-   * check (preserves prior behavior for tests that don't exercise the
-   * GitHub surface) and mergePR throws.
+   * GitHub client used by mergePR. Open-PR validation in completeSession
+   * is delegated to `verify` when wired. Optional — when omitted, mergePR
+   * throws.
    */
   github?: GitHubClient;
+  /**
+   * Verification fn that determines a session's true terminal state from
+   * GitHub. When wired, completeSession defers to it instead of trusting
+   * the agent-provided reason for PR-bearing sessions. Optional — when
+   * omitted, completeSession falls back to writing the agent's reason
+   * directly (preserves prior behavior for tests that don't exercise
+   * verification).
+   */
+  verify?: VerifySessionFn;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
+  const verify = deps.verify;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
   const maxLifetimeMs = timeout.maxLifetimeMinutes * 60 * 1000;
@@ -183,42 +193,85 @@ export function createSessionManager(deps: {
       inactivityTimers.delete(sessionId);
       if (!registry.has(sessionId)) return;
 
-      log.warn('Session exceeded inactivity timeout, terminating', {
-        sessionId,
-        inactivityMinutes: timeout.inactivityMinutes,
-      });
+      // Run verification first. If the agent finished its work and just
+      // went idle, the verifier may transition the session to
+      // completed:merged instead of failed:timeout_inactivity.
+      //
+      // Wrap the async work in an IIFE — setTimeout callbacks can't be async
+      // (return value is ignored, and we need clean error handling).
+      void (async () => {
+        let verifyResult: VerifyResult | null = null;
+        if (verify !== undefined) {
+          try {
+            verifyResult = await verify(sessionId);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.error('Inactivity-watchdog verify threw', { sessionId, error: msg });
+            // Fall through with verifyResult=null → treat as no verifier
+          }
+        }
 
-      // Record reason in meta before kill
-      try {
-        sessionFiles.updateMeta(sessionId, {
-          status: 'failed',
-          completed_at: Math.floor(Date.now() / 1000),
-          termination_reason: 'timeout_inactivity',
+        // GitHub-outage protection: if verification couldn't talk to GitHub,
+        // don't write a false timeout_inactivity — give the session another
+        // inactivity window. The watchdog will fire again; if GitHub is back
+        // up, verification will either find a terminal state or proceed to
+        // the timeout-failed path naturally.
+        if (verifyResult !== null && !verifyResult.verified && verifyResult.reason === 'github_error') {
+          log.warn('Inactivity watchdog: GitHub error during verify, resetting watchdog', {
+            sessionId,
+            error: verifyResult.error,
+          });
+          const stillActiveHandle = registry.get(sessionId);
+          if (stillActiveHandle !== undefined) {
+            resetInactivityTimer(sessionId, stillActiveHandle.acp);
+          }
+          return;
+        }
+
+        // If verifier wrote a terminal state, do NOT also write timeout_inactivity.
+        // Just proceed to kill the subprocess.
+        const verifiedTerminal: 'merged' | 'closed_without_merge' | null =
+          verifyResult !== null && verifyResult.verified ? verifyResult.termination_reason : null;
+
+        log.warn('Session exceeded inactivity timeout, terminating', {
+          sessionId,
+          inactivityMinutes: timeout.inactivityMinutes,
+          verified_as: verifiedTerminal ?? 'timeout',
         });
-      } catch {
-        // Meta may already be in terminal state
-      }
 
-      try {
-        sessionFiles.appendStream(sessionId, {
-          ts: new Date().toISOString(),
-          source: 'router',
-          type: 'session_ended',
-          reason: 'timeout_inactivity',
+        if (verifiedTerminal === null) {
+          try {
+            sessionFiles.updateMeta(sessionId, {
+              status: 'failed',
+              completed_at: Math.floor(Date.now() / 1000),
+              termination_reason: 'timeout_inactivity',
+            });
+          } catch {
+            // Meta may already be in terminal state
+          }
+
+          try {
+            sessionFiles.appendStream(sessionId, {
+              ts: new Date().toISOString(),
+              source: 'router',
+              type: 'session_ended',
+              reason: 'timeout_inactivity',
+            });
+          } catch {
+            // Best effort
+          }
+        }
+
+        // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
+        registry.remove(sessionId);
+        clearSessionTimers(sessionId);
+        completionFlags.delete(sessionId);
+
+        acp.kill().catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.error('Failed to kill inactivity-timed-out session', { sessionId, error: msg });
         });
-      } catch {
-        // Best effort
-      }
-
-      // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
-      registry.remove(sessionId);
-      clearSessionTimers(sessionId);
-      completionFlags.delete(sessionId);
-
-      acp.kill().catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        log.error('Failed to kill inactivity-timed-out session', { sessionId, error: msg });
-      });
+      })();
     }, inactivityMs);
 
     inactivityTimers.set(sessionId, timer);
@@ -482,7 +535,9 @@ export function createSessionManager(deps: {
         throw new Error(`No active session found: ${sessionId}`);
       }
 
-      // Send prompt to ACP client
+      // Send prompt to ACP client. The JSON-RPC response to session/prompt
+      // resolving IS the protocol-level turn-end signal — there is no
+      // separate streaming "turn-end" notification in the current ACP client.
       await handle.acp.sendPrompt(prompt);
 
       // Append to prompts.log
@@ -497,6 +552,17 @@ export function createSessionManager(deps: {
       });
 
       log.info('Prompt injected', { sessionId, source });
+
+      // ACP-fallback fast trigger: fire verification now that the agent
+      // has finished processing the prompt. Fire-and-forget — single-flight
+      // in the verifier handles dedup against any concurrent hook-path call
+      // or complete_session MCP call.
+      if (verify !== undefined) {
+        void verify(sessionId).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.error('Post-sendPrompt verify failed', { sessionId, error: msg });
+        });
+      }
     },
 
     async registerPR(sessionId: string, repo: string, prNumber: number): Promise<void> {
@@ -590,48 +656,44 @@ export function createSessionManager(deps: {
         throw new Error(`No active session found: ${sessionId}`);
       }
 
-      // Open-PR validation: if a GitHub client is wired up, refuse to mark
-      // the session completed while any registered PR is still open. This
-      // is the fix for the bug where an agent claimed merge via local
-      // `git push` while the PR remained open on GitHub.
-      if (github !== undefined) {
-        const meta = sessionFiles.readMeta(sessionId);
-        const openPRs: Array<{ repo: string; pr_number: number }> = [];
-        for (const pr of meta.prs) {
-          const slash = pr.repo.indexOf('/');
-          if (slash < 1 || slash === pr.repo.length - 1) {
-            log.warn('Skipping PR with malformed repo during completion check', {
-              sessionId,
-              repo: pr.repo,
-              pr_number: pr.pr_number,
-            });
-            continue;
-          }
-          const owner = pr.repo.slice(0, slash);
-          const name = pr.repo.slice(slash + 1);
-          const state = await github.getPullState(owner, name, pr.pr_number);
-          if (state.state === 'open') {
-            openPRs.push({ repo: pr.repo, pr_number: pr.pr_number });
-          }
+      // Delegate terminal-state authority to the centralized verifier when
+      // wired. The verifier queries GitHub for each registered PR and writes
+      // termination_reason from real state — never from the agent's reason
+      // argument. This is the structural fix for the bug class where an
+      // agent could claim merge while a PR remained open.
+      //
+      // When no verifier is wired (tests without a GitHub client) or when
+      // the verifier reports no_prs/already_verified, fall through to write
+      // the agent's reason directly — that's the only signal we have.
+      let verifierWroteTerminal = false;
+      if (verify !== undefined) {
+        const result = await verify(sessionId);
+        if (result.verified) {
+          verifierWroteTerminal = true;
+        } else if (result.reason === 'prs_still_open') {
+          throw new OpenPRsError(result.open_prs);
+        } else if (result.reason === 'github_error') {
+          throw new Error(`GitHub verification failed: ${result.error}`);
         }
-        if (openPRs.length > 0) {
-          throw new OpenPRsError(openPRs);
-        }
+        // no_prs / already_verified / unknown_session → fall through
       }
 
       // Mark completion so monitorSubprocessExit knows this was intentional
       completionFlags.add(sessionId);
 
-      // Update meta immediately with the provided reason
-      try {
-        const terminationReason = reason as NonNullable<SessionMeta['termination_reason']>;
-        sessionFiles.updateMeta(sessionId, {
-          status: 'completed',
-          completed_at: Math.floor(Date.now() / 1000),
-          termination_reason: terminationReason,
-        });
-      } catch {
-        // Meta may already be in terminal state
+      // Write terminal state from the agent's reason only if the verifier
+      // didn't already write one.
+      if (!verifierWroteTerminal) {
+        try {
+          const terminationReason = reason as NonNullable<SessionMeta['termination_reason']>;
+          sessionFiles.updateMeta(sessionId, {
+            status: 'completed',
+            completed_at: Math.floor(Date.now() / 1000),
+            termination_reason: terminationReason,
+          });
+        } catch {
+          // Meta may already be in terminal state
+        }
       }
 
       // Append stream entry
