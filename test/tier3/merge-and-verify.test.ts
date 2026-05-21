@@ -138,20 +138,29 @@ describe.skipIf(!hasEnv)('Tier 3: merge_pr + verifySession against real GitHub',
     expect(after.mergeCommitSha).toBe(result.sha);
   }, 90_000);
 
-  it('merge_pr is idempotent on an already-merged PR (405 → success-already-merged)', async () => {
+  it('merge_pr is idempotent on an already-merged PR', async () => {
     const prNumber = await freshPR('idemp');
 
     // First merge — happy path
     const first = await github.mergePullRequest(owner, repoName, prNumber);
     expect(first.merged).toBe(true);
 
-    // Second merge — GitHub returns 405 "Pull request is not mergeable".
-    // Our client must catch that, query getPullState, see merged=true, and
-    // return success rather than re-throwing.
+    // Second merge against an already-merged PR.
+    //
+    // Empirically (tier3 finding): GitHub returns 200 with the original
+    // merge details for this case, NOT 405 "Pull request is not mergeable"
+    // as the docs imply. The post-merge polling loop then observes
+    // merged=true immediately and returns success. The 405 handler in
+    // src/github.ts is defensive code for a hypothetical case that
+    // doesn't trigger in practice; the tier1 stub-based test verifies
+    // it works if GitHub ever does return 405.
+    //
+    // What matters for the agent: the second call returns success with
+    // the same merge commit SHA — it never throws, never retries
+    // forever, never re-merges anything.
     const second = await github.mergePullRequest(owner, repoName, prNumber);
     expect(second.merged).toBe(true);
     expect(second.sha).toBe(first.sha);
-    expect(second.message).toMatch(/already merged/i);
   }, 90_000);
 
   // ---------------------------------------------------------------------
