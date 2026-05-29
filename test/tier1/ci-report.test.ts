@@ -260,6 +260,44 @@ describe('ci-report.sh', () => {
       expect(stdout).toMatch(/Test results file not found/);
     });
 
+    it('uses "No results" status (not "Failed") when JUnit XML is missing', () => {
+      // Distinct from "tests failed" — when no results file exists, the
+      // runner likely never executed. The agent reading the bot comment
+      // needs this distinction to know whether to fix test code or to
+      // investigate harness/env issues. We pass a typecheck file so the
+      // Tests section is actually emitted (vs the both-missing minimal mode).
+      const { stdout } = runReport({
+        junitPath: null,
+        typecheckContent: '',
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+      });
+
+      const testsSection = stdout.split('## Tests')[1] ?? '';
+      expect(testsSection).toMatch(/\*\*Status:\*\* ⚠️ No results/);
+      expect(testsSection).not.toMatch(/\*\*Status:\*\* ❌ Failed/);
+      // Body should hint at harness-level cause, not test code
+      expect(testsSection).toMatch(/runner did not execute|crashed before reporting/);
+    });
+
+    it('uses "No results" status (not "Failed") when typecheck output is missing', () => {
+      const failingJunit =
+        `<?xml version="1.0"?><testsuites tests="1" failures="1"><testsuite name="t.ts" tests="1" failures="1">` +
+        `<testcase classname="t.ts" name="boom"><failure message="x" type="E">trace</failure></testcase>` +
+        `</testsuite></testsuites>`;
+      const { stdout } = runReport({
+        junitContent: failingJunit,
+        typecheckPath: null,
+        typecheckOutcome: 'failure',
+        testOutcome: 'failure',
+      });
+
+      const typecheckSection = (stdout.split('## Typecheck')[1] ?? '').split('## ')[0] ?? '';
+      expect(typecheckSection).toMatch(/\*\*Status:\*\* ⚠️ No results/);
+      expect(typecheckSection).not.toMatch(/\*\*Status:\*\* ❌ Failed/);
+      expect(typecheckSection).toMatch(/never executed/);
+    });
+
     it('produces notice when typecheck output is missing but typecheck outcome is failure', () => {
       const failingJunit =
         `<?xml version="1.0"?><testsuites tests="1" failures="1"><testsuite name="t.ts" tests="1" failures="1">` +
@@ -320,7 +358,7 @@ describe('ci-report.sh', () => {
       });
 
       expect(exitCode).toBe(0);
-      expect(stdout).toMatch(/Test results file empty|Test results file not found/);
+      expect(stdout).toMatch(/Test results file is empty|Test results file not found/);
     });
   });
 

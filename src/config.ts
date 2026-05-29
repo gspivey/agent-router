@@ -18,12 +18,16 @@ export interface AgentRouterConfig {
   sessionTimeout: SessionTimeoutConfig;
   repos: RepoConfig[];
   cron: CronConfig[];
+  /** Optional default GitHub token used when a repo has no `token` override. Typically "ENV:GITHUB_TOKEN". */
+  defaultGithubToken?: string;
 }
 
 export interface RepoConfig {
   owner: string;
   name: string;
   roadmapPath?: string;
+  /** Optional per-repo GitHub token. Overrides `defaultGithubToken`. Typically "ENV:GH_TOKEN_<NAME>". */
+  token?: string;
 }
 
 export interface CronConfig {
@@ -166,7 +170,22 @@ export function validateConfig(config: unknown): AgentRouterConfig {
       }
       entry.roadmapPath = repo['roadmapPath'];
     }
+    if (repo['token'] !== undefined) {
+      if (typeof repo['token'] !== 'string' || repo['token'].length === 0) {
+        throw new FatalError(`Invalid "repos[${i}].token": must be a non-empty string`);
+      }
+      entry.token = repo['token'];
+    }
     repos.push(entry);
+  }
+
+  // defaultGithubToken (optional)
+  let defaultGithubToken: string | undefined;
+  if (config['defaultGithubToken'] !== undefined) {
+    if (typeof config['defaultGithubToken'] !== 'string' || config['defaultGithubToken'].length === 0) {
+      throw new FatalError('Invalid "defaultGithubToken": must be a non-empty string');
+    }
+    defaultGithubToken = config['defaultGithubToken'];
   }
 
   // Build set of known "owner/name" for cron repo matching
@@ -204,7 +223,7 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     cronEntries.push({ name: cronName, schedule, repo });
   }
 
-  return {
+  const result: AgentRouterConfig = {
     port,
     webhookSecret,
     kiroPath,
@@ -213,6 +232,10 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     repos,
     cron: cronEntries,
   };
+  if (defaultGithubToken !== undefined) {
+    result.defaultGithubToken = defaultGithubToken;
+  }
+  return result;
 }
 
 export function loadConfig(configPath: string): AgentRouterConfig {

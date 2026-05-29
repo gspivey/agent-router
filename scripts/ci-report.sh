@@ -78,15 +78,18 @@ generate_typecheck_section() {
     return
   fi
 
-  # Handle missing file
+  # Handle missing file — distinct from "typecheck ran and failed" because
+  # the absence of output implies the step itself never produced output
+  # (e.g., command not found, OOM, runner crash). Use a different status so
+  # the agent reading this can tell harness failure from type errors.
   if [[ -z "$TYPECHECK_FILE" || ! -f "$TYPECHECK_FILE" ]]; then
-    printf '## Typecheck\n\n**Status:** ❌ Failed\n\nTypecheck output not found.\n'
+    printf '## Typecheck\n\n**Status:** ⚠️ No results\n\nTypecheck output not found. The step exited with failure but produced no output — the typechecker likely never executed. Check the workflow step log for the actual error.\n'
     return
   fi
 
-  # Handle empty file
+  # Handle empty file — typechecker started but produced nothing
   if [[ ! -s "$TYPECHECK_FILE" ]]; then
-    printf '## Typecheck\n\n**Status:** ❌ Failed\n\nTypecheck output empty.\n'
+    printf '## Typecheck\n\n**Status:** ⚠️ No results\n\nTypecheck output is empty. The typechecker started but produced no output before exiting — likely a crash.\n'
     return
   fi
 
@@ -311,15 +314,18 @@ generate_test_section() {
     return
   fi
 
-  # Handle missing file
+  # Handle missing file — distinct from "tests ran and failed" because no
+  # results file means the runner didn't execute (command not found, native
+  # module crash, OOM, etc.). Use a different status so the agent reading
+  # this knows to investigate harness/env, not test code.
   if [[ -z "$JUNIT_FILE" || ! -f "$JUNIT_FILE" ]]; then
-    printf '## Tests\n\n**Status:** ❌ Failed\n\nTest results file not found.\n'
+    printf '## Tests\n\n**Status:** ⚠️ No results\n\nTest results file not found. The test step exited with failure but produced no results — the test runner did not execute or crashed before reporting. Check the workflow step log for the actual error (e.g., command not found, missing dependency, runner crash).\n'
     return
   fi
 
-  # Handle empty file
+  # Handle empty file — runner started but produced nothing
   if [[ ! -s "$JUNIT_FILE" ]]; then
-    printf '## Tests\n\n**Status:** ❌ Failed\n\nTest results file empty.\n'
+    printf '## Tests\n\n**Status:** ⚠️ No results\n\nTest results file is empty. The test runner started but produced no output before exiting — likely a crash mid-run.\n'
     return
   fi
 
@@ -341,7 +347,7 @@ generate_test_section() {
 
   # If both parsers failed, report malformed XML
   if [[ "$parse_success" == false || -z "$parse_output" ]]; then
-    printf '## Tests\n\n**Status:** ❌ Failed\n\nFailed to parse test results (malformed XML).\n'
+    printf '## Tests\n\n**Status:** ⚠️ No results\n\nFailed to parse test results (malformed XML). The runner wrote output but it could not be read.\n'
     return
   fi
 
@@ -351,7 +357,7 @@ generate_test_section() {
 
   # If no summary found, report malformed
   if [[ -z "$summary_line" ]]; then
-    printf '## Tests\n\n**Status:** ❌ Failed\n\nFailed to parse test results (malformed XML).\n'
+    printf '## Tests\n\n**Status:** ⚠️ No results\n\nFailed to parse test results (malformed XML). The runner wrote output but it could not be read.\n'
     return
   fi
 

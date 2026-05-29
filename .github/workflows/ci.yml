@@ -27,12 +27,12 @@ jobs:
         continue-on-error: true
         env:
           NO_COLOR: '1'
-        run: tsc --noEmit 2>&1 | tee typecheck-output.txt
+        run: npx tsc --noEmit 2>&1 | tee typecheck-output.txt
 
       - name: Test
         id: test
         continue-on-error: true
-        run: vitest run --project tier1 --project tier2 --reporter=default --reporter=junit --outputFile=test-results.xml
+        run: npx vitest run --project tier1 --project tier2 --reporter=default --reporter=junit --outputFile=test-results.xml
 
       - name: Generate Report
         if: always()
