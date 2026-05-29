@@ -6,9 +6,12 @@
  * @octokit/rest so the production dependency surface stays small (per
  * CLAUDE.md guidance).
  *
- * Token resolution: each call reads GITHUB_TOKEN from process.env at call
- * time. If unset, the call throws — callers (cli-server handlers) surface
- * that as a structured error back to the agent.
+ * Token resolution: a `tokenResolver(owner, repo)` is consulted on every
+ * call. If no resolver is provided, the default reads GITHUB_TOKEN from
+ * process.env at call time (preserving the original lazy-env behavior so
+ * env-rotation still works for callers that don't configure per-repo
+ * tokens). The daemon (src/index.ts) builds a config-aware resolver that
+ * implements the per-repo → default → env hierarchy.
  *
  * The baseUrl is configurable so the Tier 2 harness can point this at a
  * FakeGitHubBackend; production uses https://api.github.com.
@@ -38,6 +41,8 @@ export interface GitHubClient {
   ): Promise<MergeResult>;
 }
 
+export type TokenResolver = (owner: string, repo: string) => string;
+
 export interface GitHubClientOptions {
   /** Base URL for the GitHub API. Defaults to https://api.github.com. */
   baseUrl?: string;
@@ -49,6 +54,8 @@ export interface GitHubClientOptions {
   pollAttempts?: number;
   /** Delay between polls in milliseconds. Default 300. */
   pollIntervalMs?: number;
+  /** Resolves the bearer token for a (owner, repo) pair. Default reads GITHUB_TOKEN from env at call time. */
+  tokenResolver?: TokenResolver;
 }
 
 export class GitHubApiError extends Error {
@@ -62,16 +69,53 @@ export class GitHubApiError extends Error {
   }
 }
 
-function readToken(): string {
+const defaultTokenResolver: TokenResolver = (_owner, _repo) => {
   const token = process.env['GITHUB_TOKEN'];
   if (typeof token !== 'string' || token.length === 0) {
     throw new Error('GITHUB_TOKEN environment variable is not set');
   }
   return token;
-}
+};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export interface TokenResolverConfig {
+  /** Map of "owner/repo" → token. Per-repo overrides win over `defaultToken`. */
+  perRepoTokens?: Record<string, string>;
+  /** Token used when a repo has no override. */
+  defaultToken?: string;
+  /**
+   * If true, fall back to `process.env.GITHUB_TOKEN` (read at call time) when
+   * neither a per-repo nor default token is set. Preserves the original
+   * lazy-env behavior so unconfigured deployments still work.
+   */
+  envFallback?: boolean;
+}
+
+/**
+ * Build a TokenResolver that consults: per-repo → default → (optional) env →
+ * throw. Pure given its inputs (env fallback is only consulted at call time
+ * when explicitly enabled).
+ */
+export function createTokenResolver(cfg: TokenResolverConfig): TokenResolver {
+  const perRepo = cfg.perRepoTokens ?? {};
+  const defaultToken = cfg.defaultToken;
+  const envFallback = cfg.envFallback ?? false;
+  return (owner: string, repo: string): string => {
+    const key = `${owner}/${repo}`;
+    const repoToken = perRepo[key];
+    if (typeof repoToken === 'string' && repoToken.length > 0) return repoToken;
+    if (typeof defaultToken === 'string' && defaultToken.length > 0) return defaultToken;
+    if (envFallback) {
+      const envToken = process.env['GITHUB_TOKEN'];
+      if (typeof envToken === 'string' && envToken.length > 0) return envToken;
+    }
+    throw new Error(
+      `No GitHub token available for ${key}: no per-repo token, no defaultGithubToken${envFallback ? ', GITHUB_TOKEN env unset' : ''}`,
+    );
+  };
 }
 
 export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient {
@@ -80,13 +124,15 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
   const requestTimeoutMs = opts.requestTimeoutMs ?? 5000;
   const pollAttempts = opts.pollAttempts ?? 10;
   const pollIntervalMs = opts.pollIntervalMs ?? 300;
+  const tokenResolver = opts.tokenResolver ?? defaultTokenResolver;
 
   async function request(
     method: 'GET' | 'PUT',
     path: string,
+    auth: { owner: string; repo: string },
     body?: Record<string, unknown>,
   ): Promise<unknown> {
-    const token = readToken();
+    const token = tokenResolver(auth.owner, auth.repo);
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
@@ -135,7 +181,7 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
 
   const client: GitHubClient = {
     async getPullState(owner, repo, prNumber): Promise<PullState> {
-      const data = (await request('GET', `/repos/${owner}/${repo}/pulls/${prNumber}`)) as Record<string, unknown>;
+      const data = (await request('GET', `/repos/${owner}/${repo}/pulls/${prNumber}`, { owner, repo })) as Record<string, unknown>;
       const stateRaw = data['state'];
       const mergedRaw = data['merged'];
       const numberRaw = data['number'];
@@ -156,7 +202,7 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
 
       let data: Record<string, unknown>;
       try {
-        data = (await request('PUT', `/repos/${owner}/${repo}/pulls/${prNumber}/merge`, body)) as Record<
+        data = (await request('PUT', `/repos/${owner}/${repo}/pulls/${prNumber}/merge`, { owner, repo }, body)) as Record<
           string,
           unknown
         >;
