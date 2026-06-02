@@ -28,6 +28,8 @@ interface RunReportOpts {
   testOutcome: 'success' | 'failure';
   useOutputFile?: boolean;
   workDir?: string;
+  /** Force the grep-based JUnit parser even when xmllint is installed. */
+  forceGrep?: boolean;
 }
 
 interface RunReportResult {
@@ -83,11 +85,14 @@ function runReport(opts: RunReportOpts): RunReportResult {
     args.push('--output', outputFilePath);
   }
 
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (opts.forceGrep) env['CI_REPORT_FORCE_GREP'] = '1';
+
   let stdout = '';
   let stderr = '';
   let exitCode = 0;
   try {
-    stdout = execFileSync('bash', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    stdout = execFileSync('bash', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env });
   } catch (err) {
     const e = err as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
     exitCode = e.status ?? -1;
@@ -505,6 +510,69 @@ describe('ci-report.sh', () => {
       expect(stdout).toContain('should handle empty input');
       expect(stdout).toContain('test/tier1/parser.test.ts');
       expect(stdout).toContain("Expected '' to equal 'foo'");
+    });
+  });
+
+  describe('grep-based parser fallback (CI without xmllint)', () => {
+    // ubuntu-latest runners ship without xmllint, so the grep parser is
+    // what actually runs in CI. These tests force it on so the path is
+    // exercised regardless of whether the dev machine has xmllint.
+    const multiLineJunit =
+      `<?xml version="1.0"?>\n` +
+      `<testsuites name="vitest" tests="2" failures="1" skipped="0">\n` +
+      `  <testsuite name="test/foo.test.ts" tests="2" failures="1">\n` +
+      `    <testcase classname="test/foo.test.ts" name="should handle empty input" time="0.001">\n` +
+      `      <failure message="Expected '' to equal 'foo'" type="AssertionError">stack trace line</failure>\n` +
+      `    </testcase>\n` +
+      `    <testcase classname="test/foo.test.ts" name="should pass" time="0.001"/>\n` +
+      `  </testsuite>\n` +
+      `</testsuites>\n`;
+
+    it('extracts the testcase name (not the classname) on multi-line vitest XML', () => {
+      // Regression: bare `name=\"...\"` regex matched inside `classname=\"...\"`
+      // because `classname` ends in the substring `name=`. The result was a
+      // table row showing the file path in the "Test" column instead of the
+      // actual test name, which broke agent self-correction.
+      const { stdout } = runReport({
+        junitContent: multiLineJunit,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        forceGrep: true,
+      });
+      expect(stdout).toContain('## Tests');
+      expect(stdout).toContain('| Test | File | Error |');
+      // The test name must appear in the table — not just the file path.
+      expect(stdout).toMatch(/\| should handle empty input \| test\/foo\.test\.ts \|/);
+      expect(stdout).toContain("Expected '' to equal 'foo'");
+    });
+
+    it('extracts test name correctly when testsuite and testcase share a line', () => {
+      // Single-line XML stresses the regex even harder: testsuite's own
+      // `name=` attribute appears before the testcase's, and the parser
+      // must not grab it.
+      const singleLine =
+        `<?xml version="1.0"?><testsuites tests="2" failures="1"><testsuite name="suite-name" tests="2" failures="1"><testcase classname="cls" name="actual-test-name"><failure message="boom" type="E">trace</failure></testcase><testcase classname="cls" name="passing"/></testsuite></testsuites>`;
+      const { stdout } = runReport({
+        junitContent: singleLine,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        forceGrep: true,
+      });
+      expect(stdout).toContain('actual-test-name');
+      expect(stdout).not.toMatch(/\| suite-name \|/);
+    });
+
+    it('reports correct passed/failed/skipped summary via grep parser', () => {
+      const { stdout } = runReport({
+        junitContent: multiLineJunit,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        forceGrep: true,
+      });
+      expect(stdout).toContain('1 passed, 1 failed, 0 skipped');
     });
   });
 });

@@ -50,9 +50,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Check for xmllint availability (after arg parsing)
+# Check for xmllint availability (after arg parsing).
+# Setting CI_REPORT_FORCE_GREP=1 lets tests exercise the grep fallback on
+# machines where xmllint is installed — the GitHub Actions ubuntu-latest
+# image ships without it, so the grep path is what runs in CI.
 HAS_XMLLINT=true
-command -v xmllint >/dev/null 2>&1 || { echo "::warning::xmllint not found, falling back to grep-based parsing" >&2; HAS_XMLLINT=false; }
+if [[ "${CI_REPORT_FORCE_GREP:-}" == "1" ]]; then
+  HAS_XMLLINT=false
+elif ! command -v xmllint >/dev/null 2>&1; then
+  echo "::warning::xmllint not found, falling back to grep-based parsing" >&2
+  HAS_XMLLINT=false
+fi
 
 # --- Determine overall status ---
 if [[ "$TYPECHECK_OUTCOME" == "success" && "$TEST_OUTCOME" == "success" ]]; then
@@ -227,15 +235,23 @@ parse_junit_grep() {
 
   echo "SUMMARY:${passed} passed, ${failures} failed, ${skipped} skipped"
 
-  # Extract failures using a state machine approach
+  # Extract failures using a state machine approach.
+  # The `|| [[ -n "$line" ]]` clause handles files without a trailing newline
+  # — without it, the loop body never runs on the final unterminated line,
+  # which silently drops failure records for single-line JUnit XML.
   local in_failure=false
   local current_name="" current_classname="" current_message="" current_trace=""
 
-  while IFS= read -r line; do
-    # Detect testcase with failure — capture name and classname
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Detect testcase with failure — capture name and classname.
+    # The name regex is anchored at `<testcase` so it does not match the
+    # substring `name=` inside `classname="..."` (the original bug: bare
+    # `name=\"...\"` matched the classname value because `classname`
+    # literally ends in `name=`). The anchor also makes single-line XML
+    # safe — testsuite's `name=` won't be picked up.
     if [[ "$line" =~ \<testcase[[:space:]] ]]; then
-      # Extract name attribute
-      if [[ "$line" =~ name=\"([^\"]+)\" ]]; then
+      # Extract name attribute (scoped to the testcase tag)
+      if [[ "$line" =~ \<testcase[^\>]*[[:space:]]name=\"([^\"]+)\" ]]; then
         current_name="${BASH_REMATCH[1]}"
       else
         current_name="unknown"
