@@ -243,7 +243,47 @@ parse_junit_grep() {
   local current_name="" current_classname="" current_message="" current_trace=""
 
   while IFS= read -r line || [[ -n "$line" ]]; do
-    # Detect testcase with failure — capture name and classname.
+    # When we're already tracking a failure, drain that first. The line may
+    # contain `</failure>` (closing the active failure) followed by new
+    # `<testcase>` tags — if we processed those tags before closing, we'd
+    # clobber current_name with the NEXT testcase's name and emit the
+    # failure record under the wrong test (the original bug surfaced by
+    # multi-line traces ending on the same line as a self-closing
+    # passing testcase).
+    if [[ "$in_failure" == true ]]; then
+      if [[ "$line" =~ \</failure\> ]]; then
+        # Append pre-close content to trace, then emit. Anything AFTER
+        # </failure> on this line is reprocessed below as if it were a
+        # fresh line — so a same-line follow-up testcase/failure is still
+        # seen.
+        local pre_close after_close
+        pre_close=$(printf '%s' "$line" | sed 's/<\/failure>.*//')
+        after_close=$(printf '%s' "$line" | sed 's/.*<\/failure>//')
+        if [[ -n "$pre_close" ]]; then
+          if [[ -n "$current_trace" ]]; then
+            current_trace="${current_trace}"$'\n'"${pre_close}"
+          else
+            current_trace="$pre_close"
+          fi
+        fi
+        local encoded_trace
+        encoded_trace=$(printf '%s' "$current_trace" | tr '\n' $'\x01')
+        echo "FAILURE:${current_name//|/│}|${current_classname//|/│}|${current_message//|/│}|${encoded_trace}"
+        in_failure=false
+        line="$after_close"
+        # fall through to detection on the remainder
+      else
+        # No close on this line — accumulate the whole line into trace
+        if [[ -n "$current_trace" ]]; then
+          current_trace="${current_trace}"$'\n'"${line}"
+        else
+          current_trace="$line"
+        fi
+        continue
+      fi
+    fi
+
+    # Detect testcase opening — capture name and classname.
     # The name regex is anchored at `<testcase` so it does not match the
     # substring `name=` inside `classname="..."` (the original bug: bare
     # `name=\"...\"` matched the classname value because `classname`
@@ -275,15 +315,9 @@ parse_junit_grep() {
       in_failure=true
       current_trace=""
 
-      # Check if self-closing
-      if [[ "$line" =~ /\> ]]; then
-        local encoded_trace=""
-        echo "FAILURE:${current_name//|/│}|${current_classname//|/│}|${current_message//|/│}|${encoded_trace}"
-        in_failure=false
-        continue
-      fi
-
-      # Check if failure closes on same line
+      # Check if failure closes on same line (handle BEFORE self-closing
+      # check — a `</failure>` always wins over an unrelated `/>` later on
+      # the line, e.g. a sibling self-closing passing testcase).
       if [[ "$line" =~ \</failure\> ]]; then
         local content
         content=$(printf '%s' "$line" | sed 's/.*<failure[^>]*>//;s/<\/failure>.*//')
@@ -293,10 +327,21 @@ parse_junit_grep() {
         in_failure=false
         continue
       fi
+
+      # Check if the failure tag itself is self-closing (<failure ... />)
+      # Use a narrow regex so we only match the failure tag's own self-close.
+      if [[ "$line" =~ \<failure[^\>]*/\> ]]; then
+        local encoded_trace=""
+        echo "FAILURE:${current_name//|/│}|${current_classname//|/│}|${current_message//|/│}|${encoded_trace}"
+        in_failure=false
+        continue
+      fi
       continue
     fi
 
-    # Accumulate trace content
+    # Defensive: should be unreachable now that in_failure is drained at
+    # the top of the loop. Keep the legacy accumulation path so any path
+    # we missed doesn't silently swallow a trace.
     if [[ "$in_failure" == true ]]; then
       if [[ "$line" =~ \</failure\> ]]; then
         # End of failure element — strip the closing tag from this line

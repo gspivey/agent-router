@@ -574,5 +574,33 @@ describe('ci-report.sh', () => {
       });
       expect(stdout).toContain('1 passed, 1 failed, 0 skipped');
     });
+
+    it('does not clobber current_name when </failure> and a sibling <testcase/> share a line', () => {
+      // Regression for CI: a failure whose trace ends on the SAME line as a
+      // following self-closing passing testcase used to make the parser
+      // emit the failure under the next testcase's name. The fixture below
+      // mirrors what vitest actually writes in our PR #6 run.
+      const junit =
+        `<?xml version="1.0"?><testsuites tests="2" failures="1">` +
+        `<testsuite name="test/tier1/parser.test.ts" tests="2" failures="1">` +
+        `<testcase classname="test/tier1/parser.test.ts" name="should handle empty input">` +
+        // The \n inside the trace splits the file into two lines.
+        `<failure message="Expected '' to equal 'foo'" type="AssertionError">trace line\nat parser.ts:15:20</failure>` +
+        `</testcase>` +
+        // ...and this self-closing passing testcase shares the closing line.
+        `<testcase classname="test/tier1/parser.test.ts" name="should pass"/>` +
+        `</testsuite></testsuites>`;
+      const { stdout } = runReport({
+        junitContent: junit,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        forceGrep: true,
+      });
+      expect(stdout).toContain('should handle empty input');
+      expect(stdout).toContain("Expected '' to equal 'foo'");
+      // The passing testcase must not appear in the Failed Tests table
+      expect(stdout).not.toMatch(/\| should pass \|/);
+    });
   });
 });
