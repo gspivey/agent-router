@@ -28,6 +28,8 @@ interface RunReportOpts {
   testOutcome: 'success' | 'failure';
   useOutputFile?: boolean;
   workDir?: string;
+  /** Force the grep-based JUnit parser even when xmllint is installed. */
+  forceGrep?: boolean;
 }
 
 interface RunReportResult {
@@ -83,11 +85,14 @@ function runReport(opts: RunReportOpts): RunReportResult {
     args.push('--output', outputFilePath);
   }
 
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (opts.forceGrep) env['CI_REPORT_FORCE_GREP'] = '1';
+
   let stdout = '';
   let stderr = '';
   let exitCode = 0;
   try {
-    stdout = execFileSync('bash', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    stdout = execFileSync('bash', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env });
   } catch (err) {
     const e = err as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
     exitCode = e.status ?? -1;
@@ -260,6 +265,44 @@ describe('ci-report.sh', () => {
       expect(stdout).toMatch(/Test results file not found/);
     });
 
+    it('uses "No results" status (not "Failed") when JUnit XML is missing', () => {
+      // Distinct from "tests failed" — when no results file exists, the
+      // runner likely never executed. The agent reading the bot comment
+      // needs this distinction to know whether to fix test code or to
+      // investigate harness/env issues. We pass a typecheck file so the
+      // Tests section is actually emitted (vs the both-missing minimal mode).
+      const { stdout } = runReport({
+        junitPath: null,
+        typecheckContent: '',
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+      });
+
+      const testsSection = stdout.split('## Tests')[1] ?? '';
+      expect(testsSection).toMatch(/\*\*Status:\*\* ⚠️ No results/);
+      expect(testsSection).not.toMatch(/\*\*Status:\*\* ❌ Failed/);
+      // Body should hint at harness-level cause, not test code
+      expect(testsSection).toMatch(/runner did not execute|crashed before reporting/);
+    });
+
+    it('uses "No results" status (not "Failed") when typecheck output is missing', () => {
+      const failingJunit =
+        `<?xml version="1.0"?><testsuites tests="1" failures="1"><testsuite name="t.ts" tests="1" failures="1">` +
+        `<testcase classname="t.ts" name="boom"><failure message="x" type="E">trace</failure></testcase>` +
+        `</testsuite></testsuites>`;
+      const { stdout } = runReport({
+        junitContent: failingJunit,
+        typecheckPath: null,
+        typecheckOutcome: 'failure',
+        testOutcome: 'failure',
+      });
+
+      const typecheckSection = (stdout.split('## Typecheck')[1] ?? '').split('## ')[0] ?? '';
+      expect(typecheckSection).toMatch(/\*\*Status:\*\* ⚠️ No results/);
+      expect(typecheckSection).not.toMatch(/\*\*Status:\*\* ❌ Failed/);
+      expect(typecheckSection).toMatch(/never executed/);
+    });
+
     it('produces notice when typecheck output is missing but typecheck outcome is failure', () => {
       const failingJunit =
         `<?xml version="1.0"?><testsuites tests="1" failures="1"><testsuite name="t.ts" tests="1" failures="1">` +
@@ -320,7 +363,7 @@ describe('ci-report.sh', () => {
       });
 
       expect(exitCode).toBe(0);
-      expect(stdout).toMatch(/Test results file empty|Test results file not found/);
+      expect(stdout).toMatch(/Test results file is empty|Test results file not found/);
     });
   });
 
@@ -467,6 +510,97 @@ describe('ci-report.sh', () => {
       expect(stdout).toContain('should handle empty input');
       expect(stdout).toContain('test/tier1/parser.test.ts');
       expect(stdout).toContain("Expected '' to equal 'foo'");
+    });
+  });
+
+  describe('grep-based parser fallback (CI without xmllint)', () => {
+    // ubuntu-latest runners ship without xmllint, so the grep parser is
+    // what actually runs in CI. These tests force it on so the path is
+    // exercised regardless of whether the dev machine has xmllint.
+    const multiLineJunit =
+      `<?xml version="1.0"?>\n` +
+      `<testsuites name="vitest" tests="2" failures="1" skipped="0">\n` +
+      `  <testsuite name="test/foo.test.ts" tests="2" failures="1">\n` +
+      `    <testcase classname="test/foo.test.ts" name="should handle empty input" time="0.001">\n` +
+      `      <failure message="Expected '' to equal 'foo'" type="AssertionError">stack trace line</failure>\n` +
+      `    </testcase>\n` +
+      `    <testcase classname="test/foo.test.ts" name="should pass" time="0.001"/>\n` +
+      `  </testsuite>\n` +
+      `</testsuites>\n`;
+
+    it('extracts the testcase name (not the classname) on multi-line vitest XML', () => {
+      // Regression: bare `name=\"...\"` regex matched inside `classname=\"...\"`
+      // because `classname` ends in the substring `name=`. The result was a
+      // table row showing the file path in the "Test" column instead of the
+      // actual test name, which broke agent self-correction.
+      const { stdout } = runReport({
+        junitContent: multiLineJunit,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        forceGrep: true,
+      });
+      expect(stdout).toContain('## Tests');
+      expect(stdout).toContain('| Test | File | Error |');
+      // The test name must appear in the table — not just the file path.
+      expect(stdout).toMatch(/\| should handle empty input \| test\/foo\.test\.ts \|/);
+      expect(stdout).toContain("Expected '' to equal 'foo'");
+    });
+
+    it('extracts test name correctly when testsuite and testcase share a line', () => {
+      // Single-line XML stresses the regex even harder: testsuite's own
+      // `name=` attribute appears before the testcase's, and the parser
+      // must not grab it.
+      const singleLine =
+        `<?xml version="1.0"?><testsuites tests="2" failures="1"><testsuite name="suite-name" tests="2" failures="1"><testcase classname="cls" name="actual-test-name"><failure message="boom" type="E">trace</failure></testcase><testcase classname="cls" name="passing"/></testsuite></testsuites>`;
+      const { stdout } = runReport({
+        junitContent: singleLine,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        forceGrep: true,
+      });
+      expect(stdout).toContain('actual-test-name');
+      expect(stdout).not.toMatch(/\| suite-name \|/);
+    });
+
+    it('reports correct passed/failed/skipped summary via grep parser', () => {
+      const { stdout } = runReport({
+        junitContent: multiLineJunit,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        forceGrep: true,
+      });
+      expect(stdout).toContain('1 passed, 1 failed, 0 skipped');
+    });
+
+    it('does not clobber current_name when </failure> and a sibling <testcase/> share a line', () => {
+      // Regression for CI: a failure whose trace ends on the SAME line as a
+      // following self-closing passing testcase used to make the parser
+      // emit the failure under the next testcase's name. The fixture below
+      // mirrors what vitest actually writes in our PR #6 run.
+      const junit =
+        `<?xml version="1.0"?><testsuites tests="2" failures="1">` +
+        `<testsuite name="test/tier1/parser.test.ts" tests="2" failures="1">` +
+        `<testcase classname="test/tier1/parser.test.ts" name="should handle empty input">` +
+        // The \n inside the trace splits the file into two lines.
+        `<failure message="Expected '' to equal 'foo'" type="AssertionError">trace line\nat parser.ts:15:20</failure>` +
+        `</testcase>` +
+        // ...and this self-closing passing testcase shares the closing line.
+        `<testcase classname="test/tier1/parser.test.ts" name="should pass"/>` +
+        `</testsuite></testsuites>`;
+      const { stdout } = runReport({
+        junitContent: junit,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        forceGrep: true,
+      });
+      expect(stdout).toContain('should handle empty input');
+      expect(stdout).toContain("Expected '' to equal 'foo'");
+      // The passing testcase must not appear in the Failed Tests table
+      expect(stdout).not.toMatch(/\| should pass \|/);
     });
   });
 });

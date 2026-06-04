@@ -18,7 +18,7 @@ import type { EventQueue, QueuedEvent } from './queue.js';
 import { createApp } from './server.js';
 import { createCliServer } from './cli-server.js';
 import type { CliServer } from './cli-server.js';
-import { createGitHubClient } from './github.js';
+import { createGitHubClient, createTokenResolver } from './github.js';
 import { createDaemonTokenStore } from './daemon-token.js';
 import { createVerifier } from './verify-session.js';
 import { createKiroAdapter } from './adapters/kiro.js';
@@ -362,7 +362,18 @@ async function main(): Promise<void> {
   // authority for every trigger path (HTTP /hooks/event, ACP fallback,
   // complete_session MCP call). The adapter abstracts the agent harness —
   // today only Kiro; future adapters slot in here.
-  const github = createGitHubClient();
+  const perRepoTokens: Record<string, string> = {};
+  for (const r of config.repos) {
+    if (r.token !== undefined) perRepoTokens[`${r.owner}/${r.name}`] = r.token;
+  }
+  const resolverCfg: Parameters<typeof createTokenResolver>[0] = {
+    perRepoTokens,
+    envFallback: true,
+  };
+  if (config.defaultGithubToken !== undefined) {
+    resolverCfg.defaultToken = config.defaultGithubToken;
+  }
+  const github = createGitHubClient({ tokenResolver: createTokenResolver(resolverCfg) });
   const verifySession = createVerifier({ sessionFiles, github, log });
   log.info('Verification core initialized');
 

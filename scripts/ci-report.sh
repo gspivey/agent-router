@@ -50,9 +50,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Check for xmllint availability (after arg parsing)
+# Check for xmllint availability (after arg parsing).
+# Setting CI_REPORT_FORCE_GREP=1 lets tests exercise the grep fallback on
+# machines where xmllint is installed — the GitHub Actions ubuntu-latest
+# image ships without it, so the grep path is what runs in CI.
 HAS_XMLLINT=true
-command -v xmllint >/dev/null 2>&1 || { echo "::warning::xmllint not found, falling back to grep-based parsing" >&2; HAS_XMLLINT=false; }
+if [[ "${CI_REPORT_FORCE_GREP:-}" == "1" ]]; then
+  HAS_XMLLINT=false
+elif ! command -v xmllint >/dev/null 2>&1; then
+  echo "::warning::xmllint not found, falling back to grep-based parsing" >&2
+  HAS_XMLLINT=false
+fi
 
 # --- Determine overall status ---
 if [[ "$TYPECHECK_OUTCOME" == "success" && "$TEST_OUTCOME" == "success" ]]; then
@@ -78,15 +86,18 @@ generate_typecheck_section() {
     return
   fi
 
-  # Handle missing file
+  # Handle missing file — distinct from "typecheck ran and failed" because
+  # the absence of output implies the step itself never produced output
+  # (e.g., command not found, OOM, runner crash). Use a different status so
+  # the agent reading this can tell harness failure from type errors.
   if [[ -z "$TYPECHECK_FILE" || ! -f "$TYPECHECK_FILE" ]]; then
-    printf '## Typecheck\n\n**Status:** ❌ Failed\n\nTypecheck output not found.\n'
+    printf '## Typecheck\n\n**Status:** ⚠️ No results\n\nTypecheck output not found. The step exited with failure but produced no output — the typechecker likely never executed. Check the workflow step log for the actual error.\n'
     return
   fi
 
-  # Handle empty file
+  # Handle empty file — typechecker started but produced nothing
   if [[ ! -s "$TYPECHECK_FILE" ]]; then
-    printf '## Typecheck\n\n**Status:** ❌ Failed\n\nTypecheck output empty.\n'
+    printf '## Typecheck\n\n**Status:** ⚠️ No results\n\nTypecheck output is empty. The typechecker started but produced no output before exiting — likely a crash.\n'
     return
   fi
 
@@ -224,15 +235,63 @@ parse_junit_grep() {
 
   echo "SUMMARY:${passed} passed, ${failures} failed, ${skipped} skipped"
 
-  # Extract failures using a state machine approach
+  # Extract failures using a state machine approach.
+  # The `|| [[ -n "$line" ]]` clause handles files without a trailing newline
+  # — without it, the loop body never runs on the final unterminated line,
+  # which silently drops failure records for single-line JUnit XML.
   local in_failure=false
   local current_name="" current_classname="" current_message="" current_trace=""
 
-  while IFS= read -r line; do
-    # Detect testcase with failure — capture name and classname
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # When we're already tracking a failure, drain that first. The line may
+    # contain `</failure>` (closing the active failure) followed by new
+    # `<testcase>` tags — if we processed those tags before closing, we'd
+    # clobber current_name with the NEXT testcase's name and emit the
+    # failure record under the wrong test (the original bug surfaced by
+    # multi-line traces ending on the same line as a self-closing
+    # passing testcase).
+    if [[ "$in_failure" == true ]]; then
+      if [[ "$line" =~ \</failure\> ]]; then
+        # Append pre-close content to trace, then emit. Anything AFTER
+        # </failure> on this line is reprocessed below as if it were a
+        # fresh line — so a same-line follow-up testcase/failure is still
+        # seen.
+        local pre_close after_close
+        pre_close=$(printf '%s' "$line" | sed 's/<\/failure>.*//')
+        after_close=$(printf '%s' "$line" | sed 's/.*<\/failure>//')
+        if [[ -n "$pre_close" ]]; then
+          if [[ -n "$current_trace" ]]; then
+            current_trace="${current_trace}"$'\n'"${pre_close}"
+          else
+            current_trace="$pre_close"
+          fi
+        fi
+        local encoded_trace
+        encoded_trace=$(printf '%s' "$current_trace" | tr '\n' $'\x01')
+        echo "FAILURE:${current_name//|/│}|${current_classname//|/│}|${current_message//|/│}|${encoded_trace}"
+        in_failure=false
+        line="$after_close"
+        # fall through to detection on the remainder
+      else
+        # No close on this line — accumulate the whole line into trace
+        if [[ -n "$current_trace" ]]; then
+          current_trace="${current_trace}"$'\n'"${line}"
+        else
+          current_trace="$line"
+        fi
+        continue
+      fi
+    fi
+
+    # Detect testcase opening — capture name and classname.
+    # The name regex is anchored at `<testcase` so it does not match the
+    # substring `name=` inside `classname="..."` (the original bug: bare
+    # `name=\"...\"` matched the classname value because `classname`
+    # literally ends in `name=`). The anchor also makes single-line XML
+    # safe — testsuite's `name=` won't be picked up.
     if [[ "$line" =~ \<testcase[[:space:]] ]]; then
-      # Extract name attribute
-      if [[ "$line" =~ name=\"([^\"]+)\" ]]; then
+      # Extract name attribute (scoped to the testcase tag)
+      if [[ "$line" =~ \<testcase[^\>]*[[:space:]]name=\"([^\"]+)\" ]]; then
         current_name="${BASH_REMATCH[1]}"
       else
         current_name="unknown"
@@ -256,15 +315,9 @@ parse_junit_grep() {
       in_failure=true
       current_trace=""
 
-      # Check if self-closing
-      if [[ "$line" =~ /\> ]]; then
-        local encoded_trace=""
-        echo "FAILURE:${current_name//|/│}|${current_classname//|/│}|${current_message//|/│}|${encoded_trace}"
-        in_failure=false
-        continue
-      fi
-
-      # Check if failure closes on same line
+      # Check if failure closes on same line (handle BEFORE self-closing
+      # check — a `</failure>` always wins over an unrelated `/>` later on
+      # the line, e.g. a sibling self-closing passing testcase).
       if [[ "$line" =~ \</failure\> ]]; then
         local content
         content=$(printf '%s' "$line" | sed 's/.*<failure[^>]*>//;s/<\/failure>.*//')
@@ -274,10 +327,21 @@ parse_junit_grep() {
         in_failure=false
         continue
       fi
+
+      # Check if the failure tag itself is self-closing (<failure ... />)
+      # Use a narrow regex so we only match the failure tag's own self-close.
+      if [[ "$line" =~ \<failure[^\>]*/\> ]]; then
+        local encoded_trace=""
+        echo "FAILURE:${current_name//|/│}|${current_classname//|/│}|${current_message//|/│}|${encoded_trace}"
+        in_failure=false
+        continue
+      fi
       continue
     fi
 
-    # Accumulate trace content
+    # Defensive: should be unreachable now that in_failure is drained at
+    # the top of the loop. Keep the legacy accumulation path so any path
+    # we missed doesn't silently swallow a trace.
     if [[ "$in_failure" == true ]]; then
       if [[ "$line" =~ \</failure\> ]]; then
         # End of failure element — strip the closing tag from this line
@@ -311,15 +375,18 @@ generate_test_section() {
     return
   fi
 
-  # Handle missing file
+  # Handle missing file — distinct from "tests ran and failed" because no
+  # results file means the runner didn't execute (command not found, native
+  # module crash, OOM, etc.). Use a different status so the agent reading
+  # this knows to investigate harness/env, not test code.
   if [[ -z "$JUNIT_FILE" || ! -f "$JUNIT_FILE" ]]; then
-    printf '## Tests\n\n**Status:** ❌ Failed\n\nTest results file not found.\n'
+    printf '## Tests\n\n**Status:** ⚠️ No results\n\nTest results file not found. The test step exited with failure but produced no results — the test runner did not execute or crashed before reporting. Check the workflow step log for the actual error (e.g., command not found, missing dependency, runner crash).\n'
     return
   fi
 
-  # Handle empty file
+  # Handle empty file — runner started but produced nothing
   if [[ ! -s "$JUNIT_FILE" ]]; then
-    printf '## Tests\n\n**Status:** ❌ Failed\n\nTest results file empty.\n'
+    printf '## Tests\n\n**Status:** ⚠️ No results\n\nTest results file is empty. The test runner started but produced no output before exiting — likely a crash mid-run.\n'
     return
   fi
 
@@ -341,7 +408,7 @@ generate_test_section() {
 
   # If both parsers failed, report malformed XML
   if [[ "$parse_success" == false || -z "$parse_output" ]]; then
-    printf '## Tests\n\n**Status:** ❌ Failed\n\nFailed to parse test results (malformed XML).\n'
+    printf '## Tests\n\n**Status:** ⚠️ No results\n\nFailed to parse test results (malformed XML). The runner wrote output but it could not be read.\n'
     return
   fi
 
@@ -351,7 +418,7 @@ generate_test_section() {
 
   # If no summary found, report malformed
   if [[ -z "$summary_line" ]]; then
-    printf '## Tests\n\n**Status:** ❌ Failed\n\nFailed to parse test results (malformed XML).\n'
+    printf '## Tests\n\n**Status:** ⚠️ No results\n\nFailed to parse test results (malformed XML). The runner wrote output but it could not be read.\n'
     return
   fi
 

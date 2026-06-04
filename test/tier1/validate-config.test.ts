@@ -85,6 +85,48 @@ describe('validateConfig', () => {
     expect(result.repos[0]!.roadmapPath).toBe('./ROADMAP.md');
   });
 
+  it('preserves per-repo token when provided', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', token: 'ghp_abc' }],
+    });
+    const result = validateConfig(cfg);
+    expect(result.repos[0]!.token).toBe('ghp_abc');
+  });
+
+  it('omits per-repo token when not provided', () => {
+    const cfg = validConfig({ repos: [{ owner: 'org', name: 'repo' }] });
+    const result = validateConfig(cfg);
+    expect(result.repos[0]!.token).toBeUndefined();
+  });
+
+  it('throws FatalError when per-repo token is empty', () => {
+    expect(() =>
+      validateConfig(validConfig({ repos: [{ owner: 'org', name: 'repo', token: '' }] })),
+    ).toThrow(/token/i);
+  });
+
+  it('throws FatalError when per-repo token is not a string', () => {
+    expect(() =>
+      validateConfig(validConfig({ repos: [{ owner: 'org', name: 'repo', token: 42 }] })),
+    ).toThrow(/token/i);
+  });
+
+  it('preserves defaultGithubToken when provided', () => {
+    const cfg = validConfig({ defaultGithubToken: 'ghp_default' });
+    const result = validateConfig(cfg);
+    expect(result.defaultGithubToken).toBe('ghp_default');
+  });
+
+  it('omits defaultGithubToken when not provided', () => {
+    const cfg = validConfig({});
+    const result = validateConfig(cfg);
+    expect(result.defaultGithubToken).toBeUndefined();
+  });
+
+  it('throws FatalError when defaultGithubToken is empty', () => {
+    expect(() => validateConfig(validConfig({ defaultGithubToken: '' }))).toThrow(/defaultGithubToken/i);
+  });
+
   // --- Non-object config ---
 
   it('throws FatalError when config is null', () => {
