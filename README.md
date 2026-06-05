@@ -112,7 +112,7 @@ All values can be hardcoded or read from environment variables using `"ENV:VAR_N
       // Set this when each GitHub repo webhook is configured with a different secret.
       "webhookSecret": "ENV:WEBHOOK_SECRET_YOUR_REPO",
 
-      // Optional — path to a roadmap file in the repo; required for cron sessions
+      // Optional — path to a roadmap file in the repo (for future use)
       "roadmapPath": "ROADMAP.md"
     }
   ],
@@ -124,7 +124,9 @@ All values can be hardcoded or read from environment variables using `"ENV:VAR_N
       // Standard 5-field cron expression
       "schedule": "0 9 * * 1-5",
       // Must match an owner/name entry in repos[]
-      "repo": "your-org/your-repo"
+      "repo": "your-org/your-repo",
+      // Path to a file whose contents are used as the session prompt on each fire
+      "promptFile": "/etc/agent-router/prompts/your-repo.md"
     }
   ]
 }
@@ -138,30 +140,25 @@ All values can be hardcoded or read from environment variables using `"ENV:VAR_N
 
 Cron mode lets the daemon spawn agent sessions on a schedule — no incoming webhook required. On each cron fire, the daemon:
 
-1. Checks if an active session already exists for that repo. If yes, skips.
-2. Reads the `roadmapPath` file from disk.
-3. Finds the first unchecked task (`- [ ] ...`) in the file.
-4. Spawns a new session with a prompt derived from that task.
-5. The session runs to completion, commits work, and updates the roadmap.
-
-The next cron fire picks up the next unchecked task. If all tasks are checked, the cron fires silently and does nothing.
+1. Checks if an active session already exists for that repo. If yes, skips (webhook-triggered sessions take precedence; concurrent sessions on the same repo aren't allowed).
+2. Checks that the last session for this repo ended in a clean state (`completed`). If it ended `failed` or `abandoned`, skips and logs a warning — manual re-trigger required.
+3. Reads the `promptFile` from disk and uses its contents verbatim as the session prompt.
+4. Spawns a new session.
 
 **Setup:**
 
-1. Add a `roadmapPath` to the repo entry — this is the file the daemon reads for tasks.
-2. Add a `cron` entry in config pointing at that repo with a schedule.
-3. Format the roadmap with standard GitHub checkbox syntax: `- [ ] task description`.
+1. Create a prompt file with the standing instructions for the agent (e.g. `/etc/agent-router/prompts/myrepo.md`).
+2. Add a `cron` entry in config with `promptFile` pointing to it.
 
-**Example roadmap file (`ROADMAP.md`):**
-```markdown
-- [x] Set up CI pipeline
-- [ ] Add rate limiting to the API
-- [ ] Write integration tests for the auth flow
+**Example prompt file:**
+```
+Review the open pull requests in this repo. For any PR with a failing CI check,
+investigate the failure, push a fix, and leave a comment explaining what you changed.
 ```
 
-The daemon reads top-to-bottom and picks the first `- [ ]` line. The agent is expected to complete the work, check off the task, and commit. On the next fire, the daemon moves on.
+The same prompt is used on every cron fire. The prompt file can be updated at any time — the daemon reads it fresh on each fire.
 
-**Note:** Cron sessions skip if an active session already exists for the repo — webhook-triggered sessions take precedence, and concurrent sessions on the same repo aren't allowed.
+**Manual re-trigger:** If a session ends in a non-clean state (failed, abandoned, killed), the cron will not auto-restart. Fix whatever caused the failure, then start a session manually with `agent-router prompt --new` or via the web UI. Once a clean session completes, the cron resumes on its normal schedule.
 
 ## Day-to-day commands
 

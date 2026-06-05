@@ -27,10 +27,9 @@ import {
   composeCheckRunPrompt,
   composeReviewCommentPrompt,
   composeCommandTriggerPrompt,
-  composeCronTaskPrompt,
+  composeCronPrompt,
 } from './prompt.js';
 import type { CheckRunPayload, ReviewCommentPayload, IssueCommentPayload } from './prompt.js';
-import { parseRoadmap, findNextTask } from './roadmap.js';
 import { FatalError, EventError, WakeError } from './errors.js';
 
 export { FatalError, EventError, WakeError };
@@ -145,25 +144,15 @@ function createEventProcessor(deps: {
 function setupCronJobs(deps: {
   config: AgentRouterConfig;
   sessionMgr: SessionManager;
+  sessionFiles: ReturnType<typeof import('./session-files.js').createSessionFiles>;
   log: Logger;
 }): cron.ScheduledTask[] {
-  const { config, sessionMgr, log } = deps;
+  const { config, sessionMgr, sessionFiles, log } = deps;
   const tasks: cron.ScheduledTask[] = [];
 
   for (const cronEntry of config.cron) {
-    const repoConfig = config.repos.find(
-      (r) => `${r.owner}/${r.name}` === cronEntry.repo,
-    );
-    if (!repoConfig) {
-      log.warn('Cron entry references unknown repo, skipping', {
-        cron_name: cronEntry.name,
-        repo: cronEntry.repo,
-      });
-      continue;
-    }
-
     const task = cron.schedule(cronEntry.schedule, () => {
-      void handleCronFire(cronEntry, repoConfig, sessionMgr, log);
+      void handleCronFire(cronEntry, sessionMgr, sessionFiles, log);
     });
     tasks.push(task);
     log.info('Cron job registered', { name: cronEntry.name, schedule: cronEntry.schedule, repo: cronEntry.repo });
@@ -174,49 +163,50 @@ function setupCronJobs(deps: {
 
 async function handleCronFire(
   cronEntry: AgentRouterConfig['cron'][number],
-  repoConfig: AgentRouterConfig['repos'][number],
   sessionMgr: SessionManager,
+  sessionFiles: ReturnType<typeof import('./session-files.js').createSessionFiles>,
   log: Logger,
 ): Promise<void> {
   const cronLog = log.child({ cron_name: cronEntry.name, repo: cronEntry.repo });
 
-  // Check for active session collision
+  // Skip if a session for this repo is already running
   if (sessionMgr.hasActiveSessionForRepo(cronEntry.repo)) {
-    cronLog.warn('Active session already exists for repo, skipping cron trigger', {
-      repo: cronEntry.repo,
+    cronLog.warn('Active session already exists for repo, skipping cron trigger');
+    return;
+  }
+
+  // Check that the last terminal session ended cleanly — require manual re-trigger otherwise
+  const lastTerminal = sessionFiles
+    .listSessions()
+    .find((s) => s.repo === cronEntry.repo && s.status !== 'active');
+  if (lastTerminal !== undefined && lastTerminal.status !== 'completed') {
+    cronLog.warn('Last session did not end cleanly, skipping cron trigger — manual re-trigger required', {
+      last_session_id: lastTerminal.session_id,
+      last_status: lastTerminal.status,
+      last_termination_reason: lastTerminal.termination_reason ?? null,
     });
     return;
   }
 
-  const roadmapPath = repoConfig.roadmapPath;
-  if (!roadmapPath) {
-    cronLog.warn('No roadmapPath configured for repo, skipping cron trigger');
-    return;
-  }
-
-  // Read roadmap file
-  let content: string;
+  // Read the prompt file
+  let promptContent: string;
   try {
-    content = fs.readFileSync(roadmapPath, 'utf-8');
+    promptContent = fs.readFileSync(cronEntry.promptFile, 'utf-8');
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    cronLog.error('Failed to read roadmap file', { roadmapPath, error: msg });
+    cronLog.error('Failed to read prompt file', { promptFile: cronEntry.promptFile, error: msg });
     return;
   }
 
-  // Parse and find next task
-  const tasks = parseRoadmap(content);
-  const nextTask = findNextTask(tasks);
-  if (nextTask === null) {
-    cronLog.info('All roadmap tasks are complete');
+  if (promptContent.trim().length === 0) {
+    cronLog.warn('Prompt file is empty, skipping cron trigger', { promptFile: cronEntry.promptFile });
     return;
   }
 
-  // Compose prompt and create a new session
-  const prompt = composeCronTaskPrompt(nextTask.text, cronEntry.repo, roadmapPath);
+  const prompt = composeCronPrompt(promptContent, cronEntry.repo);
   try {
     const handle = await sessionMgr.createSession(prompt, cronEntry.repo);
-    cronLog.info('Cron session created', { session_id: handle.sessionId, task: nextTask.text });
+    cronLog.info('Cron session created', { session_id: handle.sessionId, promptFile: cronEntry.promptFile });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     cronLog.error('Failed to create cron session', { error: msg });
@@ -430,7 +420,7 @@ async function main(): Promise<void> {
   log.info('CLI IPC server listening', { socketPath });
 
   // ---- Task 19.3: Register cron jobs ----
-  const cronTasks = setupCronJobs({ config, sessionMgr, log });
+  const cronTasks = setupCronJobs({ config, sessionMgr, sessionFiles, log });
 
   // ---- Task 19.4: Install graceful shutdown handlers ----
   const state: DaemonState = {

@@ -36,6 +36,8 @@ export interface CronConfig {
   name: string;
   schedule: string;
   repo: string;
+  /** Path to a file whose contents are used verbatim as the session prompt on each cron fire. */
+  promptFile: string;
 }
 
 export function resolveEnvValues(raw: Record<string, unknown>): Record<string, unknown> {
@@ -228,7 +230,11 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     if (!repoKeys.has(repo)) {
       throw new FatalError(`Invalid "cron[${i}].repo": "${repo}" does not match any entry in "repos"`);
     }
-    cronEntries.push({ name: cronName, schedule, repo });
+    const promptFile = entry['promptFile'];
+    if (typeof promptFile !== 'string' || promptFile.length === 0) {
+      throw new FatalError(`Invalid "cron[${i}].promptFile": must be a non-empty string path`);
+    }
+    cronEntries.push({ name: cronName, schedule, repo, promptFile });
   }
 
   const result: AgentRouterConfig = {

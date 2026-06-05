@@ -53,11 +53,12 @@ describe('validateConfig', () => {
 
   it('accepts a config with cron entries matching repos', () => {
     const cfg = validConfig({
-      cron: [{ name: 'sweep', schedule: '0 */2 * * *', repo: 'myorg/myrepo' }],
+      cron: [{ name: 'sweep', schedule: '0 */2 * * *', repo: 'myorg/myrepo', promptFile: '/path/to/prompt.md' }],
     });
     const result = validateConfig(cfg);
     expect(result.cron).toHaveLength(1);
     expect(result.cron[0]!.name).toBe('sweep');
+    expect(result.cron[0]!.promptFile).toBe('/path/to/prompt.md');
   });
 
   it('accepts port at lower bound (1)', () => {
@@ -273,12 +274,12 @@ describe('validateConfig', () => {
   it('throws FatalError when a cron entry has empty name', () => {
     expect(() =>
       validateConfig(validConfig({
-        cron: [{ name: '', schedule: '* * * * *', repo: 'myorg/myrepo' }],
+        cron: [{ name: '', schedule: '* * * * *', repo: 'myorg/myrepo', promptFile: '/p.md' }],
       }))
     ).toThrow(FatalError);
     expect(() =>
       validateConfig(validConfig({
-        cron: [{ name: '', schedule: '* * * * *', repo: 'myorg/myrepo' }],
+        cron: [{ name: '', schedule: '* * * * *', repo: 'myorg/myrepo', promptFile: '/p.md' }],
       }))
     ).toThrow(/name/i);
   });
@@ -286,12 +287,12 @@ describe('validateConfig', () => {
   it('throws FatalError when a cron entry has invalid schedule', () => {
     expect(() =>
       validateConfig(validConfig({
-        cron: [{ name: 'job', schedule: 'not-a-cron', repo: 'myorg/myrepo' }],
+        cron: [{ name: 'job', schedule: 'not-a-cron', repo: 'myorg/myrepo', promptFile: '/p.md' }],
       }))
     ).toThrow(FatalError);
     expect(() =>
       validateConfig(validConfig({
-        cron: [{ name: 'job', schedule: 'not-a-cron', repo: 'myorg/myrepo' }],
+        cron: [{ name: 'job', schedule: 'not-a-cron', repo: 'myorg/myrepo', promptFile: '/p.md' }],
       }))
     ).toThrow(/schedule/i);
   });
@@ -299,12 +300,12 @@ describe('validateConfig', () => {
   it('throws FatalError when a cron entry repo does not match any repos entry', () => {
     expect(() =>
       validateConfig(validConfig({
-        cron: [{ name: 'job', schedule: '* * * * *', repo: 'unknown/repo' }],
+        cron: [{ name: 'job', schedule: '* * * * *', repo: 'unknown/repo', promptFile: '/p.md' }],
       }))
     ).toThrow(FatalError);
     expect(() =>
       validateConfig(validConfig({
-        cron: [{ name: 'job', schedule: '* * * * *', repo: 'unknown/repo' }],
+        cron: [{ name: 'job', schedule: '* * * * *', repo: 'unknown/repo', promptFile: '/p.md' }],
       }))
     ).toThrow(/does not match/i);
   });
@@ -312,7 +313,7 @@ describe('validateConfig', () => {
   it('throws FatalError when a cron entry has empty schedule', () => {
     expect(() =>
       validateConfig(validConfig({
-        cron: [{ name: 'job', schedule: '', repo: 'myorg/myrepo' }],
+        cron: [{ name: 'job', schedule: '', repo: 'myorg/myrepo', promptFile: '/p.md' }],
       }))
     ).toThrow(FatalError);
   });
@@ -320,7 +321,7 @@ describe('validateConfig', () => {
   it('throws FatalError when a cron entry has empty repo', () => {
     expect(() =>
       validateConfig(validConfig({
-        cron: [{ name: 'job', schedule: '* * * * *', repo: '' }],
+        cron: [{ name: 'job', schedule: '* * * * *', repo: '', promptFile: '/p.md' }],
       }))
     ).toThrow(FatalError);
   });
@@ -329,10 +330,31 @@ describe('validateConfig', () => {
     const expressions = ['* * * * *', '0 */2 * * *', '30 9 * * 1-5', '0 0 1 * *'];
     for (const schedule of expressions) {
       const cfg = validConfig({
-        cron: [{ name: 'job', schedule, repo: 'myorg/myrepo' }],
+        cron: [{ name: 'job', schedule, repo: 'myorg/myrepo', promptFile: '/p.md' }],
       });
       expect(() => validateConfig(cfg)).not.toThrow();
     }
+  });
+
+  it('throws FatalError when a cron entry is missing promptFile', () => {
+    expect(() =>
+      validateConfig(validConfig({
+        cron: [{ name: 'job', schedule: '* * * * *', repo: 'myorg/myrepo' }],
+      }))
+    ).toThrow(FatalError);
+    expect(() =>
+      validateConfig(validConfig({
+        cron: [{ name: 'job', schedule: '* * * * *', repo: 'myorg/myrepo' }],
+      }))
+    ).toThrow(/promptFile/i);
+  });
+
+  it('throws FatalError when a cron entry has an empty promptFile', () => {
+    expect(() =>
+      validateConfig(validConfig({
+        cron: [{ name: 'job', schedule: '* * * * *', repo: 'myorg/myrepo', promptFile: '' }],
+      }))
+    ).toThrow(FatalError);
   });
 
   // --- sessionTimeout validation ---
