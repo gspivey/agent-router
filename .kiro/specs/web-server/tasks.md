@@ -76,8 +76,8 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
 - [x] 4. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Authentication middleware: web-auth.ts
-  - [ ] 5.1 Create web-auth.ts with createAuthMiddleware and createWriteGuard
+- [x] 5. Authentication middleware: web-auth.ts
+  - [x] 5.1 Create web-auth.ts with createAuthMiddleware and createWriteGuard
     - Implement `createAuthMiddleware(config: AuthConfig)` — Hono middleware factory
     - Auth resolution order: (1) trusted-proxy proof → identity extraction → validate email; (2) bearer token → timing-safe compare; (3) reject 401
     - Handle edge case: valid proof + malformed email → 401 with code `"invalid_identity"`
@@ -88,7 +88,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Case-insensitive email matching for allowlist
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.2, 3.3, 3.7, 3.8, 13.1, 13.2, 13.3_
 
-  - [ ] 5.2 Write property tests for auth middleware (Properties 1–4)
+  - [x] 5.2 Write property tests for auth middleware (Properties 1–4)
     - **Property 1: Bearer Authentication Correctness**
     - **Property 2: Authentication Rejection**
     - **Property 3: Proof-Before-Trust (Proxy Auth)**
