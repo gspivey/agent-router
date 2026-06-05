@@ -201,7 +201,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 16.1, 16.2, 16.3, 16.4_
 
 - [ ] 10. Static Web UI
-  - [ ] 10.1a Create src/ui/logic.ts — pure ESM browser+Node importable logic
+  - [x] 10.1a Create src/ui/logic.ts — pure ESM browser+Node importable logic
     - SSE event merge/dedup by `id` field (prevents duplicate display on reconnect)
     - Last-Event-ID resume logic (track highest seen ID, supply on reconnect)
     - Exponential backoff schedule computation (1s initial, double each attempt, 30s max cap)
@@ -211,7 +211,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - All functions are pure, no DOM or fetch dependencies
     - _Requirements: 7.6, 7.9, 14.2, 14.3, 14.5_
 
-  - [ ]* 10.1a-test Write Tier 1 property test for UI pure logic
+  - [x]* 10.1a-test Write Tier 1 property test for UI pure logic
     - Test backoff schedule: verify capped at 30s, always ≥1s, monotonically non-decreasing
     - Test dedup: applying same event twice yields no duplicate entries
     - Test hash-route parser: arbitrary strings produce valid parse results
