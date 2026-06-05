@@ -32,8 +32,8 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier1/web-server/config-validation.test.ts`
     - _Requirements: 1.3, 3.4, 3.5, 13.4_
 
-- [ ] 2. Core modification: Per-session turn queue in session-mgr.ts
-  - [ ] 2.1 Implement TurnQueue and integrate into SessionHandle
+- [x] 2. Core modification: Per-session turn queue in session-mgr.ts
+  - [x] 2.1 Implement TurnQueue and integrate into SessionHandle
     - Create `createTurnQueue(acp, sessionFiles, sessionId, log)` function
     - `enqueue()` returns a Promise that resolves when `sendPrompt` is CALLED (prompt dispatched to ACP), NOT when the turn completes. The web inject route calls `.catch()` on the returned promise (fire-and-forget) and returns 202 immediately. Promise rejection triggers `prompt_injection_failed` logging.
     - Add `turnQueue: TurnQueue` to `SessionHandle` interface
@@ -44,14 +44,14 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Add `drain()` to turn queue for shutdown support
     - _Requirements: 8.2, 8.3, 8.4, 8.5_
 
-  - [ ] 2.2 Write property test for turn queue serialization (Property 24)
+  - [x] 2.2 Write property test for turn queue serialization (Property 24)
     - **Property 24: Turn Queue Serialization**
     - Verify at most one `sendPrompt` is in-flight at a time with concurrent enqueues
     - Verify FIFO ordering is preserved
     - Test file: `test/tier1/web-server/turn-queue.test.ts`
     - **Validates: Requirements 8.2, 8.4**
 
-  - [ ] 2.3 Extend terminateSession signature with reason and actor parameters
+  - [x] 2.3 Extend terminateSession signature with reason and actor parameters
     - Change `terminateSession(sessionId)` to `terminateSession(sessionId, reason?, actor?)`
     - Default `reason` to `'terminated_cli'`, default `actor` to `'local'`
     - Use the provided `reason` when writing `termination_reason` to meta.json
