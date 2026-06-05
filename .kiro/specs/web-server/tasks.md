@@ -97,8 +97,8 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier1/web-server/web-auth.test.ts`
     - **Validates: Requirements 2.1, 2.2, 2.3, 3.2, 3.3, 13.1, 13.2**
 
-- [ ] 6. SSE broker: sse-broker.ts
-  - [ ] 6.1 Implement createSSEBroker with two-phase subscribe and fan-out
+- [x] 6. SSE broker: sse-broker.ts
+  - [x] 6.1 Implement createSSEBroker with two-phase subscribe and fan-out
     - Create `createSSEBroker(deps)` function
     - Export pure helper functions for testability: `splitCompleteLines(chunk, residual)` → returns `{ lines: string[], residual: string }`, `buildLineOffsetIndex(lines)` → returns offset array, `seekToLine(offsets, lineNumber)` → returns byte offset
     - Implement two-phase subscribe: Phase 1 (backlog replay from byte 0 or Last-Event-ID offset) → Phase 2 (live tail via shared poll timer)
@@ -114,7 +114,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - `shutdown()` method to clear all timers and close all streams
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.8, 6.9, 6.10_
 
-  - [ ] 6.2 Write property tests for SSE broker pure logic (Properties 11, 12)
+  - [x] 6.2 Write property tests for SSE broker pure logic (Properties 11, 12)
     - **Property 11: SSE Event IDs Are Monotonic**
     - **Property 12: SSE Last-Event-ID Resumption**
     - Test `splitCompleteLines`, `buildLineOffsetIndex`, and `seekToLine` as pure functions
