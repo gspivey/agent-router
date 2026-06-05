@@ -122,8 +122,8 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier1/web-server/sse-broker.test.ts`
     - **Validates: Requirements 6.2, 6.10**
 
-- [ ] 7. Route handlers: web-routes.ts
-  - [ ] 7.1 Create web-routes.ts with session listing and detail endpoints
+- [x] 7. Route handlers: web-routes.ts
+  - [x] 7.1 Create web-routes.ts with session listing and detail endpoints
     - Implement `GET /sessions` — filter by `status`, `since`, `limit` (default 50, max 500); return session summaries sorted by `created_at` descending
     - Implement `GET /sessions/:id` — return `{ meta, entries, skipped_lines }`; tail `lines` param (default 200, max 2000)
     - Validate query parameters: 400 for invalid values
@@ -131,7 +131,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - UUID validation is handled by middleware (task 9.1) — do NOT re-validate in handlers
     - _Requirements: 4.1–4.7, 5.1–5.7_
 
-  - [ ]* 7.2 Write property tests for session listing and detail (Properties 5, 7, 8, 9, 10)
+  - [x]* 7.2 Write property tests for session listing and detail (Properties 5, 7, 8, 9, 10)
     - **Property 5: UUID Path Parameter Validation**
     - **Property 7: Session Listing Filter Invariants**
     - **Property 8: Session Summary Completeness**
@@ -141,7 +141,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier1/web-server/session-listing.test.ts` and `test/tier1/web-server/session-detail.test.ts`
     - **Validates: Requirements 4.1–4.5, 5.2, 5.4, 5.6**
 
-  - [ ] 7.3 Add SSE stream endpoint to web-routes.ts
+  - [x] 7.3 Add SSE stream endpoint to web-routes.ts
     - Implement `GET /sessions/:id/stream` — delegate to SSE broker
     - Validate session existence before opening SSE connection
     - Return appropriate SSE content-type headers
@@ -149,7 +149,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - UUID validation is handled by middleware — do NOT re-validate in handler
     - _Requirements: 6.1, 6.6, 6.7, 6.10_
 
-  - [ ] 7.4a Add inject endpoint: POST /sessions/:id/inject
+  - [x] 7.4a Add inject endpoint: POST /sessions/:id/inject
     - Validate prompt (1–10000 chars trimmed, non-whitespace-only)
     - Fire-and-forget enqueue to turn queue, return 202 with `{ "accepted": true }`
     - Check session exists (404), active on disk (409 `session_not_active`), live handle in registry (409 `session_not_resident`)
@@ -158,7 +158,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - UUID validation is handled by middleware — do NOT re-validate in handler
     - _Requirements: 8.1–8.11, 12.1–12.5, 15.1_
 
-  - [ ] 7.4b Add interrupt endpoint: POST /sessions/:id/interrupt
+  - [x] 7.4b Add interrupt endpoint: POST /sessions/:id/interrupt
     - Call `acp.cancel()`, append `web_interrupt` stream entry with actor
     - Return 200 with `{ "ok": true }`
     - Idle session: cancel() is a no-op, still returns 200
@@ -168,7 +168,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - UUID validation is handled by middleware — do NOT re-validate in handler
     - _Requirements: 9.1–9.10, 12.1–12.5, 15.1_
 
-  - [ ] 7.4c Add kill endpoint: POST /sessions/:id/kill
+  - [x] 7.4c Add kill endpoint: POST /sessions/:id/kill
     - Delegate to `terminateSession(id, 'terminated_web', actor)` with 10s `Promise.race`
     - Return 200 or 502 `"termination_timeout"` on timeout
     - Residual state on 502: `terminateSession` continues running, writes terminal meta within ~5s (SIGKILL fallback)
@@ -178,7 +178,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - UUID validation is handled by middleware — do NOT re-validate in handler
     - _Requirements: 10.1–10.11, 12.1–12.5, 15.1_
 
-  - [ ]* 7.5 Write property tests for request hygiene (Properties 15, 22, 23)
+  - [x]* 7.5 Write property tests for request hygiene (Properties 15, 22, 23)
     - **Property 15: Invalid Prompt Rejection**
     - **Property 22: Request Body Size Enforcement**
     - **Property 23: Content-Type Enforcement**
