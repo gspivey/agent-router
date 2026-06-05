@@ -11,6 +11,7 @@ import type { AgentRouterConfig } from './config.js';
 import { createAuthMiddleware, createWriteGuard } from './web-auth.js';
 import type { AuthConfig, AuthResult } from './web-auth.js';
 import { createWebRoutes } from './web-routes.js';
+import { renderWebUI } from './web-ui.js';
 import { FatalError } from './errors.js';
 import * as fs from 'node:fs';
 
@@ -52,8 +53,20 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   }
 
   // --- Unauthenticated routes (UI) ---
-  app.get('/', (c) => c.text('agent-router control plane'));
-  app.get('/ui', (c) => c.text('agent-router control plane'));
+  app.get('/', (c) => {
+    const hasProxyProof = config.trustedProxy
+      ? c.req.header(config.trustedProxy.proofHeader) !== undefined
+      : false;
+    const embedToken = !config.bindPublic && !hasProxyProof;
+    return c.html(renderWebUI({ embedToken, token: tokenStore.read() }));
+  });
+  app.get('/ui', (c) => {
+    const hasProxyProof = config.trustedProxy
+      ? c.req.header(config.trustedProxy.proofHeader) !== undefined
+      : false;
+    const embedToken = !config.bindPublic && !hasProxyProof;
+    return c.html(renderWebUI({ embedToken, token: tokenStore.read() }));
+  });
 
   // --- Body limit for POST (applied before other middleware) ---
   app.post(
