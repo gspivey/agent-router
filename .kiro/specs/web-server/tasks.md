@@ -235,7 +235,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - PR deep links to GitHub in list entries
     - _Requirements: 7.4, 7.10, 7.11, 14.5_
 
-  - [ ] 10.1d Implement detail view + SSE client + write controls + mobile CSS
+  - [x] 10.1d Implement detail view + SSE client + write controls + mobile CSS
     - Session detail: metadata, PR deep links to GitHub, live SSE stream
     - SSE reconnection with exponential backoff (1s → 30s max) using `Last-Event-ID`
     - Reconnect on browser `visibilitychange` (regaining focus)
