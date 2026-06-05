@@ -189,8 +189,8 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
 - [x] 8. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Web server factory and request hygiene: web-server.ts
-  - [ ] 9.1 Create web-server.ts with createWebApp and startWebServer
+- [x] 9. Web server factory and request hygiene: web-server.ts
+  - [x] 9.1 Create web-server.ts with createWebApp and startWebServer
     - Implement `createWebApp(deps)` — Hono app factory that mounts auth middleware, write guard, body limit (64KB), content-type validation, UUID validation, and routes
     - Middleware chain order: BodyLimit → ContentType (POST only) → UUID validation → Auth → WriteGuard → Handler
     - UUID `:id` validation is ONLY in this middleware (regex: `/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i`) — handlers do NOT re-validate
