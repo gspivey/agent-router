@@ -22,14 +22,15 @@ export interface SessionMeta {
     | 'timeout_max_lifetime'
     | 'completed'
     | 'failed'
-    | 'terminated'
+    | 'terminated_cli'
+    | 'terminated_web'
     | 'shutdown'
     | 'merged'
     | 'closed_without_merge';
   prs: Array<{ repo: string; pr_number: number; registered_at: number }>;
 }
 
-export type PromptSource = 'cli' | 'webhook' | 'cron' | 'mcp';
+export type PromptSource = 'cli' | 'webhook' | 'cron' | 'mcp' | 'web';
 
 export interface PromptEntry {
   ts: string;
@@ -227,7 +228,12 @@ export function createSessionFiles(rootDir: string, log?: Logger): SessionFiles 
     readMeta(sessionId: string): SessionMeta {
       const paths = sessionPaths(rootDir, sessionId);
       const raw = fs.readFileSync(paths.meta, 'utf-8');
-      return JSON.parse(raw) as SessionMeta;
+      const meta = JSON.parse(raw) as SessionMeta;
+      // Normalize legacy 'terminated' value to 'terminated_cli'
+      if ((meta.termination_reason as string) === 'terminated') {
+        meta.termination_reason = 'terminated_cli';
+      }
+      return meta;
     },
 
     listSessions(): SessionMeta[] {
@@ -245,7 +251,12 @@ export function createSessionFiles(rootDir: string, log?: Logger): SessionFiles 
         const metaPath = path.join(sessionsDir, entry.name, 'meta.json');
         try {
           const raw = fs.readFileSync(metaPath, 'utf-8');
-          metas.push(JSON.parse(raw) as SessionMeta);
+          const meta = JSON.parse(raw) as SessionMeta;
+          // Normalize legacy 'terminated' value to 'terminated_cli'
+          if ((meta.termination_reason as string) === 'terminated') {
+            meta.termination_reason = 'terminated_cli';
+          }
+          metas.push(meta);
         } catch {
           // Skip directories without valid meta.json
         }

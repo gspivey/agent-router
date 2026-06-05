@@ -6,15 +6,15 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
 
 ## Tasks
 
-- [ ] 1. Foundation: Type extensions and config changes
-  - [ ] 1.1 Extend PromptSource and TerminationReason unions in session-files.ts
+- [x] 1. Foundation: Type extensions and config changes
+  - [x] 1.1 Extend PromptSource and TerminationReason unions in session-files.ts
     - Add `'web'` to the `PromptSource` union type
     - Replace `'terminated'` with `'terminated_cli'` and add `'terminated_web'` to the `termination_reason` field in `SessionMeta`
     - Add read-time normalization: if meta.json contains `"terminated"`, treat as `"terminated_cli"`
     - Update all exhaustiveness checks across the codebase that switch on these unions
     - _Requirements: 8.12, 10.10, 10.11_
 
-  - [ ] 1.2 Add new config keys and validation to config.ts
+  - [x] 1.2 Add new config keys and validation to config.ts
     - Add `controlPort` (integer 1–65535, default 3100, must not equal `port`)
     - Add `bindPublic` (boolean, default false)
     - Add `shutdownDrainSeconds` (positive integer, default 60)
@@ -25,7 +25,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - FatalError if `trustedProxy` present but missing any of the three required fields
     - _Requirements: 1.1, 1.2, 1.3, 3.1, 3.4, 3.5, 3.6, 13.4_
 
-  - [ ]* 1.3 Write property tests for config validation
+  - [x]* 1.3 Write property tests for config validation
     - Test port conflict detection (`controlPort` === `port` → FatalError)
     - Test `trustedProxy` incomplete config → FatalError
     - Test `allowedEmails` validation (non-empty strings, ≤254 chars)

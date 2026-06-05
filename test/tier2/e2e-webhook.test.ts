@@ -106,6 +106,9 @@ describe('E2E: webhook → wake → session loop', () => {
     sessionTimeout: { inactivityMinutes: 5, maxLifetimeMinutes: 120, gracePeriodAfterMergeSeconds: 60 },
     repos: [{ owner: 'testowner', name: 'testrepo' }],
     cron: [],
+    controlPort: 3100,
+    bindPublic: false,
+    shutdownDrainSeconds: 60,
   };
 
   beforeEach(async () => {

@@ -188,7 +188,7 @@ describe('session termination (Req 20.6, 21.5)', () => {
       .find((e) => e['type'] === 'session_ended');
 
     expect(endEntry).toBeDefined();
-    expect(endEntry!['reason']).toBe('terminated');
+    expect(endEntry!['reason']).toBe('terminated_cli');
   }, 15_000);
 
   it('throws for unknown session', async () => {

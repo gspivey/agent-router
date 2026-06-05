@@ -763,7 +763,7 @@ export function createSessionManager(deps: {
         sessionFiles.updateMeta(sessionId, {
           status: 'abandoned',
           completed_at: Math.floor(Date.now() / 1000),
-          termination_reason: 'terminated',
+          termination_reason: 'terminated_cli',
         });
       } catch {
         // Meta may already be in terminal state if subprocess exited concurrently
@@ -775,7 +775,7 @@ export function createSessionManager(deps: {
           ts: new Date().toISOString(),
           source: 'router',
           type: 'session_ended',
-          reason: 'terminated',
+          reason: 'terminated_cli',
         });
       } catch {
         // Best effort
