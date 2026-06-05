@@ -228,7 +228,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Single static HTML with vanilla JavaScript (no build system)
     - _Requirements: 7.1, 7.2, 7.3, 7.6, 7.8_
 
-  - [ ] 10.1c Implement list view + pagination + summary line + status badges
+  - [x] 10.1c Implement list view + pagination + summary line + status badges
     - Session list with pagination (20 per page), status badges (green/gray/yellow/red)
     - "Waiting for" summary line in session list derived from last stream entry type
     - Display authenticated identity in header banner
