@@ -27,6 +27,17 @@ function makeLogger(): Logger {
   };
 }
 
+function makeSpyLogger(): Logger {
+  const spy: Logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: () => spy,
+  };
+  return spy;
+}
+
 function makeDb(overrides: Partial<Database> = {}): Database {
   return {
     insertEvent: vi.fn(() => 1),
@@ -49,6 +60,7 @@ const WEBHOOK_SECRET = 'test-secret-for-hmac';
 function makeApp(overrides?: {
   db?: Partial<Database>;
   enqueue?: (event: QueuedEvent) => void;
+  log?: Logger;
 }) {
   const db = makeDb(overrides?.db);
   const enqueue = overrides?.enqueue ?? vi.fn();
@@ -56,7 +68,7 @@ function makeApp(overrides?: {
     webhookSecret: WEBHOOK_SECRET,
     db,
     enqueue,
-    log: makeLogger(),
+    log: overrides?.log ?? makeLogger(),
   });
   return { app, db, enqueue };
 }
@@ -407,5 +419,84 @@ describe('POST /webhook with per-repo webhook secret', () => {
     // HMAC passes (global secret used) but JSON parse fails → 400
     expect(res.status).toBe(400);
     expect(db.insertEvent).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /webhook — signature verification logging
+// ---------------------------------------------------------------------------
+
+describe('POST /webhook signature verification logging', () => {
+  const GLOBAL_SECRET = 'global-secret';
+  const REPO_SECRET = 'per-repo-secret';
+
+  function makeLoggingApp(log: Logger) {
+    const db = makeDb();
+    const enqueue = vi.fn();
+    const app = createApp({
+      webhookSecret: GLOBAL_SECRET,
+      repos: [
+        { owner: 'org', name: 'alpha', webhookSecret: REPO_SECRET },
+        { owner: 'org', name: 'beta' },
+      ],
+      db,
+      enqueue,
+      log,
+    });
+    return { app };
+  }
+
+  it('warn log includes repo and per_repo secret_source on 401 for repo with per-repo secret', async () => {
+    const log = makeSpyLogger();
+    const { app } = makeLoggingApp(log);
+    const body = JSON.stringify(webhookPayload('org/alpha', 1));
+    const sig = makeSignature(GLOBAL_SECRET, body); // wrong — should use REPO_SECRET
+
+    await app.request('/webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-GitHub-Event': 'check_run', 'X-Hub-Signature-256': sig },
+      body,
+    });
+
+    expect(log.warn).toHaveBeenCalledWith('Invalid webhook signature', {
+      repo: 'org/alpha',
+      secret_source: 'per_repo',
+    });
+  });
+
+  it('warn log includes repo and global secret_source on 401 for repo without per-repo secret', async () => {
+    const log = makeSpyLogger();
+    const { app } = makeLoggingApp(log);
+    const body = JSON.stringify(webhookPayload('org/beta', 2));
+    const sig = makeSignature('wrong-secret', body);
+
+    await app.request('/webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-GitHub-Event': 'check_run', 'X-Hub-Signature-256': sig },
+      body,
+    });
+
+    expect(log.warn).toHaveBeenCalledWith('Invalid webhook signature', {
+      repo: 'org/beta',
+      secret_source: 'global',
+    });
+  });
+
+  it('debug log includes repo and secret_source on successful verification', async () => {
+    const log = makeSpyLogger();
+    const { app } = makeLoggingApp(log);
+    const body = JSON.stringify(webhookPayload('org/alpha', 1));
+    const sig = makeSignature(REPO_SECRET, body);
+
+    await app.request('/webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-GitHub-Event': 'check_run', 'X-Hub-Signature-256': sig },
+      body,
+    });
+
+    expect(log.debug).toHaveBeenCalledWith('Webhook signature verified', {
+      repo: 'org/alpha',
+      secret_source: 'per_repo',
+    });
   });
 });
