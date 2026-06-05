@@ -1,0 +1,102 @@
+<mxfile>
+  <diagram name="Agent Router Architecture" id="arch">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- INPUTS -->
+        <mxCell id="inputs_label" value="INPUTS" style="text;html=1;fontSize=14;fontStyle=1;fillColor=none;strokeColor=none;fontColor=#888888;" vertex="1" parent="1">
+          <mxGeometry x="80" y="30" width="120" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="gh" value="🐙 GitHub Webhooks&#xa;CI failures, PR reviews, /agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6366f1;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="cli" value="⌨️ CLI / Terminal&#xa;prompt, ls, tail, terminate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#22c55e;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="150" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="editor" value="🖥️ Editor (ACP)&#xa;Cline, Zed, JetBrains" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3b82f6;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="220" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="web" value="🌐 Web Dashboard&#xa;Mobile chat UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f97316;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="290" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="cron" value="⏰ Cron Scheduler&#xa;Roadmap every 6h" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6b7280;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="360" width="200" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- ROUTER -->
+        <mxCell id="router_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e1e2e;strokeColor=#444;strokeWidth=2;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="60" width="400" height="370" as="geometry"/>
+        </mxCell>
+        <mxCell id="router_label" value="⚡ AGENT ROUTER" style="text;html=1;fontSize=18;fontStyle=1;fillColor=none;strokeColor=none;fontColor=#e2e8f0;" vertex="1" parent="1">
+          <mxGeometry x="440" y="70" width="240" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="wake" value="Wake Policy&#xa;filter → PR → session → rate limit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#374151;fontColor=#e2e8f0;strokeColor=#555;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="390" y="110" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="registry" value="Session Registry&#xa;session → PRs, agent, queue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#374151;fontColor=#e2e8f0;strokeColor=#555;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="390" y="180" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ipc" value="IPC / ACP / HTTP&#xa;Unix socket, stdio, REST+SSE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#374151;fontColor=#e2e8f0;strokeColor=#555;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="570" y="110" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="files" value="Session Files&#xa;stream.log · prompts.log · meta.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#374151;fontColor=#e2e8f0;strokeColor=#555;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="570" y="180" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="db" value="SQLite&#xa;events · sessions · WAL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#374151;fontColor=#e2e8f0;strokeColor=#555;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="480" y="250" width="160" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="mcp" value="MCP Server&#xa;register_pr · complete_session" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#374151;fontColor=#e2e8f0;strokeColor=#555;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="480" y="310" width="160" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="tunnel" value="☁️ Cloudflare Tunnel&#xa;agentrouter.gspivey.com → localhost:3000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f59e0b;fontColor=#1e1e2e;strokeColor=none;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="375" width="320" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- AGENTS -->
+        <mxCell id="agents_label" value="AGENT BACKENDS" style="text;html=1;fontSize=14;fontStyle=1;fillColor=none;strokeColor=none;fontColor=#888888;" vertex="1" parent="1">
+          <mxGeometry x="880" y="30" width="180" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="kiro" value="🤖 Kiro CLI&#xa;ACP over stdio&#xa;Primary coding agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0ea5e9;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="880" y="80" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="hermes" value="🧠 Hermes Agent&#xa;ACP over stdio&#xa;General-purpose agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#14b8a6;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="880" y="160" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="future" value="🔮 Future Agents&#xa;Claude Code, custom, etc." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#374151;fontColor=#9ca3af;strokeColor=#555;strokeDasharray=8;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="880" y="240" width="200" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- OUTPUTS -->
+        <mxCell id="outputs_label" value="OUTPUTS" style="text;html=1;fontSize=14;fontStyle=1;fillColor=none;strokeColor=none;fontColor=#888888;" vertex="1" parent="1">
+          <mxGeometry x="880" y="320" width="120" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="code" value="📝 Code Changes&#xa;git worktree per feature" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a855f7;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="880" y="355" width="200" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="stream" value="📡 Live Stream&#xa;tail -f · SSE · ACP notifications" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ec4899;fontColor=#ffffff;strokeColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="355" width="200" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- EDGES: inputs → router -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6366f1;strokeWidth=2;" edge="1" source="gh" target="router_box" parent="1"/>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#22c55e;strokeWidth=2;" edge="1" source="cli" target="router_box" parent="1"/>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#3b82f6;strokeWidth=2;" edge="1" source="editor" target="router_box" parent="1"/>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#f97316;strokeWidth=2;" edge="1" source="web" target="router_box" parent="1"/>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6b7280;strokeWidth=2;" edge="1" source="cron" target="router_box" parent="1"/>
+
+        <!-- EDGES: router → agents -->
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0ea5e9;strokeWidth=2;" edge="1" source="router_box" target="kiro" parent="1"/>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#14b8a6;strokeWidth=2;" edge="1" source="router_box" target="hermes" parent="1"/>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#555;strokeWidth=1;dashed=1;" edge="1" source="router_box" target="future" parent="1"/>
+
+        <!-- EDGES: agents → outputs -->
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#a855f7;strokeWidth=2;" edge="1" source="kiro" target="code" parent="1"/>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#ec4899;strokeWidth=2;" edge="1" source="router_box" target="stream" parent="1"/>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
