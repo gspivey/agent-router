@@ -186,7 +186,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier1/web-server/request-hygiene.test.ts`
     - **Validates: Requirements 8.7, 8.8, 16.1, 16.2**
 
-- [ ] 8. Checkpoint - Ensure all tests pass
+- [x] 8. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 9. Web server factory and request hygiene: web-server.ts
