@@ -30,6 +30,9 @@ import {
   composeCronPrompt,
 } from './prompt.js';
 import type { CheckRunPayload, ReviewCommentPayload, IssueCommentPayload } from './prompt.js';
+import { createWebApp, startWebServer } from './web-server.js';
+import { createSSEBroker } from './sse-broker.js';
+import type { SSEBroker } from './sse-broker.js';
 import { FatalError, EventError, WakeError } from './errors.js';
 
 export { FatalError, EventError, WakeError };
@@ -40,6 +43,12 @@ export { FatalError, EventError, WakeError };
 
 const rootDir = process.env['AGENT_ROUTER_HOME'] ?? path.join(process.env['HOME'] ?? '.', '.agent-router');
 const configPath = path.join(rootDir, 'config.json');
+
+// ---------------------------------------------------------------------------
+// CLI flags
+// ---------------------------------------------------------------------------
+
+const cliBindPublic = process.argv.includes('--bind-public');
 
 // ---------------------------------------------------------------------------
 // Compose prompt from event payload based on event type
@@ -219,6 +228,8 @@ async function handleCronFire(
 
 interface DaemonState {
   httpServer: ServerType | null;
+  webServer: ServerType | null;
+  sseBroker: SSEBroker | null;
   cliServer: CliServer | null;
   globalQueue: EventQueue | null;
   sessionMgr: SessionManager | null;
@@ -226,6 +237,7 @@ interface DaemonState {
   log: Logger;
   cronTasks: cron.ScheduledTask[];
   shuttingDown: boolean;
+  shuttingDownRef: { value: boolean };
 }
 
 function installShutdownHandlers(state: DaemonState): void {
@@ -250,6 +262,7 @@ function installShutdownHandlers(state: DaemonState): void {
 
     shutdownInProgress = true;
     state.shuttingDown = true;
+    state.shuttingDownRef.value = true;
     state.log.info('Shutdown initiated', { signal });
 
     try {
@@ -287,7 +300,20 @@ function installShutdownHandlers(state: DaemonState): void {
         state.log.info('Session manager shut down');
       }
 
-      // 6. WAL checkpoint and close database
+      // 6. Close web server listener and SSE broker
+      if (state.sseBroker) {
+        state.sseBroker.shutdown();
+        state.log.info('SSE broker shut down');
+      }
+      if (state.webServer) {
+        await new Promise<void>((resolve) => {
+          state.webServer!.close(() => resolve());
+          setTimeout(() => resolve(), 5000);
+        });
+        state.log.info('Web server stopped');
+      }
+
+      // 7. WAL checkpoint and close database
       if (state.db) {
         await state.db.shutdown();
         state.log.info('Database shut down');
@@ -419,12 +445,37 @@ async function main(): Promise<void> {
   await cliServer.start();
   log.info('CLI IPC server listening', { socketPath });
 
+  // ---- Web control plane startup ----
+
+  // CLI --bind-public flag takes precedence over config.bindPublic
+  const effectiveConfig = cliBindPublic
+    ? { ...config, bindPublic: true }
+    : config;
+
+  const sseBroker = createSSEBroker({ sessionFiles, rootDir, log });
+
+  const shuttingDownRef = { value: false };
+  const webApp = createWebApp({
+    sessionMgr,
+    sessionFiles,
+    sseBroker,
+    tokenStore,
+    log,
+    rootDir,
+    config: effectiveConfig,
+    shuttingDown: () => shuttingDownRef.value,
+  });
+
+  const webServer = startWebServer(webApp, effectiveConfig, log);
+
   // ---- Task 19.3: Register cron jobs ----
   const cronTasks = setupCronJobs({ config, sessionMgr, sessionFiles, log });
 
   // ---- Task 19.4: Install graceful shutdown handlers ----
   const state: DaemonState = {
     httpServer,
+    webServer,
+    sseBroker,
     cliServer,
     globalQueue,
     sessionMgr,
@@ -432,6 +483,7 @@ async function main(): Promise<void> {
     log,
     cronTasks,
     shuttingDown: false,
+    shuttingDownRef,
   };
   installShutdownHandlers(state);
 

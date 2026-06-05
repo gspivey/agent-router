@@ -84,6 +84,7 @@ export interface TestDaemon {
   stop(): Promise<void>;
   socketPath(): string;
   webhookUrl(): string;
+  controlUrl(): string;
   rootDir(): string;
   getDb(): BetterSqlite3Database;
 }
