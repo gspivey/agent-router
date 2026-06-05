@@ -15,6 +15,7 @@ function fakeAcpClient(): ACPClient {
     newSessionWithPrompt: async () => 'fake',
     loadSession: async () => {},
     sendPrompt: async () => {},
+    cancel: () => {},
     notifications: (async function* () {})(),
     sessionEnded: Promise.resolve(),
     close: async () => {},

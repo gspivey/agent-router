@@ -59,15 +59,15 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Update the CLI server call site to pass `'terminated_cli'`
     - _Requirements: 10.2, 10.3, 10.11_
 
-- [ ] 3. Core modification: ACP cancel() method
-  - [ ] 3.1 Add cancel() method to ACPClient interface in acp.ts
+- [x] 3. Core modification: ACP cancel() method
+  - [x] 3.1 Add cancel() method to ACPClient interface in acp.ts
     - Add `cancel(): void` to the `ACPClient` interface
     - Implement in `createACPClientFromStreams`: write `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"<acpSessionId>"}}` (notification — no `id` field) to stdin
     - Implement in `spawnACPClient` (inherits from createACPClientFromStreams)
     - Non-blocking `stream.write()` — fire-and-forget, no response expected
     - _Requirements: 9.1, 9.9_
 
-  - [ ]* 3.2 Write unit test for cancel() method
+  - [x]* 3.2 Write unit test for cancel() method
     - Verify cancel writes correct JSON-RPC notification to stdin
     - Verify cancel is a no-op when session is idle (does not throw)
     - Test file: `test/tier1/web-server/acp-cancel.test.ts`

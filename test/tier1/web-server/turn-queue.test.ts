@@ -24,6 +24,7 @@ function createFakeACP(options?: { delay?: number; failAt?: number }): ACPClient
       }
       calls.push(prompt);
     },
+    cancel: () => {},
     notifications: { [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }) },
     sessionEnded: new Promise(() => {}),
     close: () => Promise.resolve(),
