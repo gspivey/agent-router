@@ -9,6 +9,8 @@ import type { SessionTimeoutConfig } from './config.js';
 import { isCommentCommand, extractCommentIds } from './comment-tracker.js';
 import type { GitHubClient } from './github.js';
 import type { VerifySessionFn, VerifyResult } from './verify-session.js';
+import type { TurnQueue } from './turn-queue.js';
+import { createTurnQueue } from './turn-queue.js';
 
 export interface SessionHandle {
   sessionId: string;
@@ -16,6 +18,7 @@ export interface SessionHandle {
   paths: SessionPaths;
   acp: ACPClient;
   eventQueue: EventQueue;
+  turnQueue: TurnQueue;
   kiroPid: number;
 }
 
@@ -44,7 +47,7 @@ export interface SessionManager {
   registerPR(sessionId: string, repo: string, prNumber: number): Promise<void>;
   mergePR(sessionId: string, repo: string, prNumber: number): Promise<MergePRResult>;
   completeSession(sessionId: string, reason: string): Promise<void>;
-  terminateSession(sessionId: string): Promise<void>;
+  terminateSession(sessionId: string, reason?: 'terminated_cli' | 'terminated_web', actor?: string): Promise<void>;
   getActiveSession(sessionId: string): SessionHandle | null;
   shutdown(): Promise<void>;
 }
@@ -485,6 +488,9 @@ export function createSessionManager(deps: {
       // 6. Create per-session event queue + worker
       const eventQueue = createEventQueue();
 
+      // 6b. Create per-session turn queue for serialized prompt delivery
+      const turnQueue = createTurnQueue(acp, sessionFiles, sessionId, log);
+
       // 5. Build handle
       const handle: SessionHandle = {
         sessionId,
@@ -492,6 +498,7 @@ export function createSessionManager(deps: {
         paths,
         acp,
         eventQueue,
+        turnQueue,
         kiroPid: 0, // Will be set if available; subprocess PID is internal to ACPClient
       };
 
@@ -535,21 +542,8 @@ export function createSessionManager(deps: {
         throw new Error(`No active session found: ${sessionId}`);
       }
 
-      // Send prompt to ACP client. The JSON-RPC response to session/prompt
-      // resolving IS the protocol-level turn-end signal — there is no
-      // separate streaming "turn-end" notification in the current ACP client.
-      await handle.acp.sendPrompt(prompt);
-
-      // Append to prompts.log
-      sessionFiles.appendPrompt(sessionId, source, prompt);
-
-      // Append prompt_injected stream entry
-      sessionFiles.appendStream(sessionId, {
-        ts: new Date().toISOString(),
-        source: 'router',
-        type: 'prompt_injected',
-        prompt_source: source,
-      });
+      // Delegate to the per-session turn queue for serialized delivery
+      await handle.turnQueue.enqueue(prompt, source);
 
       log.info('Prompt injected', { sessionId, source });
 
@@ -742,7 +736,7 @@ export function createSessionManager(deps: {
       graceTimers.set(sessionId, graceTimer);
     },
 
-    async terminateSession(sessionId: string): Promise<void> {
+    async terminateSession(sessionId: string, reason: 'terminated_cli' | 'terminated_web' = 'terminated_cli', actor: string = 'local'): Promise<void> {
       const handle = registry.get(sessionId);
       if (handle === undefined) {
         throw new Error(`No active session found: ${sessionId}`);
@@ -763,7 +757,7 @@ export function createSessionManager(deps: {
         sessionFiles.updateMeta(sessionId, {
           status: 'abandoned',
           completed_at: Math.floor(Date.now() / 1000),
-          termination_reason: 'terminated_cli',
+          termination_reason: reason,
         });
       } catch {
         // Meta may already be in terminal state if subprocess exited concurrently
@@ -775,7 +769,8 @@ export function createSessionManager(deps: {
           ts: new Date().toISOString(),
           source: 'router',
           type: 'session_ended',
-          reason: 'terminated_cli',
+          reason,
+          actor,
         });
       } catch {
         // Best effort
@@ -784,7 +779,7 @@ export function createSessionManager(deps: {
       // Shutdown the per-session event queue
       await handle.eventQueue.shutdown(5);
 
-      log.info('Session terminated', { sessionId });
+      log.info('Session terminated', { sessionId, reason, actor });
     },
 
     getActiveSession(sessionId: string): SessionHandle | null {

@@ -86,7 +86,7 @@ export function createCliServer(deps: {
       if (typeof sessionId !== 'string' || sessionId.length === 0) {
         throw new Error('Missing or empty "session_id" parameter');
       }
-      await sessionMgr.terminateSession(sessionId);
+      await sessionMgr.terminateSession(sessionId, 'terminated_cli', 'local');
       return { ok: true };
     },
 
