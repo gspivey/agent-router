@@ -219,7 +219,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier1/web-server/ui-logic.test.ts`
     - **Validates: Requirements 7.9, 14.2, 14.3**
 
-  - [ ] 10.1b Create web-ui.ts shell HTML with token-embedding and routing framework
+  - [x] 10.1b Create web-ui.ts shell HTML with token-embedding and routing framework
     - Export function that returns the HTML string with conditional daemon-token embedding
     - On loopback bind: embed `window.__DAEMON_TOKEN = '<token>'` in a `<script>` tag
     - On public bind or when proxy proof is present: omit the token
