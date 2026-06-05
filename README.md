@@ -134,6 +134,35 @@ All values can be hardcoded or read from environment variables using `"ENV:VAR_N
 
 **Webhook secret resolution:** `repos[i].webhookSecret` → `webhookSecret`.
 
+## Cron sessions
+
+Cron mode lets the daemon spawn agent sessions on a schedule — no incoming webhook required. On each cron fire, the daemon:
+
+1. Checks if an active session already exists for that repo. If yes, skips.
+2. Reads the `roadmapPath` file from disk.
+3. Finds the first unchecked task (`- [ ] ...`) in the file.
+4. Spawns a new session with a prompt derived from that task.
+5. The session runs to completion, commits work, and updates the roadmap.
+
+The next cron fire picks up the next unchecked task. If all tasks are checked, the cron fires silently and does nothing.
+
+**Setup:**
+
+1. Add a `roadmapPath` to the repo entry — this is the file the daemon reads for tasks.
+2. Add a `cron` entry in config pointing at that repo with a schedule.
+3. Format the roadmap with standard GitHub checkbox syntax: `- [ ] task description`.
+
+**Example roadmap file (`ROADMAP.md`):**
+```markdown
+- [x] Set up CI pipeline
+- [ ] Add rate limiting to the API
+- [ ] Write integration tests for the auth flow
+```
+
+The daemon reads top-to-bottom and picks the first `- [ ]` line. The agent is expected to complete the work, check off the task, and commit. On the next fire, the daemon moves on.
+
+**Note:** Cron sessions skip if an active session already exists for the repo — webhook-triggered sessions take precedence, and concurrent sessions on the same repo aren't allowed.
+
 ## Day-to-day commands
 
 ```bash
