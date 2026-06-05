@@ -8,21 +8,5 @@ test/fixtures/webhooks/raw/
 # Local JUnit output from `npx vitest run --reporter=junit --outputFile=test-results.xml`.
 /test-results.xml
 
-# FakeGitHubBackend mutates the integration-test fixture repo at runtime —
-# creates branches, adds loose objects, advances refs. The tracked baseline
-# stays (allow-listed below); runtime-only mutations are ignored so test runs
-# don't dirty the working tree. This does NOT cover tracked-file modifications
-# (e.g. refs/heads/main getting its SHA bumped) — that needs proper fixture
-# isolation (per-test clones). Tracked as a follow-up in BACKLOG.md.
-test/fixtures/repos/integration-test-repo.git/refs/heads/*
-!test/fixtures/repos/integration-test-repo.git/refs/heads/main
-test/fixtures/repos/integration-test-repo.git/objects/*/
-!test/fixtures/repos/integration-test-repo.git/objects/info/
-!test/fixtures/repos/integration-test-repo.git/objects/pack/
-!test/fixtures/repos/integration-test-repo.git/objects/03/
-!test/fixtures/repos/integration-test-repo.git/objects/61/
-!test/fixtures/repos/integration-test-repo.git/objects/74/
-!test/fixtures/repos/integration-test-repo.git/objects/8d/
-!test/fixtures/repos/integration-test-repo.git/objects/ab/
-!test/fixtures/repos/integration-test-repo.git/objects/b2/
-!test/fixtures/repos/integration-test-repo.git/objects/c9/
+# FakeGitHubBackend copies the fixture repo to a temp directory at start(),
+# so the tracked fixture files are never mutated by test runs.

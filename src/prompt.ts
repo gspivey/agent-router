@@ -60,16 +60,6 @@ export function composeCommandTriggerPrompt(payload: IssueCommentPayload): strin
   ].join('\n');
 }
 
-export function composeCronTaskPrompt(
-  task: string,
-  repo: string,
-  roadmapPath: string,
-): string {
-  return [
-    `Cron task from roadmap.`,
-    `Repository: ${repo}`,
-    `Roadmap: ${roadmapPath}`,
-    `Task:`,
-    task,
-  ].join('\n');
+export function composeCronPrompt(promptFileContent: string, repo: string): string {
+  return [`Scheduled cron session.`, `Repository: ${repo}`, ``, promptFileContent.trim()].join('\n');
 }

@@ -28,12 +28,16 @@ export interface RepoConfig {
   roadmapPath?: string;
   /** Optional per-repo GitHub token. Overrides `defaultGithubToken`. Typically "ENV:GH_TOKEN_<NAME>". */
   token?: string;
+  /** Optional per-repo webhook secret for HMAC verification. Overrides the global `webhookSecret`. */
+  webhookSecret?: string;
 }
 
 export interface CronConfig {
   name: string;
   schedule: string;
   repo: string;
+  /** Path to a file whose contents are used verbatim as the session prompt on each cron fire. */
+  promptFile: string;
 }
 
 export function resolveEnvValues(raw: Record<string, unknown>): Record<string, unknown> {
@@ -176,6 +180,12 @@ export function validateConfig(config: unknown): AgentRouterConfig {
       }
       entry.token = repo['token'];
     }
+    if (repo['webhookSecret'] !== undefined) {
+      if (typeof repo['webhookSecret'] !== 'string' || repo['webhookSecret'].length === 0) {
+        throw new FatalError(`Invalid "repos[${i}].webhookSecret": must be a non-empty string`);
+      }
+      entry.webhookSecret = repo['webhookSecret'];
+    }
     repos.push(entry);
   }
 
@@ -220,7 +230,11 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     if (!repoKeys.has(repo)) {
       throw new FatalError(`Invalid "cron[${i}].repo": "${repo}" does not match any entry in "repos"`);
     }
-    cronEntries.push({ name: cronName, schedule, repo });
+    const promptFile = entry['promptFile'];
+    if (typeof promptFile !== 'string' || promptFile.length === 0) {
+      throw new FatalError(`Invalid "cron[${i}].promptFile": must be a non-empty string path`);
+    }
+    cronEntries.push({ name: cronName, schedule, repo, promptFile });
   }
 
   const result: AgentRouterConfig = {

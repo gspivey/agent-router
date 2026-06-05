@@ -67,6 +67,99 @@ SESSION_ID=$(echo "Fix CI" | agent-router prompt --new --quiet)
 agent-router tail "$SESSION_ID"
 ```
 
+## Configuration reference
+
+All values can be hardcoded or read from environment variables using `"ENV:VAR_NAME"` syntax. Copy `config.example.json` as a starting point.
+
+```jsonc
+{
+  // Required — port for the incoming GitHub webhook server
+  "port": 3000,
+
+  // Required — global HMAC-SHA256 secret for verifying webhook payloads.
+  // Used as the fallback for any repo that doesn't have its own webhookSecret.
+  "webhookSecret": "ENV:GITHUB_WEBHOOK_SECRET",
+
+  // Required — absolute path to the Kiro CLI executable
+  "kiroPath": "/path/to/kiro",
+
+  // Optional — default GitHub PAT used for any repo without its own token.
+  "defaultGithubToken": "ENV:GITHUB_TOKEN",
+
+  // Optional — rate limiting between wakes for the same PR (default: 60s)
+  "rateLimit": {
+    "perPRSeconds": 60
+  },
+
+  // Optional — session lifetime controls (all have defaults shown below)
+  "sessionTimeout": {
+    "inactivityMinutes": 5,       // kill session if silent for this long
+    "maxLifetimeMinutes": 120,    // hard cap regardless of activity
+    "gracePeriodAfterMergeSeconds": 60  // extra time after a merge
+  },
+
+  // Required — list of repos to monitor
+  "repos": [
+    {
+      // Required — GitHub org or user + repo name
+      "owner": "your-org",
+      "name": "your-repo",
+
+      // Optional — per-repo GitHub PAT, overrides defaultGithubToken
+      "token": "ENV:GH_TOKEN_YOUR_REPO",
+
+      // Optional — per-repo webhook HMAC secret, overrides top-level webhookSecret.
+      // Set this when each GitHub repo webhook is configured with a different secret.
+      "webhookSecret": "ENV:WEBHOOK_SECRET_YOUR_REPO",
+
+      // Optional — path to a roadmap file in the repo (for future use)
+      "roadmapPath": "ROADMAP.md"
+    }
+  ],
+
+  // Optional — scheduled cron sessions (one per repo per schedule)
+  "cron": [
+    {
+      "name": "nightly-tasks",
+      // Standard 5-field cron expression
+      "schedule": "0 9 * * 1-5",
+      // Must match an owner/name entry in repos[]
+      "repo": "your-org/your-repo",
+      // Path to a file whose contents are used as the session prompt on each fire
+      "promptFile": "/etc/agent-router/prompts/your-repo.md"
+    }
+  ]
+}
+```
+
+**Token resolution:** `repos[i].token` → `defaultGithubToken` → error if neither is set.
+
+**Webhook secret resolution:** `repos[i].webhookSecret` → `webhookSecret`.
+
+## Cron sessions
+
+Cron mode lets the daemon spawn agent sessions on a schedule — no incoming webhook required. On each cron fire, the daemon:
+
+1. Checks if an active session already exists for that repo. If yes, skips (webhook-triggered sessions take precedence; concurrent sessions on the same repo aren't allowed).
+2. Checks that the last session for this repo ended in a clean state (`completed`). If it ended `failed` or `abandoned`, skips and logs a warning — manual re-trigger required.
+3. Reads the `promptFile` from disk and uses its contents verbatim as the session prompt.
+4. Spawns a new session.
+
+**Setup:**
+
+1. Create a prompt file with the standing instructions for the agent (e.g. `/etc/agent-router/prompts/myrepo.md`).
+2. Add a `cron` entry in config with `promptFile` pointing to it.
+
+**Example prompt file:**
+```
+Review the open pull requests in this repo. For any PR with a failing CI check,
+investigate the failure, push a fix, and leave a comment explaining what you changed.
+```
+
+The same prompt is used on every cron fire. The prompt file can be updated at any time — the daemon reads it fresh on each fire.
+
+**Manual re-trigger:** If a session ends in a non-clean state (failed, abandoned, killed), the cron will not auto-restart. Fix whatever caused the failure, then start a session manually with `agent-router prompt --new` or via the web UI. Once a clean session completes, the cron resumes on its normal schedule.
+
 ## Day-to-day commands
 
 ```bash

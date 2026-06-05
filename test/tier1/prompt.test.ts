@@ -3,7 +3,7 @@ import {
   composeCheckRunPrompt,
   composeReviewCommentPrompt,
   composeCommandTriggerPrompt,
-  composeCronTaskPrompt,
+  composeCronPrompt,
 } from '../../src/prompt.js';
 import type {
   CheckRunPayload,
@@ -189,21 +189,15 @@ describe('composeCommandTriggerPrompt', () => {
   });
 });
 
-describe('composeCronTaskPrompt', () => {
-  it('includes task text, repo, and roadmap path', () => {
-    const result = composeCronTaskPrompt(
-      'Implement user authentication',
-      'myorg/myrepo',
-      './ROADMAP.md',
-    );
-    expect(result).toContain('Implement user authentication');
+describe('composeCronPrompt', () => {
+  it('includes prompt file content and repo', () => {
+    const result = composeCronPrompt('Fix the flaky tests in the auth module.', 'myorg/myrepo');
+    expect(result).toContain('Fix the flaky tests in the auth module.');
     expect(result).toContain('myorg/myrepo');
-    expect(result).toContain('./ROADMAP.md');
   });
 
-  it('handles empty task text', () => {
-    const result = composeCronTaskPrompt('', 'org/repo', './tasks.md');
-    expect(result).toContain('org/repo');
-    expect(result).toContain('./tasks.md');
+  it('trims whitespace from prompt file content', () => {
+    const result = composeCronPrompt('  \n  Do the thing.  \n  ', 'org/repo');
+    expect(result).toContain('Do the thing.');
   });
 });
