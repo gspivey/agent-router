@@ -246,10 +246,22 @@ export function createApp(deps: {
       deps.repos ?? [],
       deps.webhookSecret,
     );
+    const usedPerRepoSecret =
+      preParsedFullName !== null &&
+      (deps.repos ?? []).some(
+        r => `${r.owner}/${r.name}` === preParsedFullName && r.webhookSecret !== undefined,
+      );
     if (!verifySignature(effectiveSecret, rawBody, signatureHeader)) {
-      deps.log.warn('Invalid webhook signature');
+      deps.log.warn('Invalid webhook signature', {
+        repo: preParsedFullName ?? 'unknown',
+        secret_source: usedPerRepoSecret ? 'per_repo' : 'global',
+      });
       return c.text('Unauthorized', 401);
     }
+    deps.log.debug('Webhook signature verified', {
+      repo: preParsedFullName ?? 'unknown',
+      secret_source: usedPerRepoSecret ? 'per_repo' : 'global',
+    });
 
     // Extract event type from header
     const eventType = c.req.header('x-github-event') ?? 'unknown';
