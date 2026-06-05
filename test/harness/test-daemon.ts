@@ -14,6 +14,7 @@ export class TestDaemonImpl implements TestDaemon {
   private proc: cp.ChildProcess | null = null;
   private _rootDir: string = '';
   private _port = 0;
+  private _controlPort = 0;
   private _socketPath: string = '';
 
   async start(options: TestDaemonOptions): Promise<void> {
@@ -21,15 +22,17 @@ export class TestDaemonImpl implements TestDaemon {
     const dbPath = path.join(this._rootDir, 'agent-router.db');
     this._socketPath = path.join(this._rootDir, 'sock');
 
-    // Assign a free port
+    // Assign free ports
     this._port = await getFreePort();
+    this._controlPort = await getFreePort();
 
     const spawnCfg = options.kiroBackend.spawnConfig();
 
     const config = {
       port: this._port,
+      controlPort: this._controlPort,
       webhookSecret: options.webhookSecret,
-      kiroPath: spawnCfg.command,
+      kiroPath: process.execPath,
       kiroArgs: spawnCfg.args,
       kiroEnv: spawnCfg.env,
       rateLimit: { perPRSeconds: 1 },
@@ -86,6 +89,10 @@ export class TestDaemonImpl implements TestDaemon {
 
   webhookUrl(): string {
     return `http://127.0.0.1:${this._port}/webhook`;
+  }
+
+  controlUrl(): string {
+    return `http://127.0.0.1:${this._controlPort}`;
   }
 
   rootDir(): string {
