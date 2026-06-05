@@ -14,6 +14,7 @@ export interface ACPClient {
   newSessionWithPrompt(cwd: string, prompt: string): Promise<string>;
   loadSession(sessionId: string): Promise<void>;
   sendPrompt(prompt: string): Promise<void>;
+  cancel(): void;
   readonly notifications: AsyncIterable<ACPNotification>;
   readonly sessionEnded: Promise<void>;
   close(): Promise<void>;
@@ -314,6 +315,15 @@ export function createACPClientFromStreams(
         sessionId: acpSessionId,
         prompt: [{ type: 'text', text: prompt }],
       });
+    },
+
+    cancel(): void {
+      const notification = JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'session/cancel',
+        params: { sessionId: acpSessionId },
+      });
+      stdin.write(notification + '\n');
     },
 
     get notifications(): AsyncIterable<ACPNotification> {
