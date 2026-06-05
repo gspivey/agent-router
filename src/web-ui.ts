@@ -57,7 +57,27 @@ main{padding:16px;max-width:900px;margin:0 auto}
 .pagination span{font-size:13px;color:#8b949e}
 .empty-state{text-align:center;color:#8b949e;padding:40px 16px}
 button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-radius:6px;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
-@media(max-width:480px){main{padding:8px}body{font-size:16px}.session-header{flex-direction:column;align-items:flex-start}}
+/* Detail view styles */
+.detail-meta{padding:12px;background:#0d1117;border:1px solid #30363d;border-radius:8px;margin-bottom:12px}
+.detail-meta h2{margin:0 0 8px;font-size:16px}
+.detail-meta-row{font-size:13px;color:#8b949e;margin:4px 0}
+.detail-meta-row span{color:#eee}
+#log-container{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;max-height:60vh;overflow-y:auto;overflow-x:auto;font-family:monospace;font-size:13px;line-height:1.4;white-space:pre}
+.log-entry{margin:0;padding:2px 0}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
+.controls textarea{flex:1;min-width:200px;resize:vertical;padding:8px;border:1px solid #30363d;border-radius:6px;background:#0d1117;color:#eee;font-size:14px;font-family:inherit}
+.controls-buttons{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn-send{background:#238636;color:#fff}
+.btn-send:disabled{opacity:0.4;cursor:not-allowed}
+.btn-stop{background:#9e6a03;color:#fff}
+.btn-kill{background:#da3633;color:#fff}
+.btn-back{background:#21262d;color:#eee;border:1px solid #30363d;margin-bottom:12px}
+.sse-status{font-size:12px;color:#8b949e;margin-bottom:8px}
+.confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100}
+.confirm-dialog{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:320px;text-align:center}
+.confirm-dialog p{margin:0 0 16px;font-size:15px}
+.confirm-dialog button{margin:0 8px}
+@media(max-width:480px){main{padding:8px}body{font-size:16px}.session-header{flex-direction:column;align-items:flex-start}.controls{flex-direction:column}.controls textarea{min-width:100%}}
 @media(max-width:768px){#log-container{overflow-x:auto;font-size:14px}}
 </style>
 </head>
@@ -271,15 +291,283 @@ async function renderList() {
   if (nextBtn) nextBtn.addEventListener('click', function() { currentPage++; renderList(); });
 }
 
+// --- Detail view ---
+let activeSSE = null; // { eventSource, sessionId, reconnectTimer, attempt, lastId }
+
+function closeSSE() {
+  if (!activeSSE) return;
+  if (activeSSE.eventSource) activeSSE.eventSource.close();
+  if (activeSSE.reconnectTimer) clearTimeout(activeSSE.reconnectTimer);
+  activeSSE = null;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderDetailMeta(meta) {
+  const badge = statusToBadge(meta.status);
+  const shortId = meta.session_id.slice(0, 8);
+  const repoDisplay = meta.repo || 'no repo';
+  const prLinks = (meta.prs || []).map(function(pr) {
+    const url = 'https://github.com/' + pr.repo + '/pull/' + pr.pr_number;
+    return '<a href="' + url + '" target="_blank" rel="noopener">PR #' + pr.pr_number + ' (' + pr.repo + ')</a>';
+  }).join(', ');
+
+  return '<div class="detail-meta">' +
+    '<h2><span class="badge badge-' + badge + '">' + meta.status + '</span> ' + repoDisplay + ' <span class="session-id">' + shortId + '</span></h2>' +
+    '<div class="detail-meta-row">ID: <span>' + meta.session_id + '</span></div>' +
+    '<div class="detail-meta-row">Created: <span>' + formatTime(meta.created_at) + '</span></div>' +
+    (meta.completed_at ? '<div class="detail-meta-row">Ended: <span>' + formatTime(meta.completed_at) + '</span></div>' : '') +
+    (meta.termination_reason ? '<div class="detail-meta-row">Reason: <span>' + meta.termination_reason + '</span></div>' : '') +
+    (prLinks ? '<div class="detail-meta-row">PRs: <span>' + prLinks + '</span></div>' : '') +
+  '</div>';
+}
+
+function renderControls(meta) {
+  if (meta.status !== 'active') return '';
+  return '<div class="controls">' +
+    '<textarea id="prompt-input" rows="3" maxlength="10000" placeholder="Inject a prompt..."></textarea>' +
+    '<div class="controls-buttons">' +
+      '<button class="btn-send" id="btn-send">Send</button>' +
+      '<button class="btn-stop" id="btn-stop">Stop</button>' +
+      '<button class="btn-kill" id="btn-kill">Kill</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function connectSSE(sessionId, lastId) {
+  const url = '/sessions/' + sessionId + '/stream';
+  const headers = {};
+  if (_TK) headers['Authorization'] = 'Bearer ' + _TK;
+  if (lastId > 0) headers['Last-Event-ID'] = String(lastId);
+
+  // Use fetch-based SSE since EventSource doesn't support custom headers
+  const controller = new AbortController();
+  activeSSE = { eventSource: { close: function() { controller.abort(); } }, sessionId: sessionId, reconnectTimer: null, attempt: 0, lastId: lastId };
+
+  fetch(url, { headers: headers, signal: controller.signal }).then(function(resp) {
+    if (!resp.ok || !resp.body) {
+      scheduleReconnect(sessionId);
+      return;
+    }
+    activeSSE.attempt = 0;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    function processChunk() {
+      reader.read().then(function(result) {
+        if (result.done) {
+          scheduleReconnect(sessionId);
+          return;
+        }
+        buffer += decoder.decode(result.value, { stream: true });
+        const lines = buffer.split('\\n');
+        buffer = lines.pop() || '';
+        let currentEvent = '';
+        let currentId = '';
+        let currentData = '';
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            currentEvent = line.slice(6).trim();
+          } else if (line.startsWith('id:')) {
+            currentId = line.slice(3).trim();
+          } else if (line.startsWith('data:')) {
+            currentData = line.slice(5);
+          } else if (line === '' && currentData) {
+            // End of SSE message
+            const id = parseInt(currentId, 10);
+            if (!isNaN(id)) activeSSE.lastId = trackLastEventId(activeSSE.lastId, id);
+            appendLogEntry(currentData);
+            if (currentEvent === 'session_ended') {
+              updateSSEStatus('Stream ended');
+              hideControls();
+              return; // don't continue reading
+            }
+            currentEvent = '';
+            currentId = '';
+            currentData = '';
+          }
+        }
+        processChunk();
+      }).catch(function() {
+        if (activeSSE && activeSSE.sessionId === sessionId) scheduleReconnect(sessionId);
+      });
+    }
+    processChunk();
+  }).catch(function() {
+    if (activeSSE && activeSSE.sessionId === sessionId) scheduleReconnect(sessionId);
+  });
+  updateSSEStatus('Connected');
+}
+
+function scheduleReconnect(sessionId) {
+  if (!activeSSE || activeSSE.sessionId !== sessionId) return;
+  const delay = computeBackoff(activeSSE.attempt);
+  activeSSE.attempt++;
+  updateSSEStatus('Reconnecting in ' + (delay / 1000) + 's...');
+  activeSSE.reconnectTimer = setTimeout(function() {
+    if (activeSSE && activeSSE.sessionId === sessionId) {
+      connectSSE(sessionId, activeSSE.lastId);
+    }
+  }, delay);
+}
+
+function appendLogEntry(data) {
+  const container = document.getElementById('log-container');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.textContent = data;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function updateSSEStatus(text) {
+  const el = document.getElementById('sse-status');
+  if (el) el.textContent = text;
+}
+
+function hideControls() {
+  const ctrl = document.querySelector('.controls');
+  if (ctrl) ctrl.style.display = 'none';
+}
+
+async function loadDetailView(sessionId) {
+  const detailView = document.getElementById('detail-view');
+  detailView.innerHTML = '<a href="#/" class="btn btn-back">&larr; Back</a><div class="empty-state">Loading...</div>';
+
+  try {
+    const resp = await apiFetch('/sessions/' + sessionId + '?lines=200');
+    if (!resp.ok) {
+      detailView.innerHTML = '<a href="#/" class="btn btn-back">&larr; Back</a><div class="empty-state">Session not found</div>';
+      return;
+    }
+    const data = await resp.json();
+    const meta = data.meta;
+
+    let html = '<a href="#/" class="btn btn-back">&larr; Back</a>';
+    html += renderDetailMeta(meta);
+    html += renderControls(meta);
+    html += '<div class="sse-status" id="sse-status"></div>';
+    html += '<div id="log-container"></div>';
+    detailView.innerHTML = html;
+
+    // Render existing entries
+    const container = document.getElementById('log-container');
+    for (const entry of data.entries) {
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.textContent = JSON.stringify(entry);
+      container.appendChild(div);
+    }
+
+    // Wire controls
+    if (meta.status === 'active') {
+      const sendBtn = document.getElementById('btn-send');
+      const stopBtn = document.getElementById('btn-stop');
+      const killBtn = document.getElementById('btn-kill');
+      const input = document.getElementById('prompt-input');
+
+      if (sendBtn) sendBtn.addEventListener('click', async function() {
+        const prompt = input.value.trim();
+        if (!prompt) return;
+        sendBtn.disabled = true;
+        try {
+          const r = await apiFetch('/sessions/' + sessionId + '/inject', {
+            method: 'POST',
+            body: JSON.stringify({ prompt: prompt }),
+          });
+          if (r.ok || r.status === 202) {
+            input.value = '';
+          } else {
+            const err = await r.json().catch(function() { return {}; });
+            alert('Inject failed: ' + (err.error ? err.error.message : r.status));
+          }
+        } catch (e) {
+          alert('Inject error: ' + e.message);
+        }
+        sendBtn.disabled = false;
+      });
+
+      if (stopBtn) stopBtn.addEventListener('click', async function() {
+        stopBtn.disabled = true;
+        try {
+          const r = await apiFetch('/sessions/' + sessionId + '/interrupt', { method: 'POST', body: '{}' });
+          if (!r.ok) {
+            const err = await r.json().catch(function() { return {}; });
+            alert('Stop failed: ' + (err.error ? err.error.message : r.status));
+          }
+        } catch (e) {
+          alert('Stop error: ' + e.message);
+        }
+        stopBtn.disabled = false;
+      });
+
+      if (killBtn) killBtn.addEventListener('click', function() {
+        showKillConfirm(sessionId);
+      });
+    }
+
+    // Start SSE stream
+    connectSSE(sessionId, 0);
+
+  } catch (e) {
+    detailView.innerHTML = '<a href="#/" class="btn btn-back">&larr; Back</a><div class="empty-state">Error: ' + e.message + '</div>';
+  }
+}
+
+function showKillConfirm(sessionId) {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = '<div class="confirm-dialog">' +
+    '<p>Kill this session? This cannot be undone.</p>' +
+    '<button class="btn-kill" id="confirm-kill-yes">Kill</button>' +
+    '<button class="btn-back" id="confirm-kill-no">Cancel</button>' +
+  '</div>';
+  document.body.appendChild(overlay);
+
+  document.getElementById('confirm-kill-no').addEventListener('click', function() {
+    document.body.removeChild(overlay);
+  });
+  document.getElementById('confirm-kill-yes').addEventListener('click', async function() {
+    document.body.removeChild(overlay);
+    try {
+      const r = await apiFetch('/sessions/' + sessionId + '/kill', { method: 'POST', body: '{}' });
+      if (!r.ok) {
+        const err = await r.json().catch(function() { return {}; });
+        alert('Kill failed: ' + (err.error ? err.error.message : r.status));
+      } else {
+        hideControls();
+      }
+    } catch (e) {
+      alert('Kill error: ' + e.message);
+    }
+  });
+}
+
+// --- Reconnect on visibility change ---
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && activeSSE) {
+    // Force reconnect with last known ID
+    const sessionId = activeSSE.sessionId;
+    const lastId = activeSSE.lastId;
+    closeSSE();
+    connectSSE(sessionId, lastId);
+  }
+});
+
 // --- Router ---
 function navigate() {
   const route = parseHashRoute(window.location.hash);
   const listView = document.getElementById('list-view');
   const detailView = document.getElementById('detail-view');
+  closeSSE();
   if (route.view === 'detail') {
     listView.style.display = 'none';
     detailView.style.display = 'block';
-    detailView.textContent = 'Session: ' + route.sessionId;
+    loadDetailView(route.sessionId);
   } else {
     listView.style.display = 'block';
     detailView.style.display = 'none';
