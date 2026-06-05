@@ -245,7 +245,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - _Requirements: 7.5, 7.7, 7.9, 11.1–11.7, 14.1–14.4_
 
 - [ ] 11. Integration: Wire web server into index.ts
-  - [ ] 11.1 Wire createWebApp and startWebServer into daemon startup
+  - [x] 11.1 Wire createWebApp and startWebServer into daemon startup
     - Import and call `createWebApp` after the webhook server is created
     - Pass `SessionManager`, `SessionFiles`, `DaemonTokenStore`, `Logger`, config, and `SSEBroker` as dependencies
     - Call `startWebServer` to bind the web server
