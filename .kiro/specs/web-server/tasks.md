@@ -73,7 +73,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier1/web-server/acp-cancel.test.ts`
     - _Requirements: 9.9, 9.10_
 
-- [ ] 4. Checkpoint - Ensure all tests pass
+- [x] 4. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 5. Authentication middleware: web-auth.ts
