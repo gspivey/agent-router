@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import crypto from 'node:crypto';
-import { createApp, verifySignature } from '../../src/server.js';
+import { createApp, verifySignature, resolveWebhookSecret } from '../../src/server.js';
 import type { Database, NewEvent } from '../../src/db.js';
 import type { QueuedEvent } from '../../src/queue.js';
 import type { Logger } from '../../src/log.js';
+import type { RepoConfig } from '../../src/config.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -271,5 +272,140 @@ describe('Non-/webhook paths', () => {
     const { app } = makeApp();
     const res = await app.request('/health', { method: 'GET' });
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveWebhookSecret
+// ---------------------------------------------------------------------------
+
+describe('resolveWebhookSecret', () => {
+  const global = 'global-secret';
+
+  const repos: RepoConfig[] = [
+    { owner: 'org', name: 'alpha', webhookSecret: 'secret-alpha' },
+    { owner: 'org', name: 'beta' },
+  ];
+
+  it('returns per-repo secret when repo has one configured', () => {
+    expect(resolveWebhookSecret('org/alpha', repos, global)).toBe('secret-alpha');
+  });
+
+  it('returns global secret when repo has no per-repo secret', () => {
+    expect(resolveWebhookSecret('org/beta', repos, global)).toBe(global);
+  });
+
+  it('returns global secret when full_name does not match any repo', () => {
+    expect(resolveWebhookSecret('org/unknown', repos, global)).toBe(global);
+  });
+
+  it('returns global secret when full_name is null', () => {
+    expect(resolveWebhookSecret(null, repos, global)).toBe(global);
+  });
+
+  it('returns global secret when repos array is empty', () => {
+    expect(resolveWebhookSecret('org/alpha', [], global)).toBe(global);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /webhook — per-repo webhook secret
+// ---------------------------------------------------------------------------
+
+describe('POST /webhook with per-repo webhook secret', () => {
+  const GLOBAL_SECRET = 'global-secret';
+  const REPO_SECRET = 'per-repo-secret';
+
+  function makeAppWithRepos() {
+    const db = makeDb();
+    const enqueue = vi.fn();
+    const app = createApp({
+      webhookSecret: GLOBAL_SECRET,
+      repos: [
+        { owner: 'org', name: 'alpha', webhookSecret: REPO_SECRET },
+        { owner: 'org', name: 'beta' },
+      ],
+      db,
+      enqueue,
+      log: makeLogger(),
+    });
+    return { app, db, enqueue };
+  }
+
+  it('accepts payload signed with per-repo secret for a configured repo', async () => {
+    const { app, db } = makeAppWithRepos();
+    const body = JSON.stringify(webhookPayload('org/alpha', 1));
+    const sig = makeSignature(REPO_SECRET, body);
+
+    const res = await app.request('/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'check_run',
+        'X-Hub-Signature-256': sig,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(200);
+    expect(db.insertEvent).toHaveBeenCalledOnce();
+  });
+
+  it('rejects payload signed with global secret when repo has a per-repo secret', async () => {
+    const { app, db } = makeAppWithRepos();
+    const body = JSON.stringify(webhookPayload('org/alpha', 1));
+    const sig = makeSignature(GLOBAL_SECRET, body);
+
+    const res = await app.request('/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'check_run',
+        'X-Hub-Signature-256': sig,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(401);
+    expect(db.insertEvent).not.toHaveBeenCalled();
+  });
+
+  it('accepts payload signed with global secret for repo without per-repo secret', async () => {
+    const { app, db } = makeAppWithRepos();
+    const body = JSON.stringify(webhookPayload('org/beta', 2));
+    const sig = makeSignature(GLOBAL_SECRET, body);
+
+    const res = await app.request('/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'check_run',
+        'X-Hub-Signature-256': sig,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(200);
+    expect(db.insertEvent).toHaveBeenCalledOnce();
+  });
+
+  it('falls back to global secret when payload is not valid JSON during pre-parse', async () => {
+    const { app, db } = makeAppWithRepos();
+    const body = 'not-json';
+    const sig = makeSignature(GLOBAL_SECRET, body);
+
+    const res = await app.request('/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'push',
+        'X-Hub-Signature-256': sig,
+      },
+      body,
+    });
+
+    // HMAC passes (global secret used) but JSON parse fails → 400
+    expect(res.status).toBe(400);
+    expect(db.insertEvent).not.toHaveBeenCalled();
   });
 });

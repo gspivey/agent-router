@@ -404,6 +404,7 @@ async function main(): Promise<void> {
   // Create and bind Hono HTTP server (now also serves /hooks/event)
   const app = createApp({
     webhookSecret: config.webhookSecret,
+    repos: config.repos,
     db,
     enqueue: (event: QueuedEvent) => { globalQueue.enqueue(event); },
     log,

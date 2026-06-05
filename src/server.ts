@@ -7,6 +7,7 @@ import type { QueuedEvent } from './queue.js';
 import type { Logger } from './log.js';
 import type { DaemonTokenStore } from './daemon-token.js';
 import type { VerifySessionFn } from './verify-session.js';
+import type { RepoConfig } from './config.js';
 
 /**
  * If AGENT_ROUTER_CAPTURE_PAYLOADS is set to a directory path, write the raw
@@ -120,6 +121,24 @@ function extractPRNumber(eventType: string, payload: unknown): number | null {
 }
 
 /**
+ * Resolve the webhook secret for the given repo full_name.
+ * Uses the per-repo secret if configured, otherwise falls back to the global secret.
+ */
+export function resolveWebhookSecret(
+  fullName: string | null,
+  repos: RepoConfig[],
+  globalSecret: string,
+): string {
+  if (fullName !== null) {
+    const repo = repos.find(r => `${r.owner}/${r.name}` === fullName);
+    if (repo?.webhookSecret !== undefined) {
+      return repo.webhookSecret;
+    }
+  }
+  return globalSecret;
+}
+
+/**
  * Create the Hono HTTP app for the webhook server.
  *
  * Routes:
@@ -129,6 +148,7 @@ function extractPRNumber(eventType: string, payload: unknown): number | null {
  */
 export function createApp(deps: {
   webhookSecret: string;
+  repos?: RepoConfig[];
   db: Database;
   enqueue: (event: QueuedEvent) => void;
   log: Logger;
@@ -211,8 +231,22 @@ export function createApp(deps: {
       return c.text('Unauthorized', 401);
     }
 
-    // Verify HMAC-SHA256 signature
-    if (!verifySignature(deps.webhookSecret, rawBody, signatureHeader)) {
+    // Pre-parse to extract repository.full_name so we can select the correct
+    // per-repo secret. The result is untrusted until HMAC verification passes.
+    let preParsedFullName: string | null = null;
+    try {
+      preParsedFullName = extractRepo(JSON.parse(rawBody.toString('utf-8')));
+    } catch {
+      // Fall back to global secret if body isn't valid JSON yet
+    }
+
+    // Verify HMAC-SHA256 signature with the effective secret for this repo
+    const effectiveSecret = resolveWebhookSecret(
+      preParsedFullName,
+      deps.repos ?? [],
+      deps.webhookSecret,
+    );
+    if (!verifySignature(effectiveSecret, rawBody, signatureHeader)) {
       deps.log.warn('Invalid webhook signature');
       return c.text('Unauthorized', 401);
     }

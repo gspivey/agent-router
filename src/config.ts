@@ -28,6 +28,8 @@ export interface RepoConfig {
   roadmapPath?: string;
   /** Optional per-repo GitHub token. Overrides `defaultGithubToken`. Typically "ENV:GH_TOKEN_<NAME>". */
   token?: string;
+  /** Optional per-repo webhook secret for HMAC verification. Overrides the global `webhookSecret`. */
+  webhookSecret?: string;
 }
 
 export interface CronConfig {
@@ -175,6 +177,12 @@ export function validateConfig(config: unknown): AgentRouterConfig {
         throw new FatalError(`Invalid "repos[${i}].token": must be a non-empty string`);
       }
       entry.token = repo['token'];
+    }
+    if (repo['webhookSecret'] !== undefined) {
+      if (typeof repo['webhookSecret'] !== 'string' || repo['webhookSecret'].length === 0) {
+        throw new FatalError(`Invalid "repos[${i}].webhookSecret": must be a non-empty string`);
+      }
+      entry.webhookSecret = repo['webhookSecret'];
     }
     repos.push(entry);
   }
