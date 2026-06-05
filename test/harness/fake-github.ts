@@ -1,5 +1,7 @@
 import * as http from 'node:http';
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { execSync } from 'node:child_process';
 import * as path from 'node:path';
 import * as url from 'node:url';
@@ -44,6 +46,7 @@ export class FakeGitHubBackend implements GitHubBackend {
   private port = 0;
   private webhookSecret: string;
   private daemonWebhookUrl = '';
+  private repoDir = '';
 
   private prs: Map<string, Map<number, PRRecord>> = new Map();
   private prCounter = 1;
@@ -58,6 +61,9 @@ export class FakeGitHubBackend implements GitHubBackend {
   }
 
   async start(): Promise<void> {
+    this.repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-router-fixture-'));
+    this.copyFixture();
+
     await new Promise<void>((resolve, reject) => {
       this.server = http.createServer((req, res) => {
         void this.handleRequest(req, res);
@@ -78,6 +84,10 @@ export class FakeGitHubBackend implements GitHubBackend {
       if (!this.server) return resolve();
       this.server.close((err) => (err ? reject(err) : resolve()));
     });
+    if (this.repoDir) {
+      fs.rmSync(this.repoDir, { recursive: true, force: true });
+      this.repoDir = '';
+    }
   }
 
   async reset(): Promise<void> {
@@ -88,9 +98,15 @@ export class FakeGitHubBackend implements GitHubBackend {
     this.comments = [];
     this.commentCounter = 1;
     this.apiCalls = [];
-    // Recreate the fixture repo
-    const scriptPath = path.resolve(__dirname, 'scripts/make-fixture-repo.sh');
-    execSync(scriptPath, { stdio: 'pipe' });
+    this.copyFixture();
+  }
+
+  private copyFixture(): void {
+    // Wipe repoDir contents and copy a fresh snapshot of the tracked fixture.
+    // This keeps the tracked fixture files pristine across test runs.
+    fs.rmSync(this.repoDir, { recursive: true, force: true });
+    fs.mkdirSync(this.repoDir, { recursive: true });
+    execSync(`cp -r "${FIXTURE_REPO}/." "${this.repoDir}"`, { stdio: 'pipe' });
   }
 
   apiBaseUrl(): string {
@@ -106,7 +122,7 @@ export class FakeGitHubBackend implements GitHubBackend {
   }
 
   cloneUrl(repo: string): string {
-    return `file://${FIXTURE_REPO}`;
+    return `file://${this.repoDir}`;
   }
 
   async sendWebhook(event: WebhookEvent): Promise<void> {
@@ -133,7 +149,7 @@ export class FakeGitHubBackend implements GitHubBackend {
     // Create a real branch on the fixture repo
     const headSha = this.getLatestSha('main');
     execSync(
-      `git -C "${FIXTURE_REPO}" branch "${branch}" main`,
+      `git -C "${this.repoDir}" branch "${branch}" main`,
       { stdio: 'pipe' }
     );
 
@@ -243,7 +259,7 @@ export class FakeGitHubBackend implements GitHubBackend {
   }
 
   private getLatestSha(branch: string): string {
-    return execSync(`git -C "${FIXTURE_REPO}" rev-parse ${branch}`, { encoding: 'utf8' }).trim();
+    return execSync(`git -C "${this.repoDir}" rev-parse ${branch}`, { encoding: 'utf8' }).trim();
   }
 
   private async sendWebhookToRepo(
