@@ -75,6 +75,9 @@ const config: AgentRouterConfig = {
   sessionTimeout: { inactivityMinutes: 5, maxLifetimeMinutes: 120, gracePeriodAfterMergeSeconds: 60 },
   repos: [{ owner: 'octo', name: 'demo' }],
   cron: [],
+  controlPort: 3100,
+  bindPublic: false,
+  shutdownDrainSeconds: 60,
 };
 
 const SESSION_FOR_PR: Session = {

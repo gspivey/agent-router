@@ -8,6 +8,12 @@ export interface SessionTimeoutConfig {
   gracePeriodAfterMergeSeconds: number;
 }
 
+export interface TrustedProxyConfig {
+  identityHeader: string;
+  proofHeader: string;
+  proofSecret: string;
+}
+
 export interface AgentRouterConfig {
   port: number;
   webhookSecret: string;
@@ -20,6 +26,16 @@ export interface AgentRouterConfig {
   cron: CronConfig[];
   /** Optional default GitHub token used when a repo has no `token` override. Typically "ENV:GITHUB_TOKEN". */
   defaultGithubToken?: string;
+  /** Port for the web control plane (default 3100, must not equal `port`). */
+  controlPort: number;
+  /** Bind to 0.0.0.0 instead of 127.0.0.1 (default false). */
+  bindPublic: boolean;
+  /** Seconds to wait for active sessions to drain on shutdown (default 60). */
+  shutdownDrainSeconds: number;
+  /** Trusted reverse proxy authentication config. */
+  trustedProxy?: TrustedProxyConfig;
+  /** Email allowlist for write operations (case-insensitive). */
+  allowedEmails?: string[];
 }
 
 export interface RepoConfig {
@@ -198,6 +214,102 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     defaultGithubToken = config['defaultGithubToken'];
   }
 
+  // controlPort (optional, default 3100)
+  let controlPort = 3100;
+  if (config['controlPort'] !== undefined) {
+    const val = config['controlPort'];
+    if (typeof val !== 'number' || !Number.isInteger(val) || val < 1 || val > 65535) {
+      throw new FatalError(`Invalid "controlPort": must be an integer between 1 and 65535, got ${JSON.stringify(val)}`);
+    }
+    controlPort = val;
+  }
+  if (controlPort === port) {
+    throw new FatalError(`Invalid "controlPort": must not equal "port" (both are ${port})`);
+  }
+
+  // bindPublic (optional, default false)
+  let bindPublic = false;
+  if (config['bindPublic'] !== undefined) {
+    const val = config['bindPublic'];
+    if (typeof val !== 'boolean') {
+      throw new FatalError(`Invalid "bindPublic": must be a boolean, got ${JSON.stringify(val)}`);
+    }
+    bindPublic = val;
+  }
+
+  // shutdownDrainSeconds (optional, default 60)
+  let shutdownDrainSeconds = 60;
+  if (config['shutdownDrainSeconds'] !== undefined) {
+    const val = config['shutdownDrainSeconds'];
+    if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+      throw new FatalError(`Invalid "shutdownDrainSeconds": must be a positive integer, got ${JSON.stringify(val)}`);
+    }
+    shutdownDrainSeconds = val;
+  }
+
+  // trustedProxy (optional, but all three fields required if present)
+  let trustedProxy: TrustedProxyConfig | undefined;
+  if (config['trustedProxy'] !== undefined) {
+    const raw = config['trustedProxy'];
+    if (!isRecord(raw)) {
+      throw new FatalError('Invalid "trustedProxy": must be an object');
+    }
+    const identityHeader = raw['identityHeader'];
+    const proofHeader = raw['proofHeader'];
+    const proofSecret = raw['proofSecret'];
+
+    if (typeof identityHeader !== 'string' || identityHeader.length === 0) {
+      throw new FatalError('Invalid "trustedProxy": missing or empty "identityHeader"');
+    }
+    if (typeof proofHeader !== 'string' || proofHeader.length === 0) {
+      throw new FatalError('Invalid "trustedProxy": missing or empty "proofHeader"');
+    }
+    if (typeof proofSecret !== 'string' || proofSecret.length === 0) {
+      throw new FatalError('Invalid "trustedProxy": missing or empty "proofSecret"');
+    }
+
+    // Validate proofSecret file exists and is readable
+    try {
+      fs.accessSync(proofSecret, fs.constants.R_OK);
+    } catch {
+      throw new FatalError(`Invalid "trustedProxy.proofSecret": file "${proofSecret}" does not exist or is not readable`);
+    }
+
+    // Warn if file permissions are more permissive than 0600
+    try {
+      const stats = fs.statSync(proofSecret);
+      const mode = stats.mode & 0o777;
+      if (mode > 0o600) {
+        // Log warning but continue — we don't have a logger here, so use process.stderr
+        process.stderr.write(`Warning: "trustedProxy.proofSecret" file "${proofSecret}" has permissions ${mode.toString(8)}, recommended 0600 or stricter\n`);
+      }
+    } catch {
+      // If we can't stat, we already verified read access above, so continue
+    }
+
+    trustedProxy = { identityHeader, proofHeader, proofSecret };
+  }
+
+  // allowedEmails (optional)
+  let allowedEmails: string[] | undefined;
+  if (config['allowedEmails'] !== undefined) {
+    const raw = config['allowedEmails'];
+    if (!Array.isArray(raw)) {
+      throw new FatalError('Invalid "allowedEmails": must be an array');
+    }
+    allowedEmails = [];
+    for (let i = 0; i < raw.length; i++) {
+      const entry = raw[i] as unknown;
+      if (typeof entry !== 'string' || entry.length === 0) {
+        throw new FatalError(`Invalid "allowedEmails[${i}]": must be a non-empty string`);
+      }
+      if (entry.length > 254) {
+        throw new FatalError(`Invalid "allowedEmails[${i}]": must be at most 254 characters`);
+      }
+      allowedEmails.push(entry);
+    }
+  }
+
   // Build set of known "owner/name" for cron repo matching
   const repoKeys = new Set(repos.map(r => `${r.owner}/${r.name}`));
 
@@ -245,9 +357,18 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     sessionTimeout: { inactivityMinutes, maxLifetimeMinutes, gracePeriodAfterMergeSeconds },
     repos,
     cron: cronEntries,
+    controlPort,
+    bindPublic,
+    shutdownDrainSeconds,
   };
   if (defaultGithubToken !== undefined) {
     result.defaultGithubToken = defaultGithubToken;
+  }
+  if (trustedProxy !== undefined) {
+    result.trustedProxy = trustedProxy;
+  }
+  if (allowedEmails !== undefined) {
+    result.allowedEmails = allowedEmails;
   }
   return result;
 }
