@@ -272,35 +272,37 @@ function installShutdownHandlers(state: DaemonState): void {
       }
       state.log.info('Cron jobs stopped');
 
-      // 2. Stop HTTP server (stop accepting new requests)
+      // 2. Stop HTTP webhook server (stop accepting new webhooks, 5s drain)
       if (state.httpServer) {
         await new Promise<void>((resolve) => {
           state.httpServer!.close(() => resolve());
-          // Force close after 5s if connections linger
           setTimeout(() => resolve(), 5000);
         });
         state.log.info('HTTP server stopped');
       }
 
-      // 3. Close CLI server socket
+      // 3. shuttingDown flag already set above — web write endpoints return 503;
+      //    web reads + SSE still served during drain
+
+      // 4. Close CLI server socket
       if (state.cliServer) {
         await state.cliServer.shutdown();
         state.log.info('CLI server stopped');
       }
 
-      // 4. Wait up to 30s for in-flight events on the global queue
+      // 5. Wait up to 30s for in-flight events on the global queue
       if (state.globalQueue) {
         await state.globalQueue.shutdown(30);
         state.log.info('Event queue drained');
       }
 
-      // 5. Shutdown session manager (SIGTERM → 5s → SIGKILL active subprocesses, mark abandoned)
+      // 6. Shutdown session manager (drain busy sessions, then terminate)
       if (state.sessionMgr) {
         await state.sessionMgr.shutdown();
         state.log.info('Session manager shut down');
       }
 
-      // 6. Close web server listener and SSE broker
+      // 7. Close SSE broker and web server listener (5s drain for SSE connections)
       if (state.sseBroker) {
         state.sseBroker.shutdown();
         state.log.info('SSE broker shut down');
@@ -313,7 +315,7 @@ function installShutdownHandlers(state: DaemonState): void {
         state.log.info('Web server stopped');
       }
 
-      // 7. WAL checkpoint and close database
+      // 8. WAL checkpoint and close database
       if (state.db) {
         await state.db.shutdown();
         state.log.info('Database shut down');
@@ -402,6 +404,7 @@ async function main(): Promise<void> {
     acpSpawner: (sessionId: string) => adapter.spawn({ sessionId }),
     log,
     sessionTimeout: config.sessionTimeout,
+    shutdownDrainSeconds: config.shutdownDrainSeconds,
     github,
     verify: verifySession,
   });

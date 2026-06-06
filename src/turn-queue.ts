@@ -5,6 +5,8 @@ import type { Logger } from './log.js';
 export interface TurnQueue {
   enqueue(prompt: string, source: PromptSource, actor?: string): Promise<void>;
   pending(): number;
+  /** Returns true when a sendPrompt call is currently in-flight. */
+  busy(): boolean;
   drain(): Promise<void>;
 }
 
@@ -17,6 +19,7 @@ export function createTurnQueue(
   let current: Promise<void> = Promise.resolve();
   let pendingCount = 0;
   let drained = false;
+  let inFlight = false;
   const pendingRejects: Array<(err: Error) => void> = [];
 
   return {
@@ -39,7 +42,9 @@ export function createTurnQueue(
           }
 
           try {
+            inFlight = true;
             await acp.sendPrompt(prompt);
+            inFlight = false;
             sessionFiles.appendPrompt(sessionId, source, prompt);
             sessionFiles.appendStream(sessionId, {
               ts: new Date().toISOString(),
@@ -50,6 +55,7 @@ export function createTurnQueue(
             });
             resolve();
           } catch (err: unknown) {
+            inFlight = false;
             const errorMsg = err instanceof Error ? err.message : String(err);
             sessionFiles.appendStream(sessionId, {
               ts: new Date().toISOString(),
@@ -68,6 +74,10 @@ export function createTurnQueue(
 
     pending(): number {
       return pendingCount;
+    },
+
+    busy(): boolean {
+      return inFlight;
     },
 
     async drain(): Promise<void> {
