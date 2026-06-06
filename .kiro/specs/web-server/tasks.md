@@ -200,7 +200,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Use Hono's `bodyLimit` middleware with `maxSize: 65536`
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 16.1, 16.2, 16.3, 16.4_
 
-- [ ] 10. Static Web UI
+- [x] 10. Static Web UI
   - [x] 10.1a Create src/ui/logic.ts — pure ESM browser+Node importable logic
     - SSE event merge/dedup by `id` field (prevents duplicate display on reconnect)
     - Last-Event-ID resume logic (track highest seen ID, supply on reconnect)
@@ -244,7 +244,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Mobile: min 44×44px tap targets, 16px body font, single-column at ≤480px, 14px min log font at ≤768px, horizontally scrollable log container
     - _Requirements: 7.5, 7.7, 7.9, 11.1–11.7, 14.1–14.4_
 
-- [ ] 11. Integration: Wire web server into index.ts
+- [x] 11. Integration: Wire web server into index.ts
   - [x] 11.1 Wire createWebApp and startWebServer into daemon startup
     - Import and call `createWebApp` after the webhook server is created
     - Pass `SessionManager`, `SessionFiles`, `DaemonTokenStore`, `Logger`, config, and `SSEBroker` as dependencies
@@ -277,7 +277,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
 - [x] 13. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 14. Tier 2 integration tests
+- [x] 14. Tier 2 integration tests
   - [x] 14.1 Write Tier 2 test for inject lifecycle (Properties 14, 16, 17, 24)
     - **Property 14: Valid Inject Returns 202**
     - **Property 16: Write Operations Produce Audit Trail**
@@ -338,7 +338,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-token-embedding.test.ts` (extend 14.7)
     - **Validates: Requirements 2.5**
 
-- [ ] 15. Final checkpoint - Ensure all tests pass
+- [x] 15. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
