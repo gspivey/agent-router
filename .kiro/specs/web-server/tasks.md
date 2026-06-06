@@ -314,7 +314,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-auth-ordering.test.ts` (own file — not shared with 14.2)
     - **Validates: Requirements 16.4**
 
-  - [ ] 14.6 Write Tier 2 test for P27 session_ended invariant across ALL termination paths
+  - [x] 14.6 Write Tier 2 test for P27 session_ended invariant across ALL termination paths
     - **Property 27: Every Terminal Transition Emits session_ended**
     - Test each termination path: completion, failure, timeout_inactivity, timeout_max_lifetime, killed (web), killed (CLI), shutdown
     - Verify exactly one `session_ended` entry exists per terminated session
