@@ -1,13 +1,14 @@
 /**
- * Tier 2 test: Token-embedding security (task 14.7)
+ * Tier 2 test: Token-embedding security (tasks 14.7, 14.9)
  *
  * Properties tested:
  * - GET / embeds daemon token in HTML when bound to loopback (Req 7.2)
  * - GET / does NOT embed daemon token when bindPublic: true (Req 7.3)
  * - GET /ui follows same embedding rules as GET /
  * - Token is not present in HTML when proxy proof header is sent (Req 7.3)
+ * - After token rotation (daemon restart), old token → 401 (Req 2.5)
  *
- * Validates: Requirements 7.2, 7.3
+ * Validates: Requirements 2.5, 7.2, 7.3
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -220,6 +221,58 @@ describe('Token-embedding security (task 14.7)', () => {
       expect(res.status).toBe(200);
       const html = await res.text();
       expect(html).toContain(`window.__DAEMON_TOKEN = '${token}'`);
+    });
+  });
+
+  describe('token rotation (task 14.9, Req 2.5)', () => {
+    it('old token returns 401 after rotation', async () => {
+      startApp({ bindPublic: false });
+      const oldToken = tokenStore.read();
+
+      // Authenticated request with current token succeeds
+      const res1 = await fetch(`http://127.0.0.1:${controlPort}/sessions`, {
+        headers: { Authorization: `Bearer ${oldToken}` },
+      });
+      expect(res1.status).toBe(200);
+
+      // Rotate token (simulates daemon restart generating a new token)
+      tokenStore.rotate();
+      const newToken = tokenStore.read();
+      expect(newToken).not.toBe(oldToken);
+
+      // Old token now returns 401
+      const res2 = await fetch(`http://127.0.0.1:${controlPort}/sessions`, {
+        headers: { Authorization: `Bearer ${oldToken}` },
+      });
+      expect(res2.status).toBe(401);
+      const body = await res2.json() as { error: { code: string } };
+      expect(body.error.code).toBe('unauthorized');
+
+      // New token works
+      const res3 = await fetch(`http://127.0.0.1:${controlPort}/sessions`, {
+        headers: { Authorization: `Bearer ${newToken}` },
+      });
+      expect(res3.status).toBe(200);
+    });
+
+    it('embedded token in HTML reflects rotated value', async () => {
+      startApp({ bindPublic: false });
+      const oldToken = tokenStore.read();
+
+      // Before rotation: HTML embeds the original token
+      const res1 = await fetch(`http://127.0.0.1:${controlPort}/`);
+      const html1 = await res1.text();
+      expect(html1).toContain(`window.__DAEMON_TOKEN = '${oldToken}'`);
+
+      // Rotate
+      tokenStore.rotate();
+      const newToken = tokenStore.read();
+
+      // After rotation: HTML embeds the new token
+      const res2 = await fetch(`http://127.0.0.1:${controlPort}/`);
+      const html2 = await res2.text();
+      expect(html2).toContain(`window.__DAEMON_TOKEN = '${newToken}'`);
+      expect(html2).not.toContain(oldToken);
     });
   });
 });
