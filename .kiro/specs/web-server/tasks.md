@@ -274,7 +274,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Verify all timeout paths (inactivity, max_lifetime) append `session_ended` before removing from registry
     - _Requirements: 6.8, 15.3_
 
-- [ ] 13. Checkpoint - Ensure all tests pass
+- [x] 13. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 14. Tier 2 integration tests
@@ -286,7 +286,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-inject-lifecycle.test.ts`
     - **Validates: Requirements 8.1, 8.2, 8.4, 12.1, 12.2, 12.3**
 
-  - [ ] 14.2 Write Tier 2 test for kill and interrupt (Properties 6, 18, 19, 25)
+  - [x] 14.2 Write Tier 2 test for kill and interrupt (Properties 6, 18, 19, 25)
     - **Property 6: Terminal Sessions Are Immutable**
     - **Property 18: Kill Produces Correct Terminal State**
     - **Property 19: Interrupt Preserves Active Status**
