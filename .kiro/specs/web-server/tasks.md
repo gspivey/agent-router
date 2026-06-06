@@ -295,7 +295,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-kill-interrupt.test.ts`
     - **Validates: Requirements 9.2, 10.2, 10.3, 10.6, 10.7, 12.5**
 
-  - [ ] 14.3 Write Tier 2 test for SSE full lifecycle (Properties 11, 12, 13)
+  - [x] 14.3 Write Tier 2 test for SSE full lifecycle (Properties 11, 12, 13)
     - **Property 11: SSE Event IDs Are Monotonic**
     - **Property 12: SSE Last-Event-ID Resumption**
     - **Property 13: SSE Session-Ended Closes Connection**
