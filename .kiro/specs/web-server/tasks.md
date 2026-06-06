@@ -278,7 +278,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 14. Tier 2 integration tests
-  - [ ] 14.1 Write Tier 2 test for inject lifecycle (Properties 14, 16, 17, 24)
+  - [x] 14.1 Write Tier 2 test for inject lifecycle (Properties 14, 16, 17, 24)
     - **Property 14: Valid Inject Returns 202**
     - **Property 16: Write Operations Produce Audit Trail**
     - **Property 17: Failed Injection Logged**
