@@ -1,0 +1,20 @@
+{
+  "name": "slow-multi-prompt",
+  "steps": [
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": {
+            "type": "message",
+            "content": "Processing prompt..."
+          }
+        }
+      ],
+      "result": { "ok": true },
+      "delayMs": 200
+    }
+  ]
+}
