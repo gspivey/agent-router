@@ -129,6 +129,8 @@ export function createSessionManager(deps: {
   acpSpawner: (sessionId: string) => ACPClient;
   log: Logger;
   sessionTimeout?: SessionTimeoutConfig;
+  /** Seconds to wait for busy sessions during shutdown (default 60). */
+  shutdownDrainSeconds?: number;
   /**
    * GitHub client used by mergePR. Open-PR validation in completeSession
    * is delegated to `verify` when wired. Optional — when omitted, mergePR
@@ -149,6 +151,7 @@ export function createSessionManager(deps: {
   const github = deps.github;
   const verify = deps.verify;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
+  const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
   const maxLifetimeMs = timeout.maxLifetimeMinutes * 60 * 1000;
   const gracePeriodMs = timeout.gracePeriodAfterMergeSeconds * 1000;
@@ -244,16 +247,6 @@ export function createSessionManager(deps: {
 
         if (verifiedTerminal === null) {
           try {
-            sessionFiles.updateMeta(sessionId, {
-              status: 'failed',
-              completed_at: Math.floor(Date.now() / 1000),
-              termination_reason: 'timeout_inactivity',
-            });
-          } catch {
-            // Meta may already be in terminal state
-          }
-
-          try {
             sessionFiles.appendStream(sessionId, {
               ts: new Date().toISOString(),
               source: 'router',
@@ -262,6 +255,16 @@ export function createSessionManager(deps: {
             });
           } catch {
             // Best effort
+          }
+
+          try {
+            sessionFiles.updateMeta(sessionId, {
+              status: 'failed',
+              completed_at: Math.floor(Date.now() / 1000),
+              termination_reason: 'timeout_inactivity',
+            });
+          } catch {
+            // Meta may already be in terminal state
           }
         }
 
@@ -371,31 +374,31 @@ export function createSessionManager(deps: {
           }
 
           if (completionFlags.has(sessionId)) {
-            // Agent completed normally
-            sessionFiles.updateMeta(sessionId, {
-              status: 'completed',
-              completed_at: Math.floor(Date.now() / 1000),
-              termination_reason: 'completed',
-            });
+            // Agent completed normally — emit session_ended BEFORE terminal meta
             sessionFiles.appendStream(sessionId, {
               ts: new Date().toISOString(),
               source: 'router',
               type: 'session_ended',
               reason: 'completed',
             });
+            sessionFiles.updateMeta(sessionId, {
+              status: 'completed',
+              completed_at: Math.floor(Date.now() / 1000),
+              termination_reason: 'completed',
+            });
             log.info('Session completed', { sessionId });
           } else {
-            // Subprocess exited without completion — treat as failure
-            sessionFiles.updateMeta(sessionId, {
-              status: 'failed',
-              completed_at: Math.floor(Date.now() / 1000),
-              termination_reason: 'failed',
-            });
+            // Subprocess exited without completion — emit session_ended BEFORE terminal meta
             sessionFiles.appendStream(sessionId, {
               ts: new Date().toISOString(),
               source: 'router',
               type: 'session_ended',
               reason: 'failed',
+            });
+            sessionFiles.updateMeta(sessionId, {
+              status: 'failed',
+              completed_at: Math.floor(Date.now() / 1000),
+              termination_reason: 'failed',
             });
             log.warn('Session failed — subprocess exited without completion', { sessionId });
           }
@@ -424,17 +427,7 @@ export function createSessionManager(deps: {
         maxLifetimeMinutes: timeout.maxLifetimeMinutes,
       });
 
-      // Record reason in meta before kill
-      try {
-        sessionFiles.updateMeta(sessionId, {
-          status: 'failed',
-          completed_at: Math.floor(Date.now() / 1000),
-          termination_reason: 'timeout_max_lifetime',
-        });
-      } catch {
-        // Meta may already be in terminal state
-      }
-
+      // Emit session_ended BEFORE writing terminal meta
       try {
         sessionFiles.appendStream(sessionId, {
           ts: new Date().toISOString(),
@@ -444,6 +437,16 @@ export function createSessionManager(deps: {
         });
       } catch {
         // Best effort
+      }
+
+      try {
+        sessionFiles.updateMeta(sessionId, {
+          status: 'failed',
+          completed_at: Math.floor(Date.now() / 1000),
+          termination_reason: 'timeout_max_lifetime',
+        });
+      } catch {
+        // Meta may already be in terminal state
       }
 
       // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
@@ -675,6 +678,18 @@ export function createSessionManager(deps: {
       // Mark completion so monitorSubprocessExit knows this was intentional
       completionFlags.add(sessionId);
 
+      // Append session_ended stream entry BEFORE writing terminal meta
+      try {
+        sessionFiles.appendStream(sessionId, {
+          ts: new Date().toISOString(),
+          source: 'router',
+          type: 'session_ended',
+          reason,
+        });
+      } catch {
+        // Best effort
+      }
+
       // Write terminal state from the agent's reason only if the verifier
       // didn't already write one.
       if (!verifierWroteTerminal) {
@@ -688,18 +703,6 @@ export function createSessionManager(deps: {
         } catch {
           // Meta may already be in terminal state
         }
-      }
-
-      // Append stream entry
-      try {
-        sessionFiles.appendStream(sessionId, {
-          ts: new Date().toISOString(),
-          source: 'router',
-          type: 'session_ended',
-          reason,
-        });
-      } catch {
-        // Best effort
       }
 
       // Suppress inactivity timer — replace with grace period timer
@@ -752,18 +755,7 @@ export function createSessionManager(deps: {
       // Kill the subprocess: SIGTERM → 5s → SIGKILL
       await handle.acp.kill();
 
-      // Update meta.json to abandoned
-      try {
-        sessionFiles.updateMeta(sessionId, {
-          status: 'abandoned',
-          completed_at: Math.floor(Date.now() / 1000),
-          termination_reason: reason,
-        });
-      } catch {
-        // Meta may already be in terminal state if subprocess exited concurrently
-      }
-
-      // Append session_ended stream entry
+      // Append session_ended stream entry BEFORE writing terminal meta
       try {
         sessionFiles.appendStream(sessionId, {
           ts: new Date().toISOString(),
@@ -774,6 +766,17 @@ export function createSessionManager(deps: {
         });
       } catch {
         // Best effort
+      }
+
+      // Update meta.json to abandoned
+      try {
+        sessionFiles.updateMeta(sessionId, {
+          status: 'abandoned',
+          completed_at: Math.floor(Date.now() / 1000),
+          termination_reason: reason,
+        });
+      } catch {
+        // Meta may already be in terminal state if subprocess exited concurrently
       }
 
       // Shutdown the per-session event queue
@@ -808,15 +811,46 @@ export function createSessionManager(deps: {
       }
       graceTimers.clear();
 
-      // Update all active sessions to abandoned and terminate subprocesses
-      const terminationPromises: Promise<void>[] = [];
+      if (activeSessions.length === 0) {
+        log.info('Session manager shutdown complete');
+        return;
+      }
 
+      // Separate idle-active from busy sessions
+      const idle: SessionHandle[] = [];
+      const busy: SessionHandle[] = [];
       for (const handle of activeSessions) {
+        if (handle.turnQueue.busy() || handle.turnQueue.pending() > 0) {
+          busy.push(handle);
+        } else {
+          idle.push(handle);
+        }
+      }
+
+      log.info('Shutdown: session classification', {
+        idle: idle.length,
+        busy: busy.length,
+      });
+
+      // Terminate idle sessions immediately
+      const idlePromises: Promise<void>[] = [];
+      for (const handle of idle) {
         const { sessionId } = handle;
         registry.remove(sessionId);
         completionFlags.delete(sessionId);
 
-        // Update meta to abandoned
+        // Emit session_ended BEFORE writing terminal meta
+        try {
+          sessionFiles.appendStream(sessionId, {
+            ts: new Date().toISOString(),
+            source: 'router',
+            type: 'session_ended',
+            reason: 'shutdown',
+          });
+        } catch {
+          // Best effort
+        }
+
         try {
           sessionFiles.updateMeta(sessionId, {
             status: 'abandoned',
@@ -827,21 +861,104 @@ export function createSessionManager(deps: {
           // Meta may already be in terminal state
         }
 
-        // Kill subprocess
-        terminationPromises.push(
+        idlePromises.push(
           handle.acp.kill().catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
-            log.error('Failed to kill session during shutdown', { sessionId, error: msg });
+            log.error('Failed to kill idle session during shutdown', { sessionId, error: msg });
           }),
         );
+        idlePromises.push(handle.eventQueue.shutdown(5).catch(() => {}));
+      }
+      await Promise.all(idlePromises);
 
-        // Shutdown per-session event queue
-        terminationPromises.push(
-          handle.eventQueue.shutdown(5).catch(() => {}),
-        );
+      if (busy.length === 0) {
+        log.info('Session manager shutdown complete');
+        return;
       }
 
-      await Promise.all(terminationPromises);
+      // Wait up to shutdownDrainSeconds for busy sessions to finish their current turn
+      log.info('Waiting for busy sessions to drain', {
+        count: busy.length,
+        budgetSeconds: shutdownDrainSeconds,
+      });
+
+      const drainDeadline = Date.now() + shutdownDrainSeconds * 1000;
+
+      // Drain each busy session's turn queue (rejects pending, waits for in-flight)
+      const drainPromises = busy.map((handle) =>
+        handle.turnQueue.drain().catch(() => {}),
+      );
+
+      const budgetTimeout = new Promise<'timeout'>((resolve) =>
+        setTimeout(() => resolve('timeout'), shutdownDrainSeconds * 1000),
+      );
+
+      const drainResult = await Promise.race([
+        Promise.all(drainPromises).then(() => 'drained' as const),
+        budgetTimeout,
+      ]);
+
+      if (drainResult === 'drained') {
+        log.info('All busy sessions drained within budget');
+      } else {
+        const remaining = busy.filter((h) => h.turnQueue.busy());
+        log.warn('Drain budget expired, force-killing remaining sessions', {
+          remainingCount: remaining.length,
+        });
+      }
+
+      // Terminate all busy sessions (either they drained or budget expired)
+      const busyPromises: Promise<void>[] = [];
+      for (const handle of busy) {
+        const { sessionId } = handle;
+        registry.remove(sessionId);
+        completionFlags.delete(sessionId);
+
+        // Check if the session already reached terminal state during drain
+        try {
+          const meta = sessionFiles.readMeta(sessionId);
+          if (meta.status !== 'active') {
+            // Already terminal — subprocess may have exited during drain
+            busyPromises.push(handle.acp.kill().catch(() => {}));
+            busyPromises.push(handle.eventQueue.shutdown(5).catch(() => {}));
+            continue;
+          }
+        } catch {
+          // Can't read meta — proceed with termination anyway
+        }
+
+        // Emit session_ended BEFORE writing terminal meta
+        try {
+          sessionFiles.appendStream(sessionId, {
+            ts: new Date().toISOString(),
+            source: 'router',
+            type: 'session_ended',
+            reason: 'shutdown',
+          });
+        } catch {
+          // Best effort
+        }
+
+        try {
+          sessionFiles.updateMeta(sessionId, {
+            status: 'abandoned',
+            completed_at: Math.floor(Date.now() / 1000),
+            termination_reason: 'shutdown',
+          });
+        } catch {
+          // Meta may already be in terminal state
+        }
+
+        busyPromises.push(
+          handle.acp.kill().catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.error('Failed to kill busy session during shutdown', { sessionId, error: msg });
+          }),
+        );
+        busyPromises.push(handle.eventQueue.shutdown(5).catch(() => {}));
+      }
+
+      await Promise.all(busyPromises);
       log.info('Session manager shutdown complete');
     },
   };

@@ -254,8 +254,8 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Log control port binding info
     - _Requirements: 1.1, 1.2, 1.5_
 
-- [ ] 12. Graceful shutdown modification
-  - [ ] 12.1 Modify shutdown sequence in index.ts for drain-to-completion budget
+- [x] 12. Graceful shutdown modification
+  - [x] 12.1 Modify shutdown sequence in index.ts for drain-to-completion budget
     - Set `shuttingDown` flag early so web write endpoints return 503
     - Distinguish idle-active sessions (no turn in-flight) from busy sessions during drain
     - Idle-active sessions: terminate immediately (SIGTERM → 5s → SIGKILL)
@@ -267,7 +267,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Maintain session_ended invariant: every path appends entry before writing terminal meta
     - _Requirements: 1.5, 15.1, 15.2, 15.3, 15.4, 15.5, 15.6_
 
-  - [ ] 12.2 Audit and fix session_ended invariant (Property 27) across all terminal paths
+  - [x] 12.2 Audit and fix session_ended invariant (Property 27) across all terminal paths
     - Audit ALL existing terminal paths in session-mgr.ts: completion, failure, timeout_inactivity, timeout_max_lifetime, killed (CLI and web), and shutdown-abandon (the site at ~line 827 where shutdown writes `status: 'abandoned'`)
     - Ensure each path emits exactly one `session_ended` stream.log entry before writing terminal meta.json
     - Specifically verify the shutdown-abandon path appends `session_ended` with `reason: "shutdown"` (currently may be missing for some paths)
