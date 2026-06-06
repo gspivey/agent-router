@@ -327,7 +327,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-token-embedding.test.ts`
     - **Validates: Requirements 7.2, 7.3**
 
-  - [ ] 14.8 Write Tier 2 test for bind-address verification
+  - [x] 14.8 Write Tier 2 test for bind-address verification
     - Verify loopback-default: server binds to 127.0.0.1 with default config (P1)
     - Verify `bindPublic: true` → server binds to 0.0.0.0
     - Test file: `test/tier2/web-bind-address.test.ts`
