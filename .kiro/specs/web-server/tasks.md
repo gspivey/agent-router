@@ -308,7 +308,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-shutdown.test.ts`
     - **Validates: Requirements 15.1, 15.3, 15.5**
 
-  - [ ] 14.5 Write Tier 2 test for auth-before-resource (Property 26)
+  - [x] 14.5 Write Tier 2 test for auth-before-resource (Property 26)
     - **Property 26: Authentication Precedes Resource Resolution**
     - Verify unauthenticated requests always get 401, never 404/409
     - Test file: `test/tier2/web-auth-ordering.test.ts` (own file — not shared with 14.2)
