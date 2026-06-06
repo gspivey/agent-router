@@ -321,7 +321,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-session-ended-invariant.test.ts`
     - **Validates: Requirements 6.8, 15.3**
 
-  - [ ] 14.7 Write Tier 2 test for token-embedding security
+  - [x] 14.7 Write Tier 2 test for token-embedding security
     - Test that served HTML at GET / contains the daemon token when bound to loopback
     - Test that served HTML does NOT contain the daemon token when `bindPublic: true`
     - Test file: `test/tier2/web-token-embedding.test.ts`
