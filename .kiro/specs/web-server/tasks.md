@@ -333,7 +333,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-bind-address.test.ts`
     - **Validates: Requirements 1.1, 1.2**
 
-  - [ ] 14.9 Write Tier 2 test for token rotation (Req 2.5)
+  - [x] 14.9 Write Tier 2 test for token rotation (Req 2.5)
     - After a daemon restart (new token), old token → 401
     - Test file: `test/tier2/web-token-embedding.test.ts` (extend 14.7)
     - **Validates: Requirements 2.5**
