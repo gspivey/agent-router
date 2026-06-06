@@ -302,7 +302,7 @@ This plan implements a localhost-bound HTTP control plane for the agent-router d
     - Test file: `test/tier2/web-sse.test.ts`
     - **Validates: Requirements 6.2, 6.8, 6.10**
 
-  - [ ] 14.4 Write Tier 2 test for graceful shutdown (Properties 20, 21)
+  - [x] 14.4 Write Tier 2 test for graceful shutdown (Properties 20, 21)
     - **Property 20: Graceful Shutdown Leaves No Active Sessions**
     - **Property 21: Drain Phase Request Routing**
     - Test file: `test/tier2/web-shutdown.test.ts`
