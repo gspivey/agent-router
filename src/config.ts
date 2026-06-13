@@ -66,7 +66,7 @@ export function resolveEnvValues(raw: Record<string, unknown>): Record<string, u
       if (envValue === undefined) {
         throw new FatalError(`Environment variable "${varName}" is not set (referenced by config key "${key}")`);
       }
-      result[key] = envValue;
+      result[key] = envValue.trim();
     } else if (Array.isArray(value)) {
       result[key] = value.map((item: unknown) =>
         isRecord(item) ? resolveEnvValues(item) : item
