@@ -568,16 +568,8 @@ export function createSessionManager(deps: {
         throw new Error(`No active session found: ${sessionId}`);
       }
 
-      // Insert/update session-PR mapping in DB (ignore if already exists)
-      try {
-        db.insertSession(repo, prNumber, sessionId);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes('UNIQUE constraint failed')) {
-          throw err;
-        }
-        // Already registered — that's fine
-      }
+      // Upsert session-PR mapping in DB (re-registration from a new session wins)
+      db.insertSession(repo, prNumber, sessionId);
 
       // Read current meta and append PR entry
       const meta = sessionFiles.readMeta(sessionId);

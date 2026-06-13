@@ -151,7 +151,10 @@ export function initDatabase(dbPath: string): Database {
     created_at: number;
   }>(
     `INSERT INTO sessions (repo, pr_number, session_id, created_at)
-     VALUES (@repo, @pr_number, @session_id, @created_at)`
+     VALUES (@repo, @pr_number, @session_id, @created_at)
+     ON CONFLICT(repo, pr_number) DO UPDATE SET
+       session_id = excluded.session_id,
+       last_waked_at = NULL`
   );
 
   const acquireWakeSlotStmt = db.prepare<{

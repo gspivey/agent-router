@@ -33,21 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 2. Idempotent PR registration
-
-Change `registerPR` in `src/db.ts` from a plain `INSERT` to an upsert (`INSERT … ON CONFLICT
-(repo, pr_number) DO UPDATE` or `INSERT OR REPLACE`) so a new session can claim a `(repo, pr)`
-already held by a completed or dead session. Today the `INSERT` fails the `UNIQUE(repo,
-pr_number)` constraint, `meta.json` updates but the SQLite row still points at the old
-session, and inbound webhooks route to the void. Add a Tier 1 test (re-register from a second
-session wins) and a Tier 2 test (webhook for the PR routes to the new session after
-re-registration).
-
-- Spec: `BACKLOG.md § P2.13`
-- [ ] Complete · PR: —
-
----
-
 ### 3. Allow cron re-fire after an abandoned session
 
 Relax the clean-state guard in the cron-fire handler (`handleCronFire`, `src/index.ts` ~line
@@ -289,6 +274,21 @@ Tier 2-test: two simultaneous sessions on one repo get isolated worktrees and bo
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 2. Idempotent PR registration
+
+Change `registerPR` in `src/db.ts` from a plain `INSERT` to an upsert (`INSERT … ON CONFLICT
+(repo, pr_number) DO UPDATE` or `INSERT OR REPLACE`) so a new session can claim a `(repo, pr)`
+already held by a completed or dead session. Today the `INSERT` fails the `UNIQUE(repo,
+pr_number)` constraint, `meta.json` updates but the SQLite row still points at the old
+session, and inbound webhooks route to the void. Add a Tier 1 test (re-register from a second
+session wins) and a Tier 2 test (webhook for the PR routes to the new session after
+re-registration).
+
+- Spec: `BACKLOG.md § P2.13`
+- [x] Complete · PR: #37
+
+---
 
 ### 1. Trim environment variable values
 
