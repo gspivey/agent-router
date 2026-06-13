@@ -86,6 +86,18 @@ describe('resolveEnvValues', () => {
     expect(result.val).toBe('');
   });
 
+  it('trims surrounding whitespace from resolved env values', () => {
+    setEnv('PADDED_TOKEN', '  ghp_abc123\n');
+    const result = resolveEnvValues({ token: 'ENV:PADDED_TOKEN' });
+    expect(result.token).toBe('ghp_abc123');
+  });
+
+  it('trims a trailing newline typical of systemd EnvironmentFile', () => {
+    setEnv('GITHUB_TOKEN_TEST', 'ghp_realtoken\n');
+    const result = resolveEnvValues({ webhookSecret: 'ENV:GITHUB_TOKEN_TEST' });
+    expect(result.webhookSecret).toBe('ghp_realtoken');
+  });
+
   it('includes the missing variable name in the FatalError message', () => {
     deleteEnv('XYZ_MISSING');
     try {
