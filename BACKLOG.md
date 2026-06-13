@@ -407,18 +407,9 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.10 — Trim environment variable values
+### P2.10 — Trim environment variable values ✅ (PR #36)
 
-**New (surfaced 2026-06; operational footgun).**
-
-**Problem.** `resolveEnvValues` in `src/config.ts` assigns env values verbatim. A trailing newline or space in a systemd `EnvironmentFile` entry (easy to introduce, invisible in an editor) silently corrupts a secret — e.g. a `GITHUB_TOKEN` with a trailing `\n` produces opaque 401s with no hint at the cause.
-
-**Mini spec.**
-
-- In `resolveEnvValues`, `.trim()` the resolved env value before assigning it.
-- Tier 1 test: a value with surrounding whitespace resolves trimmed.
-
-**Acceptance.** A `GITHUB_TOKEN` env value with a trailing newline resolves to the bare token.
+**Done.**
 
 ---
 

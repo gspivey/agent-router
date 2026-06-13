@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 1. Trim environment variable values
-
-Add `.trim()` to resolved environment-variable values in `resolveEnvValues` (`src/config.ts`,
-~line 69) so trailing whitespace from a systemd `EnvironmentFile` can no longer silently
-corrupt a secret (a trailing newline on `GITHUB_TOKEN` produces opaque 401s). A focused Tier 1
-test feeds a value with surrounding whitespace and asserts the resolved value is trimmed. This
-is the foundation item — small, self-contained, and proves the self-build loop end to end.
-
-- Spec: `BACKLOG.md § P2.10`
-- [ ] Complete · PR: —
-
----
-
 ### 2. Idempotent PR registration
 
 Change `registerPR` in `src/db.ts` from a plain `INSERT` to an upsert (`INSERT … ON CONFLICT
@@ -303,5 +290,13 @@ Tier 2-test: two simultaneous sessions on one repo get isolated worktrees and bo
 
 Items move here after they merge to `development`.
 
-*(none yet — web-server and earlier specs predate this queue; see the git history and
-`BACKLOG.md` "What's done" for prior work.)*
+### 1. Trim environment variable values
+
+Add `.trim()` to resolved environment-variable values in `resolveEnvValues` (`src/config.ts`,
+~line 69) so trailing whitespace from a systemd `EnvironmentFile` can no longer silently
+corrupt a secret (a trailing newline on `GITHUB_TOKEN` produces opaque 401s). A focused Tier 1
+test feeds a value with surrounding whitespace and asserts the resolved value is trimmed. This
+is the foundation item — small, self-contained, and proves the self-build loop end to end.
+
+- Spec: `BACKLOG.md § P2.10`
+- [x] Complete · PR: #36
