@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 3. Allow cron re-fire after an abandoned session
-
-Relax the clean-state guard in the cron-fire handler (`handleCronFire`, `src/index.ts` ~line
-191) so it permits a last session whose status is `abandoned`, not only `completed`. An
-`abandoned` status means the daemon restarted mid-session (operator action), not that the
-agent failed — so it must not block the next scheduled run. Add a Tier 1 test that the guard
-allows re-fire after `abandoned` and still blocks after a genuine `failed`.
-
-- Spec: `BACKLOG.md § P1.8`
-- [ ] Complete · PR: —
-
----
-
 ### 4. Reject non-JSON webhooks cleanly
 
 Make the `/webhook` handler in `src/server.ts` reject a request whose `Content-Type` is not
@@ -393,6 +380,18 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 3. Allow cron re-fire after an abandoned session
+
+Relax the clean-state guard in the cron-fire handler (`handleCronFire`, `src/index.ts`) so it
+permits a last session whose status is `abandoned`, not only `completed`. An `abandoned` status
+means the daemon restarted mid-session (operator action), not that the agent failed — so it
+must not block the next scheduled run.
+
+- Spec: `BACKLOG.md § P1.8`
+- [x] Complete · PR: #41
+
+---
 
 ### 2. Idempotent PR registration
 
