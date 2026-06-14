@@ -170,6 +170,8 @@ function setupCronJobs(deps: {
   return tasks;
 }
 
+import { canCronRefire } from './cron-guard.js';
+
 async function handleCronFire(
   cronEntry: AgentRouterConfig['cron'][number],
   sessionMgr: SessionManager,
@@ -188,11 +190,11 @@ async function handleCronFire(
   const lastTerminal = sessionFiles
     .listSessions()
     .find((s) => s.repo === cronEntry.repo && s.status !== 'active');
-  if (lastTerminal !== undefined && lastTerminal.status !== 'completed') {
+  if (!canCronRefire(lastTerminal)) {
     cronLog.warn('Last session did not end cleanly, skipping cron trigger — manual re-trigger required', {
-      last_session_id: lastTerminal.session_id,
-      last_status: lastTerminal.status,
-      last_termination_reason: lastTerminal.termination_reason ?? null,
+      last_session_id: lastTerminal!.session_id,
+      last_status: lastTerminal!.status,
+      last_termination_reason: lastTerminal!.termination_reason ?? null,
     });
     return;
   }
