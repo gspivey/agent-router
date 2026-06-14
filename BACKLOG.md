@@ -239,6 +239,30 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P1.9 — Rate-limit queues (delays) wake delivery instead of dropping
+
+**New (surfaced 2026-06; breaks the core wake loop under cron — high severity).**
+
+**Problem.** The per-PR rate limiter is implemented as a *drop*, not a *defer*. In `evaluateWakePolicy` (`src/router.ts`), `db.tryAcquireWakeSlot(repo, pr, rateLimit.perPRSeconds, now)` returns `false` whenever a wake for that `(repo, pr)` happened less than `perPRSeconds` (default 60) ago; the decision becomes `rate_limited` / `wake: false`, and `createEventProcessor` (`src/index.ts`) calls `updateEventProcessed(id, false)` and returns — the event is discarded. When the discarded event is the terminal `check_run.completed` the session was waiting on, the session never wakes and times out. Observed live: session `eedb2b25` timed out waiting for CI; `6675adac` stayed stuck until manually poked.
+
+**Why it matters.** This silently defeats the autonomous loop: CI finishing right after any other wake (a push, a prior check, a comment) inside the 60s window is dropped, so the session waits on CI forever. It is also why agents start polling `gh pr checks` — a direct violation of the no-poll contract in `prompts/agent-router.md` — because the wake they were promised never arrives. The 60s cooldown is meant to *debounce* a burst of webhooks into one wake, but dropping discards the *last* event of the burst, which is usually the most important one.
+
+**Approach.** Convert rate-limiting from drop-the-event to defer-the-delivery. When an event would be rate-limited, persist it as a single coalesced *pending wake* for `(repo, pr)` and deliver it once the cooldown elapses. Coalesce to at most one pending wake per PR — a newer event during the window replaces the pending payload (freshest CI/comment state wins). A bounded daemon sweeper delivers due pending wakes, reusing the existing inject path. This is the root-cause fix that ROADMAP item 23 (CI-reconciliation watchdog) only works around; with this in place the watchdog becomes a pure backstop for genuinely-never-delivered webhooks.
+
+**Mini spec.**
+
+- New `pending_wakes` table in `src/db.ts`: `(repo, pr_number)` unique, plus `event_id`, `deferred_until` (epoch seconds), `created_at`. UPSERT on `(repo, pr_number)` so the newest event coalesces over any pending one.
+- `evaluateWakePolicy` returns the cooldown boundary alongside a `rate_limited` decision (e.g. `deferUntil = lastWakedAt + perPRSeconds`) so the caller can enqueue rather than recompute. Keep the pure rate-limit logic exported and unit-testable.
+- `createEventProcessor` (`src/index.ts`): on `rate_limited`, enqueue/replace the pending wake instead of dropping. The pure drop path remains only when there is genuinely nothing to defer.
+- Add a bounded sweeper (same cadence pattern as `markStaleEvents`) that selects `pending_wakes` with `deferred_until <= now`, re-acquires the wake slot, composes the prompt from the stored event, injects via `sessionMgr.injectPrompt(..., 'webhook')`, then deletes the row. Best-effort: if the session is gone, drop cleanly.
+- Clear a PR's pending wake when its session ends (terminate/complete path), so deferred wakes never fire into a dead session.
+- Optional config under `rateLimit`: `queue: boolean` (default `true`) to preserve the old drop behavior; coalescing stays fixed at one pending wake per PR. Keep additions minimal.
+- Tier 1: pure `defer-until` computation (given `lastWakedAt`, `now`, `perPRSeconds`) and the coalescing rule (newest event replaces pending). Tier 2: an event arriving inside the cooldown is delivered after the window (not dropped); a burst of N events inside the window yields exactly one wake after the window carrying the latest payload; a pending wake is cleared on session end; a deferred wake to a dead session is dropped without error.
+
+**Acceptance.** An event that arrives within the per-PR cooldown is delivered to its session once the cooldown elapses, never silently dropped. A session waiting on a `check_run.completed` that lands during the cooldown still wakes, and no agent needs to poll `gh pr checks`.
+
+---
+
 ## Priority 2: Quality and bug fixes
 
 ### P2.0 — Token expiry alerting
