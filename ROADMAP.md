@@ -33,6 +33,28 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 30. Rate-limit queues wake delivery instead of dropping events
+
+Stop the per-PR rate limiter from dropping webhook events during its cooldown window. Today
+`evaluateWakePolicy` (`src/router.ts`) returns `rate_limited` / `wake: false` when
+`tryAcquireWakeSlot` finds a wake happened less than `rateLimit.perPRSeconds` (default 60) ago,
+and the event processor (`src/index.ts`) drops the event — so a `check_run.completed` that lands
+during the cooldown is lost and the session waits on CI forever (observed: sessions `eedb2b25`,
+`6675adac`), which is why agents resort to polling `gh pr checks` against their no-poll contract.
+Instead, *defer* a rate-limited event: persist one coalesced pending wake per `(repo, pr)` (newest
+payload wins) in a new `pending_wakes` table (`src/db.ts`) with `deferred_until = last_waked_at +
+perPRSeconds`, and add a bounded daemon sweeper that injects the deferred wake once the window
+elapses (reusing the existing inject path and re-acquiring the slot), then clears the row. Clear a
+PR's pending wake on session end; drop cleanly if the session is gone. This is the root-cause fix
+that item 23's watchdog only works around. Tier 1 (defer-until + coalescing pure logic) + Tier 2
+(an event during the cooldown is delivered after the window; a burst yields exactly one later wake
+with the latest payload).
+
+- Spec: `BACKLOG.md § P1.9`
+- [ ] Complete · PR: —
+
+---
+
 ### 4. Reject non-JSON webhooks cleanly
 
 Make the `/webhook` handler in `src/server.ts` reject a request whose `Content-Type` is not
