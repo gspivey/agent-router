@@ -260,6 +260,8 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ### P2.1 — Session persistence across daemon restarts
 
+> **Folded into `.kiro/specs/operator-controls/` (group 3, tasks 3.1/3.2) and ROADMAP item 19.** This mini-spec is retained for history; work it from the Kiro spec, not from here.
+
 **Maps to PRODUCT.md "Open Questions": "Session resumption across daemon restarts."** Pulled forward to P2 because we hit this twice tonight.
 
 **Problem.** Sessions are in-memory. `systemctl restart` kills them all. We lost two sessions tonight to deployment restarts; the agents had local commits that survived but the session state was gone.

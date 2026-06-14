@@ -251,8 +251,9 @@ ACP `session/load(kiro_session_id)` (already present at `src/acp.ts`) for each s
 marked `active`: keep it active if load succeeds, otherwise mark `terminated_by_restart` (new
 closed-union reason). This makes restarts non-destructive and complements item 3's cron guard.
 Tier 2-test: spawn, kill the daemon mid-session, restart, assert clean resume-or-terminate.
+This is group 3 of the operator-controls spec (it supersedes the standalone `BACKLOG.md § P2.1`).
 
-- Spec: `BACKLOG.md § P2.1`
+- Spec: `.kiro/specs/operator-controls/` · tasks `3.1`, `3.2`
 - [ ] Complete · PR: —
 
 ---
@@ -267,6 +268,124 @@ This obsoletes interim collision detection (P0.4) and shares `.git/objects` acro
 Tier 2-test: two simultaneous sessions on one repo get isolated worktrees and both clean up.
 
 - Spec: `BACKLOG.md § P1.7`
+- [ ] Complete · PR: —
+
+---
+
+### 21. Child-environment secret hygiene (env-scrub)
+
+Stop leaking every repo's PAT into every spawned session. Add a pure
+`buildChildEnv(parentEnv, overrides, allowlist)` and route the spawn path
+(`spawnACPClient`/adapter) through it so the child receives only an allowlist of parent env
+(PATH, HOME, `AGENT_ROUTER_*`, optional `config.childEnvAllowlist`) plus the resolved
+`GITHUB_TOKEN` — no other `GITHUB_TOKEN_*`/`GITHUB_WEBHOOK_SECRET*`. Defense-in-depth half of
+the per-repo-token fix. Tier 1 (allowlist) + Tier 2 (spawned child excludes other secrets).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `1.1`, `1.2`
+- [ ] Complete · PR: —
+
+---
+
+### 22. Per-repo cron pause / resume
+
+Add a `cron_state` table (`src/db.ts`) and `agent-router cron list|pause <name>|resume <name>`
+(CLI + IPC) so an operator can pause one repo's cron and re-enable it; `setupCronJobs` honors
+the persisted state and live `.stop()`/`.start()` the `ScheduledTask`. State survives restarts.
+Tier 1 (state default/round-trip) + Tier 2 (paused does not fire, persists, resume re-enables).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `2.1`, `2.2`
+- [ ] Complete · PR: —
+
+---
+
+### 23. CI-reconciliation nudge (wake watchdog)
+
+Eliminate the manual "CI is green, proceed" nudging. Add `src/check-watchdog.ts`: on a bounded
+interval, for each active session waiting on an open registered PR, poll the PR's check status
+and, when checks are terminal and not already nudged, inject a wake via
+`sessionMgr.injectPrompt(..., 'router')`. Idempotent on `(pr, head_sha, conclusion)`;
+best-effort on GitHub errors. The agent's no-poll contract is preserved (the daemon polls).
+Tier 1 (terminal/idempotency) + Tier 2 (one wake on terminal, none while in-progress).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `4.1`, `4.2`
+- [ ] Complete · PR: —
+
+---
+
+### 24. Config hot-reload
+
+Pick up `config.json` changes without a restart. Add `src/config-watch.ts` (debounced
+`fs.watch` → `loadConfig`, retain-on-invalid) and a pure `classifyConfigChange(old, next)`;
+apply reloadable fields (`repos`, `cron`, `rateLimit`, `sessionTimeout`, `defaultGithubToken`,
+`allowedEmails`) to running components via a mutable holder + `reconcileCronJobs`, without
+touching active sessions. Restart-required fields are left for item 25. Tier 1 (classify,
+debounce) + Tier 2 (reload adds repo/cron, rejects invalid, no session dropped).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `5.1`, `5.2`, `5.3`
+- [ ] Complete · PR: —
+
+---
+
+### 25. Restart-required surfacing (env caveat)
+
+Surface changes that a hot-reload cannot apply. Record a `restart_required` condition
+(`{ fields, since }`) when a reload sees a restart-required field differ from the startup value;
+log `warn` each reload while it persists and expose it on `/health` (item 9) when present.
+Document the `EnvironmentFile`/`ENV:` limitation (rotated tokens need a restart) in README.
+Builds on item 24. Tier 1 (state logic) + Tier 2 (changed restart-field sets the condition).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `6.1`
+- [ ] Complete · PR: —
+
+---
+
+### 26. Web: diagnose and reproduce load/SSE failures
+
+Reproduce the "Load failed"/SSE-drop failures under the browser harness with network shaping
+(CDP `Network.emulateNetworkConditions`, route delay/abort, offline→online) — desktop-direct vs
+mobile/cloudflared-like — and capture a repro matrix. These specs start as expected-fail and
+become the regression suite for items 27–29. Depends on the browser harness (items 14–18).
+
+- Spec: `.kiro/specs/web-client/` · tasks `1.1`
+- [ ] Complete · PR: —
+
+---
+
+### 27. Web: one-request session list
+
+Kill the N+1 fan-out that causes most mobile "Load failed". Move the per-session waiting-for
+computation server-side so the `/sessions` list response carries status/repo/timestamps/waiting-for
+(`src/web-routes.ts`), add bounded pagination (replace `limit=500`, active always shown), and
+make the client (`src/web-ui.ts`) render from a single request — deleting `fetchWaitingFor` and
+the per-row loop. Tier 2 (list shape + pagination) + browser test (exactly one list request).
+
+- Spec: `.kiro/specs/web-client/` · tasks `2.1`, `2.2`
+- [ ] Complete · PR: —
+
+---
+
+### 28. Web: client fetch resilience
+
+Replace the bare `apiFetch` with a wrapper that has a bounded `AbortController` timeout and
+retry-with-backoff for network/5xx (not `401`), and add a clear error state with a Retry action
+plus an auth-specific message. Transient blips self-heal; mutations are not auto-retried.
+Browser tests: fail-then-recover, permanent-fail → Retry, `401` → auth message, hung → timeout.
+
+- Spec: `.kiro/specs/web-client/` · tasks `3.1`
+- [ ] Complete · PR: —
+
+---
+
+### 29. Web: SSE hardening for Cloudflare / mobile
+
+Make the live stream survive proxy buffering and mobile network transitions. Server: set
+`Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`, explicit event-stream type,
+an initial flush, per-event `id:` and a `retry:` hint; configurable heartbeat
+(`src/web-server.ts`/`src/sse-broker.ts`). Client: reconnect on `visibilitychange`/`online`,
+resume via `Last-Event-ID` with de-dupe, stop on `session_ended`. Browser tests for reconnect
+without duplicates. Builds on items 17/18 reconnect coverage.
+
+- Spec: `.kiro/specs/web-client/` · tasks `4.1`, `4.2`
 - [ ] Complete · PR: —
 
 ---
