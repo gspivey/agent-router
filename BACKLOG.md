@@ -222,6 +222,23 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P1.8 — Cron guard: allow re-fire after an abandoned session
+
+**New (surfaced 2026-06; blocks unattended cron recovery).**
+
+**Problem.** The cron-fire clean-state guard (`handleCronFire`, `src/index.ts`) only allows the next scheduled run when the last session's status is `completed`. An `abandoned` status means the daemon restarted mid-session (a deploy/config change), not that the agent failed — yet the guard treats it like a failure and blocks the timer, requiring a manual re-trigger.
+
+**Approach.** Widen the guard to also allow `abandoned`. Keep blocking on genuine `failed`/active states.
+
+**Mini spec.**
+
+- In the cron-fire guard, change the allowed-last-status check so `completed` **and** `abandoned` both permit a re-fire.
+- Tier 1 test: guard allows re-fire after `abandoned`, still blocks after `failed`, still blocks while a session is `active`.
+
+**Acceptance.** After a daemon restart leaves the last session `abandoned`, the next cron tick starts a fresh session instead of being blocked. A genuinely `failed` last session still blocks.
+
+---
+
 ## Priority 2: Quality and bug fixes
 
 ### P2.0 — Token expiry alerting
@@ -242,6 +259,8 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 **Acceptance.** Daemon configured with `token_expires_at: 2027-04-25` logs a warn entry every 24h starting 2027-04-11, an error entry starting 2027-04-23, and continues to error daily after expiry.
 
 ### P2.1 — Session persistence across daemon restarts
+
+> **Folded into `.kiro/specs/operator-controls/` (group 3, tasks 3.1/3.2) and ROADMAP item 19.** This mini-spec is retained for history; work it from the Kiro spec, not from here.
 
 **Maps to PRODUCT.md "Open Questions": "Session resumption across daemon restarts."** Pulled forward to P2 because we hit this twice tonight.
 
@@ -387,6 +406,60 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 **Acceptance.** A PR against agent-router that breaks tier3 gets a structured failure comment within ~60s of the run completing. If a session is bound to that PR, the agent wakes, reads the comment, fixes, pushes. Loop closes without human intervention.
 
 **Blocked on:** nothing — all prerequisites are in main now. Ready when someone has 2-3 hours to wire it up + validate against a deliberately-broken PR.
+
+---
+
+### P2.10 — Trim environment variable values ✅ (PR #36)
+
+**Done.**
+
+---
+
+### P2.11 — `ls` pagination
+
+**New (surfaced 2026-06; operational friction once many sessions accumulate).**
+
+**Problem.** `agent-router ls` prints every session. After cron mode has run for a while the list is unusable from a terminal.
+
+**Mini spec.**
+
+- Default `ls` to 20 rows, with active sessions always shown regardless of the cap.
+- `--all` flag prints everything; `--limit N` overrides the default cap.
+- No daemon changes — pure CLI.
+- Tier 1 tests for the row-selection logic (default cap, `--all`, `--limit`, active-always-shown).
+
+**Acceptance.** `agent-router ls` shows at most 20 rows plus all active; `--all` and `--limit N` behave as specified.
+
+---
+
+### P2.12 — `tail` renders agent text
+
+**New (surfaced 2026-06; the default tail view is missing the agent's output).**
+
+**Problem.** The `tail` pretty-printer (`prettyPrint` in `bin/agent-router.ts`) renders the entry `content` field only for error/stderr entry types; agent message entries fall back to `message` and so a non-`--raw` tail does not show the agent's actual text.
+
+**Mini spec.**
+
+- Render the `content` field for agent-message entries in `prettyPrint`.
+- Tier 1 tests covering each entry shape (agent message, error, tool call) — assert the agent text appears.
+
+**Acceptance.** `agent-router tail <id>` (without `--raw`) shows the agent's message text.
+
+---
+
+### P2.13 — `registerPR` upsert (routing bug)
+
+**New (surfaced 2026-06; correctness bug, hit on dpdk PR #72).**
+
+**Problem.** `registerPR` in `src/db.ts` uses a plain `INSERT` against a `UNIQUE(repo, pr_number)` constraint. When a new session tries to register a PR already owned by a completed/dead session, the `INSERT` fails: `meta.json` is updated but the SQLite row still points at the old session, so webhooks for that PR route to the dead session and get dropped.
+
+**Mini spec.**
+
+- Change the `INSERT` to an upsert (`INSERT … ON CONFLICT(repo, pr_number) DO UPDATE SET session_id = …, last_waked_at = NULL`, or `INSERT OR REPLACE`) so re-registering a PR from a new session always wins.
+- Tier 1 test: re-register `(repo, pr)` from a second session and assert the row now points at it.
+- Tier 2 test: webhook for the PR routes to the new session after re-registration.
+
+**Acceptance.** A second session registering a PR already held by a dead session claims the SQLite row, and subsequent webhooks route to the live session.
 
 ---
 

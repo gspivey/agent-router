@@ -310,10 +310,31 @@ describe('insertSession', () => {
     expect(session!.prNumber).toBe(10);
   });
 
-  it('throws on duplicate repo+prNumber', () => {
+  it('upserts on duplicate repo+prNumber (new session wins)', () => {
     const { db } = setup();
     db.insertSession('myorg/myrepo', 10, 'sess-1');
-    expect(() => db.insertSession('myorg/myrepo', 10, 'sess-2')).toThrow();
+    db.insertSession('myorg/myrepo', 10, 'sess-2');
+
+    const session = db.findSession('myorg/myrepo', 10);
+    expect(session).not.toBeNull();
+    expect(session!.sessionId).toBe('sess-2');
+  });
+
+  it('upsert resets last_waked_at to null', () => {
+    const { db } = setup();
+    db.insertSession('myorg/myrepo', 10, 'sess-1');
+    // Simulate a wake
+    const now = Math.floor(Date.now() / 1000);
+    db.tryAcquireWakeSlot('myorg/myrepo', 10, 0, now);
+    // Confirm last_waked_at is set
+    const before = db.findSession('myorg/myrepo', 10);
+    expect(before!.lastWakedAt).toBe(now);
+
+    // Re-register from a new session
+    db.insertSession('myorg/myrepo', 10, 'sess-2');
+    const after = db.findSession('myorg/myrepo', 10);
+    expect(after!.sessionId).toBe('sess-2');
+    expect(after!.lastWakedAt).toBeNull();
   });
 });
 

@@ -4,7 +4,7 @@
  * Pure unit tests for the per-repo → default → env hierarchy.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createTokenResolver } from '../../src/github.js';
+import { createTokenResolver, resolveSessionTokenEnv } from '../../src/github.js';
 
 const ORIG_TOKEN = process.env['GITHUB_TOKEN'];
 
@@ -95,5 +95,40 @@ describe('createTokenResolver', () => {
     });
     process.env['GITHUB_TOKEN'] = 'tok-env';
     expect(resolve('o', 'r')).toBe('tok-default');
+  });
+});
+
+describe('resolveSessionTokenEnv', () => {
+  const resolver = createTokenResolver({
+    perRepoTokens: { 'gspivey/edit-director': 'tok-edit' },
+    defaultToken: 'tok-default',
+    envFallback: false,
+  });
+
+  it('injects the per-repo token as GITHUB_TOKEN for a configured repo', () => {
+    expect(resolveSessionTokenEnv('gspivey/edit-director', resolver)).toEqual({
+      GITHUB_TOKEN: 'tok-edit',
+    });
+  });
+
+  it('injects the default token for a repo with no per-repo override', () => {
+    expect(resolveSessionTokenEnv('gspivey/agent-router', resolver)).toEqual({
+      GITHUB_TOKEN: 'tok-default',
+    });
+  });
+
+  it('returns no override when no repo is bound', () => {
+    expect(resolveSessionTokenEnv(undefined, resolver)).toEqual({});
+  });
+
+  it('returns no override (does not throw) when the resolver finds no token', () => {
+    const empty = createTokenResolver({ envFallback: false });
+    expect(resolveSessionTokenEnv('o/r', empty)).toEqual({});
+  });
+
+  it('returns no override for a malformed repo slug', () => {
+    expect(resolveSessionTokenEnv('noslash', resolver)).toEqual({});
+    expect(resolveSessionTokenEnv('/leading', resolver)).toEqual({});
+    expect(resolveSessionTokenEnv('trailing/', resolver)).toEqual({});
   });
 });

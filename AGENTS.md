@@ -7,25 +7,34 @@ This document describes how agents (and humans) should work in this codebase. It
 Different documents serve different purposes. Use the right one:
 
 - **`README.md`** — how to operate the daemon, install, and run tests. First thing to read.
-- **`PRODUCT.md`** — what the product is, what it does differently, open architecture questions.
-- **`ROADMAP.md`** — strategic phase plan. What we're building over months.
-- **`BACKLOG.md`** — tactical bug list and small specs. What to work on next.
+- **`PRODUCT.md`** — what the product is, what it does differently, the strategic phase plan, open architecture questions.
+- **`ROADMAP.md`** — the serialized, dependency-ordered work queue. The first unchecked item is the next thing to build. This is what an agent picks work from.
+- **`BACKLOG.md`** — tactical bug list and small specs. The mini-spec for any `BACKLOG.md §`-backed ROADMAP item lives here.
+- **`prompts/agent-router.md`** — the RFC-2119 session contract: how the daemon-driven agent advances the queue one PR per session.
+- **`docs/roadmap-from-kiro-specs.md`** — the method for serializing a Kiro spec into ROADMAP items.
 - **`AGENTS.md`** (this doc) — how to do the work once you know what to do.
-- **`.kiro/specs/agent-router/`** — historical specs from initial buildout. Most tasks are complete. Useful for understanding original intent; not authoritative for new work.
+- **`.kiro/specs/`** — Kiro specs. Most of `agent-router/` is complete (historical); active specs like `browser-test-harness/` are referenced by ROADMAP items.
 - **The code** — the most authoritative source for "how is this actually done." When docs and code disagree, the code wins.
 
-## Working from the backlog
+## Selecting work
 
-`BACKLOG.md` lists prioritized work items P0 through P3. Each item has a mini-spec sufficient to drive a Kiro spec generation. To work an item:
+**The default flow is ROADMAP-driven.** `ROADMAP.md` is a serialized, dependency-ordered queue. Pick the **first unchecked item** (`- [ ] Complete`), implement exactly that one item, and open exactly one PR. Read everything on the item's `Spec:` line first: for a `.kiro/specs/<feature>/` reference, read its `requirements.md`, `design.md`, and `tasks.md`; for a `BACKLOG.md § P<n>` reference, read that mini-spec. The full per-session contract — branch, test, PR, CI wait, finalize, merge — lives in [`prompts/agent-router.md`](prompts/agent-router.md) and is summarized under "Session mechanics" below.
 
-1. Pick the highest-priority unblocked item from `BACKLOG.md`.
-2. If it has a clear "Mini spec" section, the mini spec drives the Kiro spec phase. Generate `requirements.md`, `design.md`, `tasks.md` under `.kiro/specs/<spec-group>/` if a fresh spec is needed for the change.
-3. If it's a small fix (single-digit lines of code), skip the spec generation and implement directly.
-4. Implement, write tests, run tests.
-5. Tests must be green before opening a PR. No exceptions.
-6. Open the PR. Update `BACKLOG.md` to mark the item done (or remove it).
+**`BACKLOG.md` is the mini-spec source and the bug list.** Most ROADMAP items that aren't spec-backed point at a `BACKLOG.md` mini-spec. When you need a brand-new item, write its mini-spec in `BACKLOG.md` first, then add the corresponding ROADMAP entry. To turn a Kiro spec into ROADMAP items, follow [`docs/roadmap-from-kiro-specs.md`](docs/roadmap-from-kiro-specs.md).
 
-For genuinely tactical bugs (typos, prompt edits), no spec is needed — just fix it.
+For genuinely tactical bugs (typos, prompt edits) outside the queue, no spec is needed — just fix it. Don't add features that aren't in `ROADMAP.md`, `BACKLOG.md`, or `PRODUCT.md` without recording them there first.
+
+## Session mechanics
+
+How a daemon-driven session advances the queue. This is the human-readable summary; `prompts/agent-router.md` is the authoritative RFC-2119 version.
+
+- **Branch model.** Branch off the latest `development` with a short descriptive slug: `git checkout -b agent/<slug>`. PRs **target `development`, never `main`.** Promotion of `development` → `main` is a human operator step. Never push directly to `main` and never open a PR against it.
+- **One item per session.** Implement exactly one ROADMAP item and open exactly one PR. Never start a second item in the same session.
+- **Test before push.** `npm run typecheck` and `npm test` must pass locally before the first push. A behavioral change requires a Tier 2 test in addition to Tier 1.
+- **Register the PR.** Immediately after `gh pr create`, call the agent-router MCP `register_pr` tool with the new PR number so CI events route back to this session.
+- **No polling.** After any push to a PR-bound branch, **stop and wait**. CI posts results back as a PR comment and a `check_run` event, which wake the session. Never loop on `gh run watch`/`gh run list` or sleep-and-recheck. React only to delivered events; fix-and-push on failure, proceed on green.
+- **Finish before merge.** Before merging, on the feature branch: tick the ROADMAP item to `- [x] Complete · PR: #<n>` and move it to `## Completed`; tick the cited `tasks.md` sub-tasks (spec-backed items); and land any docs the change justifies. Everything the merge should contain is on the branch before the merge — never a post-merge fixup.
+- **Squash-merge.** `gh pr merge <n> --squash --delete-branch` into `development`. Then the session is complete.
 
 ## Coding conventions
 

@@ -68,6 +68,22 @@ Future entrypoints (see `ROADMAP.md`): ACP server for editor integration, web da
 
 Agent Router is a **session router for coding agents** — not an agent itself, not a webhook processor, not a chat interface. Its value is the session registry and the ability to route inputs from any source to the right agent session. The agent, the UI, and the event sources are all pluggable.
 
+## Phased plan
+
+The strategic direction, in dependency order. This is *what* we build over months and *in what order*; the PR-sized, ready-to-build slice of it lives in [`ROADMAP.md`](ROADMAP.md), and tactical fixes in [`BACKLOG.md`](BACKLOG.md). Phases are not strict gates — later-phase work can begin once its dependencies are stable.
+
+1. **Production Stability.** Reliable unattended operation: deterministic session completion, self-wake prevention, token-expiry monitoring, collision handling, git worktrees per session, cleanup automation, health endpoint, restart survival. Most of `BACKLOG.md` P0–P1 lives here. The current focus.
+
+2. **ACP Server — editor integration.** Expose agent-router's own ACP endpoint over stdio so any ACP editor (Zed, Cline, JetBrains) can drive sessions — mapping `session/new`, `session/prompt`, `session/load` and streaming `session/update`. Depends on Phase 1 (sessions must survive restarts and be resumable first).
+
+3. **Web Dashboard.** Static SPA served by the daemon, REST + SSE over the existing IPC ops, session list/detail, prompt input, token/Cloudflare-Access auth. Primary use: checking overnight cron runs from a phone. Independent of Phase 2 — parallel entrypoints to the same session manager. (The web server and browser-test-harness work is the start of this.)
+
+4. **Multi-Repo Projects & Sandboxing.** A project = a named group of repos with shared context; a feature = coordinated worktrees across them, spanning multiple PRs. Docker-based sandboxing isolates agent execution; project-level shared memory persists across features. Needs at least one UI (Phase 2 or 3).
+
+5. **Swappable Agent Backends.** Abstract the backend behind a spawn/initialize/prompt/stream interface, refactor the Kiro driver to it, add a second backend (Hermes), per-session selection with health-monitored fallback. Informed by Phase 2's interface work.
+
+**Sequencing:** Phases 2 and 3 are independent and can run in parallel (Phase 3 has more user-facing value if you only do one). Phase 4 needs a UI. Phase 5 is architecturally independent but most valuable once a dashboard exists.
+
 ## Open questions
 
 1. **Web dashboard process model.** Embedded in the daemon (simpler, shared state) or separate process (better isolation)?
@@ -80,7 +96,8 @@ Agent Router is a **session router for coding agents** — not an agent itself, 
 
 ## Where to look next
 
-- **`ROADMAP.md`** — phase plan for getting from current single-user daemon to a feature-complete self-hosted tool.
-- **`BACKLOG.md`** — tactical next-week-to-next-month bug list and small specs.
+- **`ROADMAP.md`** — the serialized, dependency-ordered work queue; the next thing to build is the first unchecked item.
+- **`BACKLOG.md`** — tactical next-week-to-next-month bug list and small specs (mini-spec source for queue items).
+- **`prompts/agent-router.md`** — the per-session contract the daemon-driven agent follows to advance the queue.
 - **`AGENTS.md`** — conventions for agents (and humans) working in this repo.
 - **`README.md`** — first-run guide, current capabilities, how to operate the daemon.
