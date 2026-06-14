@@ -26,6 +26,9 @@ mkdir -p "$WORKDIR" && cd "$WORKDIR"
 git clone https://github.com/gspivey/agent-router.git
 cd agent-router
 git checkout development
+gh auth setup-git                       # point git's HTTPS credential helper at the session token
+git config user.name  "Gerard"          # the fresh clone has no author identity; commits need one
+git config user.email "gs@gspivey.com"
 npm install
 ```
 
@@ -33,6 +36,12 @@ The agent MUST read [`AGENTS.md`](../AGENTS.md) and [`CLAUDE.md`](../CLAUDE.md) 
 repository root **before writing any code**. These define the project's conventions, the
 branch model, the post-back CI contract, the three error classes, the dependency-injection
 and atomic-write rules, and the three-tier test layout the agent must respect.
+
+The session's GitHub token is provisioned by agent-router and wired into git by the
+`gh auth setup-git` and `git config` lines above. Beyond those lines the agent MUST NOT add,
+replace, or edit Git credentials or credential helpers, and MUST NOT embed a token in a
+remote URL. If a push or `gh` call is later denied, that is an authorization problem to
+report, not a credential problem to wrangle — see §8.
 
 ---
 
@@ -46,7 +55,8 @@ Each ROADMAP item carries a `Spec:` line. There are two forms and the agent MUST
 referenced material before writing any code:
 
 - **`Spec: .kiro/specs/<feature>/ · tasks N.N, …`** — read **all** of that spec's
-  `requirements.md`, `design.md`, and `tasks.md`, and implement only the cited sub-tasks.
+  `requirements.md`, `design.md`, and `tasks.md` (not only `tasks.md`), and implement only
+  the cited sub-tasks.
 - **`Spec: BACKLOG.md § P<n>`** — read that mini-spec section of `BACKLOG.md` in full; it is
   the complete contract for the item. There is no `tasks.md` for these.
 
@@ -167,9 +177,16 @@ PR, or continue working in the same session.
   agent MUST stop and report the missing dependency in a PR comment or session message. The
   agent MUST NOT attempt to bootstrap a toolchain via brew, snap, conda, or any other package
   manager, and MUST NOT add an npm dependency the item's spec does not call for.
-- **Auth failures.** If `git push`, `gh pr create`, or any `gh` call fails with an
-  authentication error, the agent MUST stop and report it. The agent MUST NOT attempt to fix or
-  rotate credentials.
+- **Auth failures — stop on the first one; never route around them.** If `git push`,
+  `gh pr create`, or any GitHub write fails with a `401`/`403`/permission error, the agent MUST
+  stop on the **first** failure and report it in a PR comment or session message. The agent MUST
+  NOT retry with a different token, account, or remote; MUST NOT embed a token in the remote URL;
+  MUST NOT edit Git credentials or credential helpers (beyond the single `gh auth setup-git` in
+  §1); and MUST NOT attempt any alternate write path — the GitHub REST contents/git-data API,
+  `gh api` tree/commit creation, a fork, or a push to `main` — to get the change in. The session
+  token is provisioned by agent-router and a denial is authoritative: halt, do not work around
+  it. A token that lacks `contents:write`/`pull_requests:write` is an operator fix, not an
+  agent fix.
 - **CI divergence.** If the agent cannot get CI green after a reasonable number of cycles, it
   MUST post a PR comment summarizing the blocker and stop. It MUST NOT thrash with speculative
   pushes.

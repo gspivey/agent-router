@@ -126,7 +126,7 @@ function translateNotification(notification: ACPNotification): StreamEntry {
 export function createSessionManager(deps: {
   db: Database;
   sessionFiles: SessionFiles;
-  acpSpawner: (sessionId: string) => ACPClient;
+  acpSpawner: (sessionId: string, repo?: string) => ACPClient;
   log: Logger;
   sessionTimeout?: SessionTimeoutConfig;
   /** Seconds to wait for busy sessions during shutdown (default 60). */
@@ -475,8 +475,9 @@ export function createSessionManager(deps: {
       }
       sessionLog.info('Session files created');
 
-      // 2. Spawn ACP client
-      const acp = acpSpawner(sessionId);
+      // 2. Spawn ACP client. Pass the bound repo so the spawner can inject the
+      //    repo-specific GitHub token as GITHUB_TOKEN into the child env.
+      const acp = acpSpawner(sessionId, repo);
 
       // 3. Initialize ACP handshake
       await acp.initialize();

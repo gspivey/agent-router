@@ -18,7 +18,7 @@ import type { EventQueue, QueuedEvent } from './queue.js';
 import { createApp } from './server.js';
 import { createCliServer } from './cli-server.js';
 import type { CliServer } from './cli-server.js';
-import { createGitHubClient, createTokenResolver } from './github.js';
+import { createGitHubClient, createTokenResolver, resolveSessionTokenEnv } from './github.js';
 import { createDaemonTokenStore } from './daemon-token.js';
 import { createVerifier } from './verify-session.js';
 import { createKiroAdapter } from './adapters/kiro.js';
@@ -391,7 +391,8 @@ async function main(): Promise<void> {
   if (config.defaultGithubToken !== undefined) {
     resolverCfg.defaultToken = config.defaultGithubToken;
   }
-  const github = createGitHubClient({ tokenResolver: createTokenResolver(resolverCfg) });
+  const tokenResolver = createTokenResolver(resolverCfg);
+  const github = createGitHubClient({ tokenResolver });
   const verifySession = createVerifier({ sessionFiles, github, log });
   log.info('Verification core initialized');
 
@@ -401,7 +402,13 @@ async function main(): Promise<void> {
   const sessionMgr = createSessionManager({
     db,
     sessionFiles,
-    acpSpawner: (sessionId: string) => adapter.spawn({ sessionId }),
+    acpSpawner: (sessionId: string, repo?: string) => {
+      const env = resolveSessionTokenEnv(repo, tokenResolver);
+      if (repo !== undefined && env['GITHUB_TOKEN'] === undefined) {
+        log.warn('No GitHub token resolved for session repo; child inherits daemon env', { repo });
+      }
+      return adapter.spawn({ sessionId, env });
+    },
     log,
     sessionTimeout: config.sessionTimeout,
     shutdownDrainSeconds: config.shutdownDrainSeconds,

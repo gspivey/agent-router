@@ -118,6 +118,32 @@ export function createTokenResolver(cfg: TokenResolverConfig): TokenResolver {
   };
 }
 
+/**
+ * Build the environment overrides for a spawned agent session: the GitHub token
+ * resolved for the session's bound repo, injected as `GITHUB_TOKEN` so the
+ * agent's git/`gh` operations use the correct per-repo credential instead of
+ * whatever `GITHUB_TOKEN` the daemon happened to inherit from its own process.
+ *
+ * Returns an empty object — no override, child inherits the daemon env unchanged
+ * — when no repo is bound, the repo is malformed, or no token can be resolved.
+ * This preserves the daemon's prior behavior rather than failing the spawn, and
+ * leaves any logging to the caller. Pure given (repo, resolver).
+ */
+export function resolveSessionTokenEnv(
+  repo: string | undefined,
+  tokenResolver: TokenResolver,
+): Record<string, string> {
+  if (repo === undefined) return {};
+  const slash = repo.indexOf('/');
+  if (slash < 1 || slash === repo.length - 1) return {};
+  try {
+    const token = tokenResolver(repo.slice(0, slash), repo.slice(slash + 1));
+    return token.length > 0 ? { GITHUB_TOKEN: token } : {};
+  } catch {
+    return {};
+  }
+}
+
 export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient {
   const baseUrl = (opts.baseUrl ?? 'https://api.github.com').replace(/\/$/, '');
   const fetchImpl = opts.fetchImpl ?? fetch;
