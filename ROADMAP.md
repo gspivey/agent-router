@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 12. PAT expiry alerting
-
-Add an optional `token_expires_at` (ISO 8601) config field and a startup + 24h-interval check
-that logs `warn` at 14 and 7 days out, `error` at 2 days and after expiry. Document the
-rotation procedure in `README.md` on the same branch. Builds on the notification webhook from
-item 11 (reuse it to surface the alert). Tier 1-test the days-to-severity mapping as a pure
-function.
-
-- Spec: `BACKLOG.md § P2.0`
-- [ ] Complete · PR: —
-
----
-
 ### 13. Prompt-injection input guards
 
 Wrap untrusted-source fields (webhook comment bodies, titles, check-run summaries) in
@@ -279,6 +266,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 12. PAT expiry alerting
+
+Add an optional `token_expires_at` (ISO 8601) config field and a startup + 24h-interval check
+that logs `warn` at 14 and 7 days out, `error` at 2 days and after expiry. Document the
+rotation procedure in `README.md` on the same branch. Builds on the notification webhook from
+item 11 (reuse it to surface the alert). Tier 1-test the days-to-severity mapping as a pure
+function.
+
+- Spec: `BACKLOG.md § P2.0`
+- [x] Complete · PR: #52
+
+---
 
 ### 11. Session-end notification webhook
 
