@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 16. Browser harness: list, detail, SSE-render, and auth tests
-
-Add the read-path spec files against the fixtures from item 15: `list-view.spec.ts` (status
-badges render, no console errors), `detail-view.spec.ts` (row click → hash route, not-found
-state, back to list), `sse-render.spec.ts` (appended `stream.log` entries render in ID order,
-auto-scroll, `session_ended` hides controls), and `auth-token.spec.ts` (token present when
-`bindPublic: false`, absent when `true`). All use `seedSession({ live: false })`.
-
-- Spec: `.kiro/specs/browser-test-harness/` · tasks `5.1`, `6.1`, `7.1`, `13.1`
-- [ ] Complete · PR: —
-
----
-
 ### 17. Browser harness: reconnect, inject, and kill tests
 
 Add the interactive spec files: `sse-reconnect.spec.ts` (drop via `disconnectAll`, reconnect
@@ -223,6 +210,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 16. Browser harness: list, detail, SSE-render, and auth tests
+
+Add the read-path spec files against the fixtures from item 15: `list-view.spec.ts` (status
+badges render, no console errors), `detail-view.spec.ts` (row click → hash route, not-found
+state, back to list), `sse-render.spec.ts` (appended `stream.log` entries render in ID order,
+auto-scroll, `session_ended` hides controls), and `auth-token.spec.ts` (token present when
+`bindPublic: false`, absent when `true`). All use `seedSession({ live: false })`.
+
+- Spec: `.kiro/specs/browser-test-harness/` · tasks `5.1`, `6.1`, `7.1`, `13.1`
+- [x] Complete · PR: #56
+
+---
 
 ### 15. Browser harness: fixtures and server lifecycle
 

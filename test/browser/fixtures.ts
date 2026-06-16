@@ -258,13 +258,16 @@ export const test = base.extend<ServerFixture & BrowserFixture>({
       const crypto = await import('node:crypto');
       const sessionId = crypto.randomUUID();
       sessionFiles.createSession(sessionId, 'Browser test session');
-      sessionFiles.updateMeta(sessionId, { repo, status });
 
       if (status !== 'active') {
         sessionFiles.updateMeta(sessionId, {
+          repo,
+          status,
           completed_at: Date.now(),
           termination_reason: status === 'completed' ? 'completed' : 'terminated_cli',
         });
+      } else {
+        sessionFiles.updateMeta(sessionId, { repo });
       }
 
       if (streamEntries) {
