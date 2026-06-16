@@ -23,7 +23,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - _Requirements: 5.1, 5.2, 5.3_
 
 - [ ] 3. Create Playwright fixtures
-  - [ ] 3.1 Create `test/browser/fixtures.ts` with full per-test server lifecycle
+  - [x] 3.1 Create `test/browser/fixtures.ts` with full per-test server lifecycle
     - Import `test as base` from `@playwright/test` and project modules: `createSessionFiles`, `initDatabase`, `createLogger`, `createDaemonTokenStore`, `createSSEBroker`, `createWebApp`, `startWebServer`, `FakeKiroBackend`, `createSessionManager`, `spawnACPClient`
     - Define `ServerFixture` interface: `baseUrl`, `sessionFiles`, `sseBroker`, `sessionManager`, `db`, `tokenStore`, `rootDir`, `token`
     - Define `ConsoleCollector` interface: `errors: string[]`, `warnings: string[]`, `dialogs: string[]`, `pageErrors: string[]`, `assertNoErrors(): void`
