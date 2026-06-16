@@ -23,14 +23,13 @@ import * as os from 'node:os';
 import * as readline from 'node:readline';
 import { selectVisibleSessions, DEFAULT_LS_LIMIT } from '../src/ls-pagination.js';
 import { resolveSessionId } from '../src/session-id.js';
+import { prettyPrint, type StreamEntryLike } from '../src/pretty-print.js';
 
 // ---------------------------------------------------------------------------
 // ANSI color helpers
 // ---------------------------------------------------------------------------
 
 const GRAY = '\x1b[90m';
-const CYAN = '\x1b[36m';
-const RED = '\x1b[31m';
 const RESET = '\x1b[0m';
 
 // ---------------------------------------------------------------------------
@@ -119,44 +118,6 @@ function sendToDaemon(socketPath: string, msg: Record<string, unknown>): Promise
       }
     });
   });
-}
-
-// ---------------------------------------------------------------------------
-// Pretty-print a stream entry
-// ---------------------------------------------------------------------------
-
-interface StreamEntryLike {
-  ts?: string;
-  source?: string;
-  type?: string;
-  [key: string]: unknown;
-}
-
-function prettyPrint(entry: StreamEntryLike): string {
-  const ts = entry.ts ?? '';
-  const source = entry.source ?? '';
-  const type = entry.type ?? '';
-
-  // Router events → gray
-  if (source === 'router') {
-    return `${GRAY}[${ts}] router/${type}${RESET}`;
-  }
-
-  // Errors → red
-  if (type === 'stderr' || type === 'error') {
-    const content = typeof entry['content'] === 'string' ? ` ${entry['content']}` : '';
-    return `${RED}[${ts}] ${source}/${type}${content}${RESET}`;
-  }
-
-  // Tool calls → cyan
-  if (type === 'tool_call' || type === 'tool_result' || type === 'mcp_call') {
-    const tool = typeof entry['tool'] === 'string' ? ` ${entry['tool']}` : '';
-    return `${CYAN}[${ts}] ${source}/${type}${tool}${RESET}`;
-  }
-
-  // Agent messages → default (no color)
-  const message = typeof entry['message'] === 'string' ? ` ${entry['message']}` : '';
-  return `[${ts}] ${source}/${type}${message}`;
 }
 
 // ---------------------------------------------------------------------------
