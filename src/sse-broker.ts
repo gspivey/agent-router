@@ -71,6 +71,8 @@ export interface SSEBroker {
   ): string; // returns clientId
   unsubscribe(sessionId: string, clientId: string): void;
   shutdown(): void;
+  /** Force-close all SSE clients for a session without emitting session_ended. */
+  disconnectAll(sessionId: string): void;
 }
 
 interface SessionState {
@@ -399,6 +401,17 @@ export function createSSEBroker(deps: {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
       }
+    },
+
+    disconnectAll(sessionId: string): void {
+      const state = sessions.get(sessionId);
+      if (!state) return;
+      for (const client of state.clients.values()) {
+        client.close();
+      }
+      state.clients.clear();
+      stopPollTimer(state);
+      checkHeartbeat();
     },
   };
 }

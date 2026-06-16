@@ -33,22 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 14. Browser harness: module resolution and `disconnectAll`
-
-Stand up the Playwright tier. Install `@playwright/test` as a devDependency, add
-`playwright.config.ts` (`testDir: ./test/browser`, `.spec.ts` match, chromium headless,
-`workers: CI ? 1 : 4`), and a `test/browser/smoke.spec.ts` that imports `createWebApp` from
-`../../src/web-server.js` to prove `.js`→`.ts` resolution under Playwright's loader. Add
-`disconnectAll(sessionId)` to the `SSEBroker` interface and `createSSEBroker`
-(`src/sse-broker.ts`) — close all clients, clear the poll timer and heartbeat state, write no
-`session_ended` event — to enable reconnect testing. Foundation for the harness items that
-follow.
-
-- Spec: `.kiro/specs/browser-test-harness/` · tasks `1.1`, `2.1`
-- [ ] Complete · PR: —
-
----
-
 ### 15. Browser harness: fixtures and server lifecycle
 
 Create `test/browser/fixtures.ts` with the full per-test server lifecycle (tmpdir → session
@@ -253,6 +237,22 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 14. Browser harness: module resolution and `disconnectAll`
+
+Stand up the Playwright tier. Install `@playwright/test` as a devDependency, add
+`playwright.config.ts` (`testDir: ./test/browser`, `.spec.ts` match, chromium headless,
+`workers: CI ? 1 : 4`), and a `test/browser/smoke.spec.ts` that imports `createWebApp` from
+`../../src/web-server.js` to prove `.js`→`.ts` resolution under Playwright's loader. Add
+`disconnectAll(sessionId)` to the `SSEBroker` interface and `createSSEBroker`
+(`src/sse-broker.ts`) — close all clients, clear the poll timer and heartbeat state, write no
+`session_ended` event — to enable reconnect testing. Foundation for the harness items that
+follow.
+
+- Spec: `.kiro/specs/browser-test-harness/` · tasks `1.1`, `2.1`
+- [x] Complete · PR: #54
+
+---
 
 ### 13. Prompt-injection input guards
 
