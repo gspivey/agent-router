@@ -38,6 +38,7 @@ import { createPendingWakeSweeper } from './pending-wake-sweeper.js';
 import type { PendingWakeSweeper } from './pending-wake-sweeper.js';
 import { shouldNotify, sendSessionEndNotification } from './notify.js';
 import { startTokenExpiryChecker } from './token-expiry.js';
+import { createWorktreeManager } from './worktree-manager.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -427,6 +428,9 @@ async function main(): Promise<void> {
   const adapter = createKiroAdapter({ kiroPath: config.kiroPath, log });
   log.info('Agent adapter initialized', { adapter: adapter.name });
 
+  const worktreeManager = createWorktreeManager({ rootDir, log });
+  log.info('Worktree manager initialized', { rootDir });
+
   const sessionMgr = createSessionManager({
     db,
     sessionFiles,
@@ -435,6 +439,16 @@ async function main(): Promise<void> {
       if (repo !== undefined && env['GITHUB_TOKEN'] === undefined) {
         log.warn('No GitHub token resolved for session repo; child inherits daemon env', { repo });
       }
+      // Create an isolated worktree for repo-bound sessions
+      if (repo !== undefined) {
+        try {
+          const workdir = worktreeManager.ensureWorktree(repo, sessionId);
+          env['WORKDIR'] = workdir;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.warn('Failed to create worktree; session proceeds without WORKDIR', { repo, sessionId, error: msg });
+        }
+      }
       return adapter.spawn({ sessionId, env });
     },
     log,
@@ -442,6 +456,7 @@ async function main(): Promise<void> {
     shutdownDrainSeconds: config.shutdownDrainSeconds,
     github,
     verify: verifySession,
+    worktreeManager,
     onSessionEnd: (sessionId: string) => {
       const meta = sessionFiles.readMeta(sessionId);
       if (shouldNotify(config.notifyOnSessionEnd, meta.termination_reason)) {
