@@ -9,7 +9,7 @@
  * Subcommands:
  *   prompt --new [--quiet] [--file <path>]   Create a new session
  *   prompt --session-id <id>                 Inject prompt into existing session
- *   ls                                       List sessions
+ *   ls [--all] [--limit N]                   List sessions
  *   tail <session_id> [--raw] [--prompts]    Tail session output
  *   terminate <session_id>                   Terminate a session
  *
@@ -21,6 +21,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as readline from 'node:readline';
+import { selectVisibleSessions, DEFAULT_LS_LIMIT } from '../src/ls-pagination.js';
 
 // ---------------------------------------------------------------------------
 // ANSI color helpers
@@ -353,7 +354,25 @@ function truncate(s: string, maxLen: number): string {
   return s.slice(0, maxLen - 3) + '...';
 }
 
-async function cmdLs(): Promise<void> {
+async function cmdLs(args: string[]): Promise<void> {
+  let all = false;
+  let limit = DEFAULT_LS_LIMIT;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--all') {
+      all = true;
+    } else if (arg === '--limit') {
+      const val = args[++i];
+      const parsed = Number(val);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        process.stderr.write('Error: --limit must be a non-negative integer\n');
+        process.exit(1);
+      }
+      limit = Math.floor(parsed);
+    }
+  }
+
   const socketPath = resolveSocketPath();
   const result = await sendToDaemon(socketPath, { op: 'list_sessions' });
 
@@ -368,12 +387,14 @@ async function cmdLs(): Promise<void> {
     return;
   }
 
+  const visible = selectVisibleSessions(sessions, { all, limit });
+
   // Table header
   const header = padRow('ID', 'Status', 'Age', 'PRs', 'Prompt');
   process.stdout.write(header + '\n');
   process.stdout.write('-'.repeat(header.length) + '\n');
 
-  for (const s of sessions) {
+  for (const s of visible) {
     const id = s.session_id.slice(0, 8);
     const status = s.status;
     const age = formatAge(s.created_at);
@@ -382,6 +403,11 @@ async function cmdLs(): Promise<void> {
       : '-';
     const prompt = truncate(s.original_prompt.replace(/\n/g, ' '), 40);
     process.stdout.write(padRow(id, status, age, prs, prompt) + '\n');
+  }
+
+  const hidden = sessions.length - visible.length;
+  if (hidden > 0) {
+    process.stdout.write(`${GRAY}(${hidden} more sessions hidden — use --all to show all)${RESET}\n`);
   }
 }
 
@@ -519,7 +545,7 @@ Commands:
   prompt --new [--quiet] [--force] [--repo <owner/name>] [--file <path>]
                                            Create a new session
   prompt --session-id <id>                 Inject prompt into existing session
-  ls                                       List sessions
+  ls [--all] [--limit N]                   List sessions (default: 20 rows)
   tail <session_id> [--raw] [--prompts]    Tail session output
   terminate <session_id>                   Terminate a session
   complete-session --session-id <id> --reason <reason>
@@ -543,7 +569,7 @@ async function main(): Promise<void> {
       await cmdPrompt(subArgs);
       break;
     case 'ls':
-      await cmdLs();
+      await cmdLs(subArgs);
       break;
     case 'tail':
       await cmdTail(subArgs);
