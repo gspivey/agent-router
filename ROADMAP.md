@@ -33,18 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 10. Track merge timestamp
-
-Add an optional `merged_at?: number` to each `prs[]` entry in `SessionMeta`
-(`src/session-files.ts`) and have the auto-completion path (the `merged` termination handler)
-set it. Add `agent-router ls --merged` to filter to sessions that shipped a PR. Tier 1-test
-the metadata write; Tier 2-test that a synthetic merge populates `merged_at`.
-
-- Spec: `BACKLOG.md § P2.2`
-- [ ] Complete · PR: —
-
----
-
 ### 11. Session-end notification webhook
 
 Add a `notifyOnSessionEnd: { url: string, events: string[] }` config field (`src/config.ts`)
@@ -304,6 +292,18 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 10. Track merge timestamp
+
+Add an optional `merged_at?: number` to each `prs[]` entry in `SessionMeta`
+(`src/session-files.ts`) and have the auto-completion path (the `merged` termination handler)
+set it. Add `agent-router ls --merged` to filter to sessions that shipped a PR. Tier 1-test
+the metadata write; Tier 2-test that a synthetic merge populates `merged_at`.
+
+- Spec: `BACKLOG.md § P2.2`
+- [x] Complete · PR: #50
+
+---
 
 ### 9. `GET /health` endpoint
 
