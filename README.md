@@ -128,13 +128,38 @@ All values can be hardcoded or read from environment variables using `"ENV:VAR_N
       // Path to a file whose contents are used as the session prompt on each fire
       "promptFile": "/etc/agent-router/prompts/your-repo.md"
     }
-  ]
+  ],
+
+  // Optional — ISO 8601 date when the GitHub PAT expires.
+  // Enables startup + 24h-interval alerting as expiry approaches.
+  "tokenExpiresAt": "2027-04-25T00:00:00Z"
 }
 ```
 
 **Token resolution:** `repos[i].token` → `defaultGithubToken` → error if neither is set.
 
 **Webhook secret resolution:** `repos[i].webhookSecret` → `webhookSecret`.
+
+## Token rotation
+
+GitHub fine-grained PATs have a maximum lifetime of one year. Set `tokenExpiresAt` in your config to the PAT's expiry date and the daemon will alert you as it approaches:
+
+| Days remaining | Severity |
+|---|---|
+| > 14 | — (no log) |
+| 7–14 | `warn` |
+| 3–7 | `warn` |
+| ≤ 2 | `error` |
+| Expired | `error` |
+
+Alerts fire on daemon startup and every 24 hours. If `notifyOnSessionEnd` is configured, the same webhook receives a `token_expiry` payload with `{ type, severity, days_remaining, expires_at }`.
+
+**To rotate a PAT:**
+
+1. Create a new fine-grained PAT on GitHub with the same scopes (`contents:write`, `pull_requests:write`, `metadata:read`, `actions:write`).
+2. Update the environment variable or config value that holds the token.
+3. Update `tokenExpiresAt` to the new PAT's expiry date.
+4. Restart the daemon (`systemctl restart agent-router`). A restart is required because tokens are resolved from the environment at startup.
 
 ## Cron sessions
 
