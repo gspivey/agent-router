@@ -33,21 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 19. Session resumption across daemon restarts
-
-Add `kiro_session_id?: string` to `SessionMeta` (`src/session-files.ts`), persist it to
-`meta.json` after ACP `session/create` (`src/session-mgr.ts`), and on daemon startup attempt
-ACP `session/load(kiro_session_id)` (already present at `src/acp.ts`) for each session still
-marked `active`: keep it active if load succeeds, otherwise mark `terminated_by_restart` (new
-closed-union reason). This makes restarts non-destructive and complements item 3's cron guard.
-Tier 2-test: spawn, kill the daemon mid-session, restart, assert clean resume-or-terminate.
-This is group 3 of the operator-controls spec (it supersedes the standalone `BACKLOG.md § P2.1`).
-
-- Spec: `.kiro/specs/operator-controls/` · tasks `3.1`, `3.2`
-- [ ] Complete · PR: —
-
----
-
 ### 20. Git worktrees per session
 
 Add `src/worktree-manager.ts`: ensure a canonical clone per repo under
@@ -183,6 +168,21 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 19. Session resumption across daemon restarts
+
+Add `kiro_session_id?: string` to `SessionMeta` (`src/session-files.ts`), persist it to
+`meta.json` after ACP `session/create` (`src/session-mgr.ts`), and on daemon startup attempt
+ACP `session/load(kiro_session_id)` (already present at `src/acp.ts`) for each session still
+marked `active`: keep it active if load succeeds, otherwise mark `terminated_by_restart` (new
+closed-union reason). This makes restarts non-destructive and complements item 3's cron guard.
+Tier 2-test: spawn, kill the daemon mid-session, restart, assert clean resume-or-terminate.
+This is group 3 of the operator-controls spec (it supersedes the standalone `BACKLOG.md § P2.1`).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `3.1`, `3.2`
+- [x] Complete · PR: #59
+
+---
 
 ### 18. Browser harness: visibility reconnect and `test:browser` script
 
