@@ -33,18 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 4. Reject non-JSON webhooks cleanly
-
-Make the `/webhook` handler in `src/server.ts` reject a request whose `Content-Type` is not
-JSON with a `400` before attempting to parse, rather than failing inside `JSON.parse`. The
-daemon must stay up. Add a Tier 1 test posting `application/x-www-form-urlencoded` and
-asserting a `400` with a clear error body.
-
-- Spec: `BACKLOG.md § P2.7`
-- [ ] Complete · PR: —
-
----
-
 ### 5. `ls` pagination
 
 Give `agent-router ls` (`bin/agent-router.ts`, `cmdLs`) a default cap of 20 rows with active
@@ -380,6 +368,18 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 4. Reject non-JSON webhooks cleanly
+
+Make the `/webhook` handler in `src/server.ts` reject a request whose `Content-Type` is not
+JSON with a `400` before attempting to parse, rather than failing inside `JSON.parse`. The
+daemon must stay up. Add a Tier 1 test posting `application/x-www-form-urlencoded` and
+asserting a `400` with a clear error body.
+
+- Spec: `BACKLOG.md § P2.7`
+- [x] Complete · PR: #44
+
+---
 
 ### 30. Rate-limit queues wake delivery instead of dropping events
 
