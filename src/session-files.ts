@@ -27,7 +27,9 @@ export interface SessionMeta {
     | 'killed_by_operator'
     | 'shutdown'
     | 'merged'
-    | 'closed_without_merge';
+    | 'closed_without_merge'
+    | 'terminated_by_restart';
+  kiro_session_id?: string;
   prs: Array<{ repo: string; pr_number: number; registered_at: number; merged_at?: number }>;
 }
 
@@ -54,6 +56,7 @@ export interface SessionFiles {
   readMeta(sessionId: string): SessionMeta;
   listSessions(): SessionMeta[];
   sessionExists(sessionId: string): boolean;
+  getSessionPaths(sessionId: string): SessionPaths;
 }
 
 const VALID_STATUSES = new Set(['active', 'completed', 'abandoned', 'failed']);
@@ -271,6 +274,10 @@ export function createSessionFiles(rootDir: string, log?: Logger): SessionFiles 
     sessionExists(sessionId: string): boolean {
       const paths = sessionPaths(rootDir, sessionId);
       return fs.existsSync(paths.dir);
+    },
+
+    getSessionPaths(sessionId: string): SessionPaths {
+      return sessionPaths(rootDir, sessionId);
     },
   };
 }

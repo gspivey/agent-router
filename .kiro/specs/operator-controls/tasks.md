@@ -40,13 +40,13 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
     - _Requirements: 3.1, 3.2, 3.3, 3.5, 3.6_
 
 - [ ] 3. Session resumption across restart
-  - [ ] 3.1 Persist `kiro_session_id` + new termination reason
+  - [x] 3.1 Persist `kiro_session_id` + new termination reason
     - Add `kiro_session_id?: string` to `SessionMeta` (`src/session-files.ts`); write it in
       `createSession` after `newSessionWithPrompt`. Add `terminated_by_restart` to the
       `termination_reason` closed union and handle it in every switch/surface.
     - Tier 1: meta round-trips `kiro_session_id`; union/validators accept the new reason.
     - _Requirements: 6.1, 6.5_
-  - [ ] 3.2 Resume-or-terminate on startup
+  - [x] 3.2 Resume-or-terminate on startup
     - New startup scan in `src/index.ts`: for each on-disk `active` session, attempt ACP
       `loadSession(kiro_session_id)`; on success rebuild the `SessionHandle` (queues, timers)
       into the registry; on failure/missing id mark `terminated_by_restart` + write

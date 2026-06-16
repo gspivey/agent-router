@@ -47,6 +47,12 @@ function createFakeSessionFiles(): { files: SessionFiles; state: FakeSessionFile
     },
     listSessions: () => Array.from(state.metas.values()),
     sessionExists: (sessionId) => state.metas.has(sessionId),
+    getSessionPaths: (sessionId) => ({
+      dir: `/tmp/sessions/${sessionId}`,
+      meta: `/tmp/sessions/${sessionId}/meta.json`,
+      stream: `/tmp/sessions/${sessionId}/stream.log`,
+      prompts: `/tmp/sessions/${sessionId}/prompts.log`,
+    }),
   };
 
   return { files, state };

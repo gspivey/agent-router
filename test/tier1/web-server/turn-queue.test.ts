@@ -45,6 +45,7 @@ function createFakeSessionFiles(): SessionFiles & { streams: unknown[]; prompts:
     readMeta: () => ({ session_id: '', original_prompt: '', status: 'active', created_at: 0, completed_at: null, prs: [] }),
     listSessions: () => [],
     sessionExists: () => true,
+    getSessionPaths: () => ({ dir: '', meta: '', stream: '', prompts: '' }),
   };
 }
 
