@@ -39,6 +39,7 @@ import type { PendingWakeSweeper } from './pending-wake-sweeper.js';
 import { shouldNotify, sendSessionEndNotification } from './notify.js';
 import { startTokenExpiryChecker } from './token-expiry.js';
 import { createWorktreeManager } from './worktree-manager.js';
+import { buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from './acp.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -435,20 +436,25 @@ async function main(): Promise<void> {
     db,
     sessionFiles,
     acpSpawner: (sessionId: string, repo?: string) => {
-      const env = resolveSessionTokenEnv(repo, tokenResolver);
-      if (repo !== undefined && env['GITHUB_TOKEN'] === undefined) {
+      const tokenEnv = resolveSessionTokenEnv(repo, tokenResolver);
+      if (repo !== undefined && tokenEnv['GITHUB_TOKEN'] === undefined) {
         log.warn('No GitHub token resolved for session repo; child inherits daemon env', { repo });
       }
+      const overrides: Record<string, string> = { ...tokenEnv };
       // Create an isolated worktree for repo-bound sessions
       if (repo !== undefined) {
         try {
           const workdir = worktreeManager.ensureWorktree(repo, sessionId);
-          env['WORKDIR'] = workdir;
+          overrides['WORKDIR'] = workdir;
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           log.warn('Failed to create worktree; session proceeds without WORKDIR', { repo, sessionId, error: msg });
         }
       }
+      const allowlist = config.childEnvAllowlist
+        ? [...DEFAULT_CHILD_ENV_ALLOWLIST, ...config.childEnvAllowlist]
+        : undefined;
+      const env = buildChildEnv(process.env as Record<string, string | undefined>, overrides, allowlist);
       return adapter.spawn({ sessionId, env });
     },
     log,

@@ -346,6 +346,62 @@ export function createACPClientFromStreams(
   };
 }
 
+/**
+ * Default allowlist of parent env keys forwarded to child processes.
+ * Conservative set: what git/gh/kiro genuinely need to run.
+ */
+export const DEFAULT_CHILD_ENV_ALLOWLIST: readonly string[] = [
+  'PATH',
+  'HOME',
+  'LANG',
+  'USER',
+  'SHELL',
+  'TERM',
+  'TMPDIR',
+  'XDG_RUNTIME_DIR',
+  'NODE_PATH',
+];
+
+/**
+ * Build a scrubbed environment for a child process.
+ *
+ * Forwards only allowlisted keys from the parent env, plus any key matching
+ * the `AGENT_ROUTER_*` prefix, then applies explicit overrides on top.
+ * This ensures secrets like `GITHUB_TOKEN_*` and `GITHUB_WEBHOOK_SECRET*`
+ * never leak into spawned sessions.
+ *
+ * Pure function — no side effects, no reads from process.env.
+ */
+export function buildChildEnv(
+  parentEnv: Record<string, string | undefined>,
+  overrides: Record<string, string>,
+  allowlist?: readonly string[],
+): Record<string, string> {
+  const allowed = allowlist ?? DEFAULT_CHILD_ENV_ALLOWLIST;
+  const result: Record<string, string> = {};
+
+  for (const key of allowed) {
+    const value = parentEnv[key];
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+
+  // Always forward AGENT_ROUTER_* keys from parent
+  for (const key of Object.keys(parentEnv)) {
+    if (key.startsWith('AGENT_ROUTER_') && parentEnv[key] !== undefined) {
+      result[key] = parentEnv[key]!;
+    }
+  }
+
+  // Apply explicit overrides last (e.g. GITHUB_TOKEN, AGENT_ROUTER_SESSION_ID)
+  for (const [key, value] of Object.entries(overrides)) {
+    result[key] = value;
+  }
+
+  return result;
+}
+
 export function spawnACPClient(
   kiroPath: string,
   args: string[],
@@ -354,7 +410,7 @@ export function spawnACPClient(
 ): ACPClient {
   const child: ChildProcess = spawn(kiroPath, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: env ? { ...process.env, ...env } : undefined,
+    env: env ?? undefined,
   });
 
   const sessionEnded = new Promise<void>((resolve) => {

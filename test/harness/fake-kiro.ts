@@ -12,13 +12,13 @@ export class FakeKiroBackend implements KiroBackend {
   private scenarioPath: string | null = null;
 
   spawnConfig(): { command: string; args: string[]; env: Record<string, string> } {
-    return {
-      command: 'node',
-      args: ['--import', 'tsx/esm', FAKE_KIRO_SCRIPT],
-      env: this.scenarioPath
-        ? { FAKE_KIRO_SCENARIO: this.scenarioPath }
-        : {},
-    };
+    const env: Record<string, string> = {};
+    // Forward essential env vars the child needs to run node/tsx
+    if (process.env['PATH']) env['PATH'] = process.env['PATH'];
+    if (process.env['HOME']) env['HOME'] = process.env['HOME'];
+    if (process.env['NODE_PATH']) env['NODE_PATH'] = process.env['NODE_PATH'];
+    if (this.scenarioPath) env['FAKE_KIRO_SCENARIO'] = this.scenarioPath;
+    return { command: 'node', args: ['--import', 'tsx/esm', FAKE_KIRO_SCRIPT], env };
   }
 
   async loadScenario(scenarioPath: string): Promise<void> {
