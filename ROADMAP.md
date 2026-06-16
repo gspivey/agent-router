@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 8. `tail` renders agent text
-
-Fix the `tail` pretty-printer (`prettyPrint` in `bin/agent-router.ts`) so a plain (non-`--raw`)
-tail shows the agent's actual output. Agent message text arrives in the entry's `content`
-field, which the current printer renders only for error/stderr entry types while agent
-messages fall back to `message`. Render `content` for agent-message entries too. Add Tier 1
-tests covering each entry shape (agent message, error, tool call).
-
-- Spec: `BACKLOG.md § P2.12`
-- [ ] Complete · PR: —
-
----
-
 ### 9. `GET /health` endpoint
 
 Add a `GET /health` route to the daemon's HTTP server (`src/server.ts`) returning `200` with
@@ -329,6 +316,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 8. `tail` renders agent text
+
+Fix the `tail` pretty-printer (`prettyPrint` in `bin/agent-router.ts`) so a plain (non-`--raw`)
+tail shows the agent's actual output. Agent message text arrives in the entry's `content`
+field, which the current printer renders only for error/stderr entry types while agent
+messages fall back to `message`. Render `content` for agent-message entries too. Add Tier 1
+tests covering each entry shape (agent message, error, tool call).
+
+- Spec: `BACKLOG.md § P2.12`
+- [x] Complete · PR: #48
+
+---
 
 ### 7. `kill` subcommand
 
