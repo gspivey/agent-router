@@ -26,12 +26,12 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
     - _Requirements: 5.1, 5.3_
 
 - [ ] 2. Per-repo cron pause / resume
-  - [ ] 2.1 `cron_state` persistence
+  - [x] 2.1 `cron_state` persistence
     - Add `cron_state(name TEXT PRIMARY KEY, paused INTEGER NOT NULL, updated_at INTEGER)` to
       `src/db.ts` with `getCronState`/`setCronPaused` methods; absent row defaults to active.
     - Tier 1: default-active, set/clear paused, persistence round-trip.
     - _Requirements: 3.4_
-  - [ ] 2.2 CLI control + scheduler honors state
+  - [x] 2.2 CLI control + scheduler honors state
     - `agent-router cron list|pause <name>|resume <name>` via the CLI/IPC server
       (`src/cli-server.ts`); handler updates `cron_state` and calls `.stop()`/`.start()` on the
       live `ScheduledTask`. `setupCronJobs` consults `cron_state` at registration (paused →
