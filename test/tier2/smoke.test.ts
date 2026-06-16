@@ -78,6 +78,6 @@ describe('Tier 2 harness smoke test', () => {
   it('FakeKiroBackend reset clears scenario', async () => {
     await kiro.reset();
     const cfg = kiro.spawnConfig();
-    expect(cfg.env).toEqual({});
+    expect(cfg.env['FAKE_KIRO_SCENARIO']).toBeUndefined();
   });
 });

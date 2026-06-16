@@ -33,20 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 21. Child-environment secret hygiene (env-scrub)
-
-Stop leaking every repo's PAT into every spawned session. Add a pure
-`buildChildEnv(parentEnv, overrides, allowlist)` and route the spawn path
-(`spawnACPClient`/adapter) through it so the child receives only an allowlist of parent env
-(PATH, HOME, `AGENT_ROUTER_*`, optional `config.childEnvAllowlist`) plus the resolved
-`GITHUB_TOKEN` — no other `GITHUB_TOKEN_*`/`GITHUB_WEBHOOK_SECRET*`. Defense-in-depth half of
-the per-repo-token fix. Tier 1 (allowlist) + Tier 2 (spawned child excludes other secrets).
-
-- Spec: `.kiro/specs/operator-controls/` · tasks `1.1`, `1.2`
-- [ ] Complete · PR: —
-
----
-
 ### 22. Per-repo cron pause / resume
 
 Add a `cron_state` table (`src/db.ts`) and `agent-router cron list|pause <name>|resume <name>`
@@ -154,6 +140,20 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 21. Child-environment secret hygiene (env-scrub)
+
+Stop leaking every repo's PAT into every spawned session. Add a pure
+`buildChildEnv(parentEnv, overrides, allowlist)` and route the spawn path
+(`spawnACPClient`/adapter) through it so the child receives only an allowlist of parent env
+(PATH, HOME, `AGENT_ROUTER_*`, optional `config.childEnvAllowlist`) plus the resolved
+`GITHUB_TOKEN` — no other `GITHUB_TOKEN_*`/`GITHUB_WEBHOOK_SECRET*`. Defense-in-depth half of
+the per-repo-token fix. Tier 1 (allowlist) + Tier 2 (spawned child excludes other secrets).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `1.1`, `1.2`
+- [x] Complete · PR: #61
+
+---
 
 ### 20. Git worktrees per session
 

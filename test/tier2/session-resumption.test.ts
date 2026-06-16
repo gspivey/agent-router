@@ -118,6 +118,8 @@ describe('session resumption on startup (Task 3.2)', () => {
       acpSpawner: (sessionId: string) => {
         return spawnACPClient(process.execPath, ['--import', 'tsx/esm', FAKE_KIRO_CRASH_ON_LOAD], {
           AGENT_ROUTER_SESSION_ID: sessionId,
+          ...(process.env['PATH'] ? { PATH: process.env['PATH'] } : {}),
+          ...(process.env['HOME'] ? { HOME: process.env['HOME'] } : {}),
         });
       },
       log,

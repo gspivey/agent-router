@@ -41,6 +41,8 @@ export interface AgentRouterConfig {
   notifyOnSessionEnd?: NotifyOnSessionEndConfig;
   /** Optional ISO 8601 date when the GitHub PAT expires. Enables expiry alerting. */
   tokenExpiresAt?: string;
+  /** Optional extra env var names to forward to child processes (on top of the built-in allowlist). */
+  childEnvAllowlist?: string[];
 }
 
 export interface RepoConfig {
@@ -351,6 +353,23 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     tokenExpiresAt = val;
   }
 
+  // childEnvAllowlist (optional)
+  let childEnvAllowlist: string[] | undefined;
+  if (config['childEnvAllowlist'] !== undefined) {
+    const raw = config['childEnvAllowlist'];
+    if (!Array.isArray(raw)) {
+      throw new FatalError('Invalid "childEnvAllowlist": must be an array');
+    }
+    childEnvAllowlist = [];
+    for (let i = 0; i < raw.length; i++) {
+      const entry = raw[i] as unknown;
+      if (typeof entry !== 'string' || entry.length === 0) {
+        throw new FatalError(`Invalid "childEnvAllowlist[${i}]": must be a non-empty string`);
+      }
+      childEnvAllowlist.push(entry);
+    }
+  }
+
   // Build set of known "owner/name" for cron repo matching
   const repoKeys = new Set(repos.map(r => `${r.owner}/${r.name}`));
 
@@ -416,6 +435,9 @@ export function validateConfig(config: unknown): AgentRouterConfig {
   }
   if (tokenExpiresAt !== undefined) {
     result.tokenExpiresAt = tokenExpiresAt;
+  }
+  if (childEnvAllowlist !== undefined) {
+    result.childEnvAllowlist = childEnvAllowlist;
   }
   return result;
 }

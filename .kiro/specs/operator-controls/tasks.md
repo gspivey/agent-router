@@ -10,14 +10,14 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
 ## Tasks
 
 - [ ] 1. Child-environment secret hygiene (env-scrub)
-  - [ ] 1.1 Pure `buildChildEnv(parentEnv, overrides, allowlist)` helper
+  - [x] 1.1 Pure `buildChildEnv(parentEnv, overrides, allowlist)` helper
     - Add to the spawn path module (`src/agent-adapter.ts` or `src/acp.ts`). Forward only an
       allowlist of parent env keys (PATH, HOME, LANG, `AGENT_ROUTER_*`, plus an optional extra
       allowlist), then apply `overrides` (the resolved `GITHUB_TOKEN`).
     - Tier 1: parent env with `GITHUB_TOKEN_DPDK`, `GITHUB_WEBHOOK_SECRET_*` yields a child env
       with none of them, the allowlisted keys present, and the `GITHUB_TOKEN` override applied.
     - _Requirements: 5.1, 5.2, 5.4_
-  - [ ] 1.2 Wire the allowlist into the spawn path
+  - [x] 1.2 Wire the allowlist into the spawn path
     - Replace `spawnACPClient`'s `{ ...process.env, ...env }` with `buildChildEnv(...)` (or an
       option that disables the blanket `process.env` spread). Add optional
       `config.childEnvAllowlist`. Keep the per-repo `GITHUB_TOKEN` injection from the prior fix.
