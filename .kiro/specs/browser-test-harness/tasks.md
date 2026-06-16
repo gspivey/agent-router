@@ -43,7 +43,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
   - Ensure smoke test and fixtures compile correctly under `npx playwright test test/browser/smoke.spec.ts`. Ask the user if questions arise.
 
 - [ ] 5. Implement list view tests
-  - [ ] 5.1 Create `test/browser/list-view.spec.ts`
+  - [x] 5.1 Create `test/browser/list-view.spec.ts`
     - Import `test` and `expect` from the local `./fixtures.ts`
     - Seed a session with `seedSession({ live: false, status: 'active' })` — filesystem-only, no live process needed
     - Test: call `page.goto(baseUrl)`, wait for `.session-item` element with `.badge` child within 5s
@@ -52,7 +52,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - _Requirements: 2.1, 2.2, 2.3, 11.3_
 
 - [ ] 6. Implement detail view tests
-  - [ ] 6.1 Create `test/browser/detail-view.spec.ts`
+  - [x] 6.1 Create `test/browser/detail-view.spec.ts`
     - Seed with `seedSession({ live: false, status: 'active' })` — filesystem-only, detail view just needs metadata
     - Test: call `page.goto(baseUrl)`, click session row → URL hash updates to `#/sessions/<id>`, `#list-view` hidden, `#detail-view` visible
     - Test: detail view shows status badge, repo name, session ID, creation timestamp
@@ -61,7 +61,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
 - [ ] 7. Implement SSE rendering tests
-  - [ ] 7.1 Create `test/browser/sse-render.spec.ts`
+  - [x] 7.1 Create `test/browser/sse-render.spec.ts`
     - Seed with `seedSession({ live: false, status: 'active' })` — filesystem-only; SSE broker tails stream.log regardless of live process
     - Call `page.goto(baseUrl)`, navigate to detail view
     - Append entries to `stream.log` via `sessionFiles.appendStream()` after page navigation
@@ -119,7 +119,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
 - [ ] 13. Implement auth token tests
-  - [ ] 13.1 Create `test/browser/auth-token.spec.ts`
+  - [x] 13.1 Create `test/browser/auth-token.spec.ts`
     - Test (bindPublic: false, default): `page.evaluate(() => window.__DAEMON_TOKEN)` returns the provisioned daemon token for this test instance
     - Test (bindPublic: true): create a second fixture variant with `bindPublic: true`, use `page.setExtraHTTPHeaders({ Authorization: 'Bearer <token>' })`, verify `page.evaluate(() => window.__DAEMON_TOKEN)` returns `undefined`
     - _Requirements: 9.1, 9.2_
