@@ -34,6 +34,9 @@ function createFakeGitHubClient() {
     async mergePullRequest(): Promise<MergeResult> {
       throw new Error('not used');
     },
+    async getCheckRunsForRef(): Promise<never[]> {
+      return [];
+    },
   } satisfies GitHubClient & { setPRState: (r: string, n: number, s: PullState) => void };
 }
 
@@ -81,7 +84,7 @@ describe('merged_at population via verifySession (P2.2)', () => {
   it('sets merged_at on all PR entries when all PRs are merged', async () => {
     const h = await mgr.createSession('Ship PR');
     await mgr.registerPR(h.sessionId, 'owner/repo', 42);
-    github.setPRState('owner/repo', 42, { number: 42, state: 'closed', merged: true, mergeCommitSha: 'abc' });
+    github.setPRState('owner/repo', 42, { number: 42, state: 'closed', merged: true, mergeCommitSha: 'abc', headSha: null });
 
     // Trigger verify via injectPrompt (post-sendPrompt fast trigger)
     await mgr.injectPrompt(h.sessionId, 'CI passed', 'webhook');
@@ -97,7 +100,7 @@ describe('merged_at population via verifySession (P2.2)', () => {
   it('does not set merged_at when PR is closed without merge', async () => {
     const h = await mgr.createSession('Closed PR');
     await mgr.registerPR(h.sessionId, 'owner/repo', 99);
-    github.setPRState('owner/repo', 99, { number: 99, state: 'closed', merged: false, mergeCommitSha: null });
+    github.setPRState('owner/repo', 99, { number: 99, state: 'closed', merged: false, mergeCommitSha: null, headSha: null });
 
     await mgr.injectPrompt(h.sessionId, 'PR closed', 'webhook');
     await new Promise((r) => setTimeout(r, 100));

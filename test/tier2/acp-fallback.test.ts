@@ -56,6 +56,9 @@ function createFakeGitHubClient(): FakeGitHubClient {
     async mergePullRequest(): Promise<MergeResult> {
       throw new Error('fake: mergePullRequest not used in these tests');
     },
+    async getCheckRunsForRef(): Promise<never[]> {
+      return [];
+    },
   } satisfies FakeGitHubClient;
   return self;
 }
@@ -124,7 +127,7 @@ describe('post-sendPrompt → verifySession fast trigger (Req 5.1)', () => {
     makeManager();
     const h = await mgr.createSession('Ship feature');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 59);
-    github.setPRState('agent-router/repo', 59, { number: 59, state: 'closed', merged: true, mergeCommitSha: 'abc' });
+    github.setPRState('agent-router/repo', 59, { number: 59, state: 'closed', merged: true, mergeCommitSha: 'abc', headSha: null });
 
     await mgr.injectPrompt(h.sessionId, 'Final word', 'cli');
 
@@ -151,7 +154,7 @@ describe('post-sendPrompt → verifySession fast trigger (Req 5.1)', () => {
     makeManager();
     const h = await mgr.createSession('Open work');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 60);
-    github.setPRState('agent-router/repo', 60, { number: 60, state: 'open', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 60, { number: 60, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
 
     await mgr.injectPrompt(h.sessionId, 'check in', 'cli');
     await new Promise((r) => setTimeout(r, 50));
@@ -171,7 +174,7 @@ describe('inactivity watchdog → verifySession-first (Req 5.2)', () => {
     makeManager({ inactivityMinutes: FAST_INACTIVITY });
     const h = await mgr.createSession('Ship + idle');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 61);
-    github.setPRState('agent-router/repo', 61, { number: 61, state: 'closed', merged: true, mergeCommitSha: 'sha' });
+    github.setPRState('agent-router/repo', 61, { number: 61, state: 'closed', merged: true, mergeCommitSha: 'sha', headSha: null });
 
     // Wait past the inactivity window
     await new Promise((r) => setTimeout(r, 3500));
@@ -185,7 +188,7 @@ describe('inactivity watchdog → verifySession-first (Req 5.2)', () => {
     makeManager({ inactivityMinutes: FAST_INACTIVITY });
     const h = await mgr.createSession('Hung work');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 62);
-    github.setPRState('agent-router/repo', 62, { number: 62, state: 'open', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 62, { number: 62, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
 
     await new Promise((r) => setTimeout(r, 3500));
 
@@ -210,7 +213,7 @@ describe('inactivity watchdog → verifySession-first (Req 5.2)', () => {
     const h = await mgr.createSession('Mid-outage');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 63);
     // Configure the fake to fail the first getPullState call only (the next watchdog cycle will succeed)
-    github.setPRState('agent-router/repo', 63, { number: 63, state: 'open', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 63, { number: 63, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
     github.failNextGetPullState(new Error('502 Bad Gateway'));
 
     await new Promise((r) => setTimeout(r, 3500));

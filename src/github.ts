@@ -23,12 +23,21 @@ export interface PullState {
   merged: boolean;
   /** GitHub's merge_commit_sha. Null when not yet computed or PR was closed unmerged. */
   mergeCommitSha: string | null;
+  /** The head sha of the PR branch. */
+  headSha: string | null;
 }
 
 export interface MergeResult {
   sha: string;
   merged: true;
   message: string;
+}
+
+export interface CheckRunSummary {
+  id: number;
+  name: string;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion: string | null;
 }
 
 export interface GitHubClient {
@@ -39,6 +48,7 @@ export interface GitHubClient {
     prNumber: number,
     options?: { commitTitle?: string; commitMessage?: string },
   ): Promise<MergeResult>;
+  getCheckRunsForRef(owner: string, repo: string, ref: string): Promise<CheckRunSummary[]>;
 }
 
 export type TokenResolver = (owner: string, repo: string) => string;
@@ -212,13 +222,18 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
       const mergedRaw = data['merged'];
       const numberRaw = data['number'];
       const shaRaw = data['merge_commit_sha'];
+      const headRaw = data['head'];
+      const headShaRaw = typeof headRaw === 'object' && headRaw !== null
+        ? (headRaw as Record<string, unknown>)['sha']
+        : null;
       // GitHub returns state='closed' for both merged and closed-unmerged PRs;
       // 'merged' is the boolean discriminator.
       const state: 'open' | 'closed' = stateRaw === 'open' ? 'open' : 'closed';
       const merged: boolean = mergedRaw === true;
       const number: number = typeof numberRaw === 'number' ? numberRaw : prNumber;
       const mergeCommitSha: string | null = typeof shaRaw === 'string' && shaRaw.length > 0 ? shaRaw : null;
-      return { number, state, merged, mergeCommitSha };
+      const headSha: string | null = typeof headShaRaw === 'string' && headShaRaw.length > 0 ? headShaRaw : null;
+      return { number, state, merged, mergeCommitSha, headSha };
     },
 
     async mergePullRequest(owner, repo, prNumber, options): Promise<MergeResult> {
@@ -270,6 +285,18 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
       // caught up within the polling budget. Return the original response —
       // session-level verification will retry later if needed.
       return { sha, merged: true, message };
+    },
+
+    async getCheckRunsForRef(owner, repo, ref): Promise<CheckRunSummary[]> {
+      const data = (await request('GET', `/repos/${owner}/${repo}/commits/${ref}/check-runs`, { owner, repo })) as Record<string, unknown>;
+      const checkRuns = data['check_runs'];
+      if (!Array.isArray(checkRuns)) return [];
+      return checkRuns.map((cr: Record<string, unknown>) => ({
+        id: typeof cr['id'] === 'number' ? cr['id'] : 0,
+        name: typeof cr['name'] === 'string' ? cr['name'] : '',
+        status: (cr['status'] as CheckRunSummary['status']) ?? 'queued',
+        conclusion: typeof cr['conclusion'] === 'string' ? cr['conclusion'] : null,
+      }));
     },
   };
   return client;

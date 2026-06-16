@@ -33,7 +33,7 @@ export interface SessionMeta {
   prs: Array<{ repo: string; pr_number: number; registered_at: number; merged_at?: number }>;
 }
 
-export type PromptSource = 'cli' | 'webhook' | 'cron' | 'mcp' | 'web';
+export type PromptSource = 'cli' | 'webhook' | 'cron' | 'mcp' | 'web' | 'router';
 
 export interface PromptEntry {
   ts: string;

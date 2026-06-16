@@ -92,6 +92,9 @@ function createFakeGitHub(): FakeGitHubClient {
     async mergePullRequest(): Promise<MergeResult> {
       throw new Error('fake: mergePullRequest not used by verifier tests');
     },
+    async getCheckRunsForRef(): Promise<never[]> {
+      return [];
+    },
   };
 }
 
@@ -127,7 +130,7 @@ describe('verifySession', () => {
   describe('terminal write paths', () => {
     it('all PRs merged → writes termination_reason=merged and returns verified:true', async () => {
       state.metas.set('sess-1', makeMeta([{ repo: 'o/r', pr_number: 1 }]));
-      github.setState('o/r', 1, { number: 1, state: 'closed', merged: true, mergeCommitSha: 'abc' });
+      github.setState('o/r', 1, { number: 1, state: 'closed', merged: true, mergeCommitSha: 'abc', headSha: null });
 
       const result = await verifySession('sess-1');
       expect(result).toEqual({ verified: true, termination_reason: 'merged' });
@@ -138,7 +141,7 @@ describe('verifySession', () => {
 
     it('all PRs closed-unmerged → writes closed_without_merge', async () => {
       state.metas.set('sess-1', makeMeta([{ repo: 'o/r', pr_number: 1 }]));
-      github.setState('o/r', 1, { number: 1, state: 'closed', merged: false, mergeCommitSha: null });
+      github.setState('o/r', 1, { number: 1, state: 'closed', merged: false, mergeCommitSha: null, headSha: null });
 
       const result = await verifySession('sess-1');
       expect(result).toEqual({ verified: true, termination_reason: 'closed_without_merge' });
@@ -149,8 +152,8 @@ describe('verifySession', () => {
         { repo: 'o/r', pr_number: 1 },
         { repo: 'o/r', pr_number: 2 },
       ]));
-      github.setState('o/r', 1, { number: 1, state: 'closed', merged: true, mergeCommitSha: 'a' });
-      github.setState('o/r', 2, { number: 2, state: 'closed', merged: false, mergeCommitSha: null });
+      github.setState('o/r', 1, { number: 1, state: 'closed', merged: true, mergeCommitSha: 'a', headSha: null });
+      github.setState('o/r', 2, { number: 2, state: 'closed', merged: false, mergeCommitSha: null, headSha: null });
 
       const result = await verifySession('sess-1');
       expect(result).toEqual({ verified: true, termination_reason: 'closed_without_merge' });
@@ -158,7 +161,7 @@ describe('verifySession', () => {
 
     it('appends session_verified stream entry on terminal write', async () => {
       state.metas.set('sess-1', makeMeta([{ repo: 'o/r', pr_number: 1 }]));
-      github.setState('o/r', 1, { number: 1, state: 'closed', merged: true, mergeCommitSha: 'a' });
+      github.setState('o/r', 1, { number: 1, state: 'closed', merged: true, mergeCommitSha: 'a', headSha: null });
       await verifySession('sess-1');
 
       const entries = state.streamEntries.get('sess-1') ?? [];
@@ -175,8 +178,8 @@ describe('verifySession', () => {
         { repo: 'o/r', pr_number: 1 },
         { repo: 'o/r', pr_number: 2 },
       ]));
-      github.setState('o/r', 1, { number: 1, state: 'open', merged: false, mergeCommitSha: null });
-      github.setState('o/r', 2, { number: 2, state: 'closed', merged: true, mergeCommitSha: 'a' });
+      github.setState('o/r', 1, { number: 1, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
+      github.setState('o/r', 2, { number: 2, state: 'closed', merged: true, mergeCommitSha: 'a', headSha: null });
 
       const result = await verifySession('sess-1');
       expect(result).toEqual({
@@ -242,7 +245,7 @@ describe('verifySession', () => {
   describe('concurrency (single-flight)', () => {
     it('two concurrent calls for the same session produce one write and identical results', async () => {
       state.metas.set('sess-1', makeMeta([{ repo: 'o/r', pr_number: 1 }]));
-      github.setState('o/r', 1, { number: 1, state: 'closed', merged: true, mergeCommitSha: 'abc' });
+      github.setState('o/r', 1, { number: 1, state: 'closed', merged: true, mergeCommitSha: 'abc', headSha: null });
 
       const [a, b] = await Promise.all([verifySession('sess-1'), verifySession('sess-1')]);
       expect(a).toEqual(b);
@@ -259,7 +262,7 @@ describe('verifySession', () => {
 
     it('after settlement the in-flight slot is released for the next call', async () => {
       state.metas.set('sess-1', makeMeta([{ repo: 'o/r', pr_number: 1 }]));
-      github.setState('o/r', 1, { number: 1, state: 'open', merged: false, mergeCommitSha: null });
+      github.setState('o/r', 1, { number: 1, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
 
       await verifySession('sess-1');
       await verifySession('sess-1');
@@ -276,7 +279,7 @@ describe('verifySession', () => {
         { repo: 'no-slash', pr_number: 1 },
         { repo: 'o/r', pr_number: 2 },
       ]));
-      github.setState('o/r', 2, { number: 2, state: 'closed', merged: true, mergeCommitSha: 'a' });
+      github.setState('o/r', 2, { number: 2, state: 'closed', merged: true, mergeCommitSha: 'a', headSha: null });
 
       const result = await verifySession('sess-1');
       // The malformed one is skipped; verification proceeds on the well-formed PR

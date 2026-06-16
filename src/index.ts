@@ -36,6 +36,8 @@ import type { SSEBroker } from './sse-broker.js';
 import { FatalError, EventError, WakeError } from './errors.js';
 import { createPendingWakeSweeper } from './pending-wake-sweeper.js';
 import type { PendingWakeSweeper } from './pending-wake-sweeper.js';
+import { createCheckWatchdog } from './check-watchdog.js';
+import type { CheckWatchdog } from './check-watchdog.js';
 import { shouldNotify, sendSessionEndNotification } from './notify.js';
 import { startTokenExpiryChecker } from './token-expiry.js';
 import { createWorktreeManager } from './worktree-manager.js';
@@ -253,6 +255,7 @@ interface DaemonState {
   cliServer: CliServer | null;
   globalQueue: EventQueue | null;
   pendingWakeSweeper: PendingWakeSweeper | null;
+  checkWatchdog: CheckWatchdog | null;
   tokenExpiryChecker: { stop: () => void } | null;
   sessionMgr: SessionManager | null;
   db: Database | null;
@@ -298,6 +301,12 @@ function installShutdownHandlers(state: DaemonState): void {
       if (state.pendingWakeSweeper) {
         state.pendingWakeSweeper.stop();
         state.log.info('Pending wake sweeper stopped');
+      }
+
+      // 1b2. Stop check watchdog
+      if (state.checkWatchdog) {
+        state.checkWatchdog.stop();
+        state.log.info('Check watchdog stopped');
       }
 
       // 1c. Stop token expiry checker
@@ -498,6 +507,11 @@ async function main(): Promise<void> {
   pendingWakeSweeper.start(5000);
   log.info('Pending wake sweeper started');
 
+  // Start check watchdog (polls PR check status every 30s to nudge waiting sessions)
+  const checkWatchdog = createCheckWatchdog({ github, sessionMgr, sessionFiles, log });
+  checkWatchdog.start(30_000);
+  log.info('Check watchdog started');
+
   // Start token expiry checker if configured
   let tokenExpiryChecker: { stop: () => void } | null = null;
   if (config.tokenExpiresAt !== undefined) {
@@ -592,6 +606,7 @@ async function main(): Promise<void> {
     cliServer,
     globalQueue,
     pendingWakeSweeper,
+    checkWatchdog,
     tokenExpiryChecker,
     sessionMgr,
     db,

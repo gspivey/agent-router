@@ -76,8 +76,11 @@ function createFakeGitHubClient(): FakeGitHubClient {
           message: 'Pull Request successfully merged',
         };
       }
-      states.set(key, { number: prNumber, state: 'closed', merged: true, mergeCommitSha: 'fake-merge-sha' });
+      states.set(key, { number: prNumber, state: 'closed', merged: true, mergeCommitSha: 'fake-merge-sha', headSha: null });
       return { sha: 'fake-merge-sha', merged: true, message: 'Squashed and merged' };
+    },
+    async getCheckRunsForRef(): Promise<never[]> {
+      return [];
     },
   };
 }
@@ -184,7 +187,7 @@ describe('completeSession open-PR validation', () => {
   it('rejects completion when a registered PR is still open on GitHub (the bug)', async () => {
     const h = await mgr.createSession('Ship feature');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 59);
-    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
 
     await expect(mgr.completeSession(h.sessionId, 'merged')).rejects.toBeInstanceOf(OpenPRsError);
 
@@ -199,9 +202,9 @@ describe('completeSession open-PR validation', () => {
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 59);
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 60);
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 61);
-    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null });
-    github.setPRState('agent-router/repo', 60, { number: 60, state: 'closed', merged: true, mergeCommitSha: 'fake-merge-sha' });
-    github.setPRState('agent-router/repo', 61, { number: 61, state: 'open', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
+    github.setPRState('agent-router/repo', 60, { number: 60, state: 'closed', merged: true, mergeCommitSha: 'fake-merge-sha', headSha: null });
+    github.setPRState('agent-router/repo', 61, { number: 61, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
 
     try {
       await mgr.completeSession(h.sessionId, 'merged');
@@ -219,7 +222,7 @@ describe('completeSession open-PR validation', () => {
   it('allows completion when every registered PR is merged', async () => {
     const h = await mgr.createSession('Ship feature');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 59);
-    github.setPRState('agent-router/repo', 59, { number: 59, state: 'closed', merged: true, mergeCommitSha: 'fake-merge-sha' });
+    github.setPRState('agent-router/repo', 59, { number: 59, state: 'closed', merged: true, mergeCommitSha: 'fake-merge-sha', headSha: null });
 
     await expect(mgr.completeSession(h.sessionId, 'merged')).resolves.toBeUndefined();
 
@@ -231,7 +234,7 @@ describe('completeSession open-PR validation', () => {
   it('allows completion when every registered PR is closed-unmerged', async () => {
     const h = await mgr.createSession('Abandon feature');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 59);
-    github.setPRState('agent-router/repo', 59, { number: 59, state: 'closed', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 59, { number: 59, state: 'closed', merged: false, mergeCommitSha: null, headSha: null });
 
     await expect(mgr.completeSession(h.sessionId, 'completed')).resolves.toBeUndefined();
   }, 15_000);
@@ -245,7 +248,7 @@ describe('completeSession open-PR validation', () => {
   it('end-to-end: agent registers PR, merges via mergePR, then completes cleanly', async () => {
     const h = await mgr.createSession('Ship feature');
     await mgr.registerPR(h.sessionId, 'agent-router/repo', 59);
-    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
 
     // First attempt: completion fails because PR is still open
     await expect(mgr.completeSession(h.sessionId, 'merged')).rejects.toBeInstanceOf(OpenPRsError);
@@ -280,7 +283,7 @@ describe('cli-server end-to-end (socket protocol)', () => {
   it('complete_session returns structured open_prs payload when a PR is still open', async () => {
     const session = await cli.newSession('Ship feature');
     await cli.registerPR(session.session_id, 'agent-router/repo', 59);
-    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
 
     const result = await cli.completeSession(session.session_id, 'merged');
 
@@ -306,7 +309,7 @@ describe('cli-server end-to-end (socket protocol)', () => {
   it('merge_pr → complete_session: full happy path through the socket', async () => {
     const session = await cli.newSession('Ship feature');
     await cli.registerPR(session.session_id, 'agent-router/repo', 59);
-    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null });
+    github.setPRState('agent-router/repo', 59, { number: 59, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
 
     // Open-PR check blocks completion
     const blocked = await cli.completeSession(session.session_id, 'merged');

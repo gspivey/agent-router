@@ -91,7 +91,7 @@ describe('createGitHubClient', () => {
       }));
       const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl });
       const result = await client.getPullState('octocat', 'hello', 42);
-      expect(result).toEqual({ number: 42, state: 'open', merged: false, mergeCommitSha: null });
+      expect(result).toEqual({ number: 42, state: 'open', merged: false, mergeCommitSha: null, headSha: null });
       expect(calls[0]!.url).toBe('http://stub/repos/octocat/hello/pulls/42');
       expect(calls[0]!.init.method).toBe('GET');
     });
@@ -103,7 +103,7 @@ describe('createGitHubClient', () => {
       }));
       const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl });
       const result = await client.getPullState('o', 'r', 7);
-      expect(result).toEqual({ number: 7, state: 'closed', merged: true, mergeCommitSha: null });
+      expect(result).toEqual({ number: 7, state: 'closed', merged: true, mergeCommitSha: null, headSha: null });
     });
 
     it('reports state=closed, merged=false for a closed-unmerged PR', async () => {
@@ -113,7 +113,7 @@ describe('createGitHubClient', () => {
       }));
       const client = createGitHubClient({ baseUrl: 'http://stub', fetchImpl });
       const result = await client.getPullState('o', 'r', 7);
-      expect(result).toEqual({ number: 7, state: 'closed', merged: false, mergeCommitSha: null });
+      expect(result).toEqual({ number: 7, state: 'closed', merged: false, mergeCommitSha: null, headSha: null });
     });
 
     it('throws GitHubApiError on 404', async () => {
