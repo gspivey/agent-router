@@ -71,18 +71,18 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
     - _Requirements: 4.1, 4.2, 4.3, 4.6_
 
 - [ ] 5. Config hot-reload
-  - [ ] 5.1 `classifyConfigChange(old, next)` pure partitioner
+  - [x] 5.1 `classifyConfigChange(old, next)` pure partitioner
     - In `src/config.ts`: returns `{ reloadable, restartRequired }` changed-field lists.
       Restart-required: `port`, `controlPort`, `bindPublic`, `kiroPath`, `trustedProxy`.
     - Tier 1: each field classified correctly; no-change → empty lists.
     - _Requirements: 1.3, 1.4_
-  - [ ] 5.2 `watchConfig` module (debounce, validate-or-retain)
+  - [x] 5.2 `watchConfig` module (debounce, validate-or-retain)
     - New `src/config-watch.ts`: `fs.watch` + debounce (default 1000ms) → `loadConfig`; on
       validation failure call `onError` and retain previous; on success call `onReload(next)`.
     - Tier 1: debounce collapses rapid writes (injected timer); invalid config → onError, no
       throw.
     - _Requirements: 1.1, 1.2_
-  - [ ] 5.3 Apply reload to running components
+  - [x] 5.3 Apply reload to running components
     - Route token resolver, wake policy inputs, and `sessionTimeout` through a mutable holder
       updated on reload; `reconcileCronJobs` stops/starts/replaces tasks (re-applying paused
       state from task 2); active sessions untouched.
