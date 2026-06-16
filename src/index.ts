@@ -460,6 +460,19 @@ async function main(): Promise<void> {
     log,
     tokenStore,
     verifySession,
+    health: {
+      startedAtMs: Date.now(),
+      activeSessionCount: () =>
+        sessionFiles.listSessions().filter((s) => s.status === 'active').length,
+      checkDb: () => {
+        try {
+          db.markStaleEvents(0);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+    },
   });
 
   const httpServer = serve({

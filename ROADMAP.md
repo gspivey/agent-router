@@ -33,18 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 9. `GET /health` endpoint
-
-Add a `GET /health` route to the daemon's HTTP server (`src/server.ts`) returning `200` with
-`{ status: "ok", uptime_seconds, active_sessions, db_ok }`, and `503` when the database is
-unreachable. The handler is a pure function over injected daemon state so it Tier 1-tests
-directly (ok shape, db-down → 503).
-
-- Spec: `BACKLOG.md § P1.5`
-- [ ] Complete · PR: —
-
----
-
 ### 10. Track merge timestamp
 
 Add an optional `merged_at?: number` to each `prs[]` entry in `SessionMeta`
@@ -316,6 +304,18 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 9. `GET /health` endpoint
+
+Add a `GET /health` route to the daemon's HTTP server (`src/server.ts`) returning `200` with
+`{ status: "ok", uptime_seconds, active_sessions, db_ok }`, and `503` when the database is
+unreachable. The handler is a pure function over injected daemon state so it Tier 1-tests
+directly (ok shape, db-down → 503).
+
+- Spec: `BACKLOG.md § P1.5`
+- [x] Complete · PR: #49
+
+---
 
 ### 8. `tail` renders agent text
 
