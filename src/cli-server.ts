@@ -11,6 +11,7 @@ export interface CliRequest {
     | 'list_sessions'
     | 'inject_prompt'
     | 'terminate_session'
+    | 'kill_session'
     | 'register_pr'
     | 'merge_pr'
     | 'session_status'
@@ -87,6 +88,18 @@ export function createCliServer(deps: {
         throw new Error('Missing or empty "session_id" parameter');
       }
       await sessionMgr.terminateSession(sessionId, 'terminated_cli', 'local');
+      return { ok: true };
+    },
+
+    async kill_session(req: CliRequest): Promise<Record<string, unknown>> {
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('Missing or empty "session_id" parameter');
+      }
+      const reason = typeof req['reason'] === 'string' && req['reason'].length > 0
+        ? req['reason']
+        : 'killed_by_operator';
+      await sessionMgr.terminateSession(sessionId, 'killed_by_operator', reason);
       return { ok: true };
     },
 

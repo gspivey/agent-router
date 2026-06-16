@@ -47,7 +47,7 @@ export interface SessionManager {
   registerPR(sessionId: string, repo: string, prNumber: number): Promise<void>;
   mergePR(sessionId: string, repo: string, prNumber: number): Promise<MergePRResult>;
   completeSession(sessionId: string, reason: string): Promise<void>;
-  terminateSession(sessionId: string, reason?: 'terminated_cli' | 'terminated_web', actor?: string): Promise<void>;
+  terminateSession(sessionId: string, reason?: 'terminated_cli' | 'terminated_web' | 'killed_by_operator', actor?: string): Promise<void>;
   getActiveSession(sessionId: string): SessionHandle | null;
   shutdown(): Promise<void>;
 }
@@ -750,7 +750,7 @@ export function createSessionManager(deps: {
       graceTimers.set(sessionId, graceTimer);
     },
 
-    async terminateSession(sessionId: string, reason: 'terminated_cli' | 'terminated_web' = 'terminated_cli', actor: string = 'local'): Promise<void> {
+    async terminateSession(sessionId: string, reason: 'terminated_cli' | 'terminated_web' | 'killed_by_operator' = 'terminated_cli', actor: string = 'local'): Promise<void> {
       const handle = registry.get(sessionId);
       if (handle === undefined) {
         throw new Error(`No active session found: ${sessionId}`);
