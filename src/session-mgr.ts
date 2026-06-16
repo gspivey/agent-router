@@ -11,6 +11,7 @@ import type { GitHubClient } from './github.js';
 import type { VerifySessionFn, VerifyResult } from './verify-session.js';
 import type { TurnQueue } from './turn-queue.js';
 import { createTurnQueue } from './turn-queue.js';
+import type { WorktreeManager } from './worktree-manager.js';
 
 export interface SessionHandle {
   sessionId: string;
@@ -149,11 +150,14 @@ export function createSessionManager(deps: {
   verify?: VerifySessionFn;
   /** Best-effort callback fired after a session reaches terminal state. */
   onSessionEnd?: (sessionId: string) => void;
+  /** Optional worktree manager for isolated per-session working directories. */
+  worktreeManager?: WorktreeManager;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
   const verify = deps.verify;
   const onSessionEnd = deps.onSessionEnd;
+  const worktreeManager = deps.worktreeManager;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
@@ -179,6 +183,19 @@ export function createSessionManager(deps: {
       const meta = sessionFiles.readMeta(sessionId);
       for (const pr of meta.prs) {
         db.clearPendingWake(pr.repo, pr.pr_number);
+      }
+    } catch {
+      // Best effort — meta may not be readable
+    }
+  }
+
+  /** Remove the worktree for a session. Best-effort. */
+  function removeSessionWorktree(sessionId: string): void {
+    if (worktreeManager === undefined) return;
+    try {
+      const meta = sessionFiles.readMeta(sessionId);
+      if (meta.repo !== undefined) {
+        worktreeManager.removeWorktree(meta.repo, sessionId);
       }
     } catch {
       // Best effort — meta may not be readable
@@ -288,6 +305,7 @@ export function createSessionManager(deps: {
         registry.remove(sessionId);
         clearSessionTimers(sessionId);
         clearPendingWakesForSession(sessionId);
+        removeSessionWorktree(sessionId);
         completionFlags.delete(sessionId);
 
         onSessionEnd?.(sessionId);
@@ -428,6 +446,7 @@ export function createSessionManager(deps: {
 
         completionFlags.delete(sessionId);
         clearPendingWakesForSession(sessionId);
+        removeSessionWorktree(sessionId);
         registry.remove(sessionId);
         onSessionEnd?.(sessionId);
       })
@@ -474,6 +493,7 @@ export function createSessionManager(deps: {
       registry.remove(sessionId);
       clearSessionTimers(sessionId);
       clearPendingWakesForSession(sessionId);
+      removeSessionWorktree(sessionId);
       completionFlags.delete(sessionId);
 
       onSessionEnd?.(sessionId);
@@ -753,6 +773,7 @@ export function createSessionManager(deps: {
         // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
         registry.remove(sessionId);
         clearSessionTimers(sessionId);
+        removeSessionWorktree(sessionId);
         completionFlags.delete(sessionId);
 
         handle.acp.kill().catch((err: unknown) => {
@@ -775,6 +796,9 @@ export function createSessionManager(deps: {
 
       // Clear pending wakes for this session's PRs
       clearPendingWakesForSession(sessionId);
+
+      // Clean up worktree
+      removeSessionWorktree(sessionId);
 
       // Remove from registry first to prevent monitorSubprocessExit from double-updating
       registry.remove(sessionId);
@@ -955,6 +979,7 @@ export function createSessionManager(deps: {
         const { sessionId } = handle;
         registry.remove(sessionId);
         completionFlags.delete(sessionId);
+        removeSessionWorktree(sessionId);
 
         // Emit session_ended BEFORE writing terminal meta
         try {
@@ -1030,6 +1055,7 @@ export function createSessionManager(deps: {
         const { sessionId } = handle;
         registry.remove(sessionId);
         completionFlags.delete(sessionId);
+        removeSessionWorktree(sessionId);
 
         // Check if the session already reached terminal state during drain
         try {
