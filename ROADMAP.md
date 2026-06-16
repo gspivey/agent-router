@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 13. Prompt-injection input guards
-
-Wrap untrusted-source fields (webhook comment bodies, titles, check-run summaries) in
-`<<UNTRUSTED_INPUT>>…<</UNTRUSTED_INPUT>>` markers inside the prompt composers in
-`src/prompt.ts`, prepend a preamble instructing the agent to treat delimited content as data
-not instructions, and cap each field at 2KB with a truncation marker. Tier 1-test that a large
-hostile field is truncated, wrapped, and preceded by the preamble.
-
-- Spec: `BACKLOG.md § P3.2`
-- [ ] Complete · PR: —
-
----
-
 ### 14. Browser harness: module resolution and `disconnectAll`
 
 Stand up the Playwright tier. Install `@playwright/test` as a devDependency, add
@@ -266,6 +253,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 13. Prompt-injection input guards
+
+Wrap untrusted-source fields (webhook comment bodies, titles, check-run summaries) in
+`<<UNTRUSTED_INPUT>>…<</UNTRUSTED_INPUT>>` markers inside the prompt composers in
+`src/prompt.ts`, prepend a preamble instructing the agent to treat delimited content as data
+not instructions, and cap each field at 2KB with a truncation marker. Tier 1-test that a large
+hostile field is truncated, wrapped, and preceded by the preamble.
+
+- Spec: `BACKLOG.md § P3.2`
+- [x] Complete · PR: #53
+
+---
 
 ### 12. PAT expiry alerting
 
