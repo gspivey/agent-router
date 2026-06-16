@@ -1,0 +1,16 @@
+{
+  "name": "load-session-success",
+  "steps": [
+    {
+      "trigger": "session/load",
+      "result": { "ok": true }
+    },
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        { "jsonrpc": "2.0", "method": "session/notification", "params": { "type": "agent_message", "message": "Resumed OK" } }
+      ],
+      "result": { "ok": true }
+    }
+  ]
+}

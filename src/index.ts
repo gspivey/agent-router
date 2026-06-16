@@ -451,6 +451,15 @@ async function main(): Promise<void> {
   });
   log.info('Session manager initialized');
 
+  // Attempt to resume sessions that were active before last shutdown
+  const resumeResult = await sessionMgr.resumeSessions();
+  if (resumeResult.resumed > 0 || resumeResult.terminated > 0) {
+    log.info('Session resumption complete', {
+      resumed: resumeResult.resumed,
+      terminated: resumeResult.terminated,
+    });
+  }
+
   // Create global event queue for webhook processing
   const globalQueue = createEventQueue();
 

@@ -49,6 +49,7 @@ export interface SessionManager {
   completeSession(sessionId: string, reason: string): Promise<void>;
   terminateSession(sessionId: string, reason?: 'terminated_cli' | 'terminated_web' | 'killed_by_operator', actor?: string): Promise<void>;
   getActiveSession(sessionId: string): SessionHandle | null;
+  resumeSessions(): Promise<{ resumed: number; terminated: number }>;
   shutdown(): Promise<void>;
 }
 
@@ -512,6 +513,9 @@ export function createSessionManager(deps: {
       const acpSessionId = await acp.newSessionWithPrompt(process.cwd(), originalPrompt);
       sessionLog.info('ACP session created with prompt', { acpSessionId });
 
+      // Persist kiro_session_id for session resumption across daemon restarts
+      sessionFiles.updateMeta(sessionId, { kiro_session_id: acpSessionId });
+
       // 6. Create per-session event queue + worker
       const eventQueue = createEventQueue();
 
@@ -817,6 +821,93 @@ export function createSessionManager(deps: {
 
     hasActiveSessionForRepo(repo: string): boolean {
       return registry.list().some((h) => h.repo === repo);
+    },
+
+    async resumeSessions(): Promise<{ resumed: number; terminated: number }> {
+      const allSessions = sessionFiles.listSessions();
+      const activeSessions = allSessions.filter((s) => s.status === 'active');
+      let resumed = 0;
+      let terminated = 0;
+
+      for (const meta of activeSessions) {
+        const sessionId = meta.session_id;
+        const kiroSessionId = meta.kiro_session_id;
+
+        if (kiroSessionId === undefined || kiroSessionId === '') {
+          // No kiro_session_id — cannot resume, mark terminated
+          log.warn('Cannot resume session: no kiro_session_id', { sessionId });
+          try {
+            sessionFiles.appendStream(sessionId, {
+              ts: new Date().toISOString(),
+              source: 'router',
+              type: 'session_ended',
+              reason: 'terminated_by_restart',
+            });
+            sessionFiles.updateMeta(sessionId, {
+              status: 'abandoned',
+              completed_at: Math.floor(Date.now() / 1000),
+              termination_reason: 'terminated_by_restart',
+            });
+          } catch {
+            // Best effort
+          }
+          terminated++;
+          continue;
+        }
+
+        // Attempt to resume via session/load
+        try {
+          const acp = acpSpawner(sessionId, meta.repo);
+          await acp.initialize();
+          await acp.loadSession(kiroSessionId);
+
+          // Rebuild session handle
+          const paths = sessionFiles.getSessionPaths(sessionId);
+
+          const eventQueue = createEventQueue();
+          const turnQueue = createTurnQueue(acp, sessionFiles, sessionId, log);
+
+          const handle: SessionHandle = {
+            sessionId,
+            repo: meta.repo,
+            paths,
+            acp,
+            eventQueue,
+            turnQueue,
+            kiroPid: 0,
+          };
+
+          registry.add(handle);
+          startNotificationConsumer(sessionId, acp);
+          monitorSubprocessExit(sessionId, acp);
+          resetInactivityTimer(sessionId, acp);
+          enforceMaxLifetime(sessionId, acp);
+
+          log.info('Session resumed after restart', { sessionId, kiroSessionId });
+          resumed++;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.warn('Failed to resume session, marking terminated_by_restart', { sessionId, error: msg });
+          try {
+            sessionFiles.appendStream(sessionId, {
+              ts: new Date().toISOString(),
+              source: 'router',
+              type: 'session_ended',
+              reason: 'terminated_by_restart',
+            });
+            sessionFiles.updateMeta(sessionId, {
+              status: 'abandoned',
+              completed_at: Math.floor(Date.now() / 1000),
+              termination_reason: 'terminated_by_restart',
+            });
+          } catch {
+            // Best effort
+          }
+          terminated++;
+        }
+      }
+
+      return { resumed, terminated };
     },
 
     async shutdown(): Promise<void> {
