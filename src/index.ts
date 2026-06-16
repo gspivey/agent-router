@@ -37,6 +37,7 @@ import { FatalError, EventError, WakeError } from './errors.js';
 import { createPendingWakeSweeper } from './pending-wake-sweeper.js';
 import type { PendingWakeSweeper } from './pending-wake-sweeper.js';
 import { shouldNotify, sendSessionEndNotification } from './notify.js';
+import { startTokenExpiryChecker } from './token-expiry.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -246,6 +247,7 @@ interface DaemonState {
   cliServer: CliServer | null;
   globalQueue: EventQueue | null;
   pendingWakeSweeper: PendingWakeSweeper | null;
+  tokenExpiryChecker: { stop: () => void } | null;
   sessionMgr: SessionManager | null;
   db: Database | null;
   log: Logger;
@@ -290,6 +292,12 @@ function installShutdownHandlers(state: DaemonState): void {
       if (state.pendingWakeSweeper) {
         state.pendingWakeSweeper.stop();
         state.log.info('Pending wake sweeper stopped');
+      }
+
+      // 1c. Stop token expiry checker
+      if (state.tokenExpiryChecker) {
+        state.tokenExpiryChecker.stop();
+        state.log.info('Token expiry checker stopped');
       }
 
       // 2. Stop HTTP webhook server (stop accepting new webhooks, 5s drain)
@@ -456,6 +464,20 @@ async function main(): Promise<void> {
   pendingWakeSweeper.start(5000);
   log.info('Pending wake sweeper started');
 
+  // Start token expiry checker if configured
+  let tokenExpiryChecker: { stop: () => void } | null = null;
+  if (config.tokenExpiresAt !== undefined) {
+    const expiryDeps: Parameters<typeof startTokenExpiryChecker>[0] = {
+      tokenExpiresAt: config.tokenExpiresAt,
+      log,
+    };
+    if (config.notifyOnSessionEnd !== undefined) {
+      expiryDeps.notifyConfig = config.notifyOnSessionEnd;
+    }
+    tokenExpiryChecker = startTokenExpiryChecker(expiryDeps);
+    log.info('Token expiry checker started', { expires_at: config.tokenExpiresAt });
+  }
+
   // ---- Task 19.1c: Server surfaces startup ----
 
   // Create and bind Hono HTTP server (now also serves /hooks/event)
@@ -533,6 +555,7 @@ async function main(): Promise<void> {
     cliServer,
     globalQueue,
     pendingWakeSweeper,
+    tokenExpiryChecker,
     sessionMgr,
     db,
     log,

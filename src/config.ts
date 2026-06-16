@@ -39,6 +39,8 @@ export interface AgentRouterConfig {
   allowedEmails?: string[];
   /** Optional webhook notification on session end. */
   notifyOnSessionEnd?: NotifyOnSessionEndConfig;
+  /** Optional ISO 8601 date when the GitHub PAT expires. Enables expiry alerting. */
+  tokenExpiresAt?: string;
 }
 
 export interface RepoConfig {
@@ -336,6 +338,19 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     notifyOnSessionEnd = { url, events: events as string[] };
   }
 
+  // tokenExpiresAt (optional ISO 8601 date)
+  let tokenExpiresAt: string | undefined;
+  if (config['tokenExpiresAt'] !== undefined) {
+    const val = config['tokenExpiresAt'];
+    if (typeof val !== 'string' || val.length === 0) {
+      throw new FatalError('Invalid "tokenExpiresAt": must be a non-empty string');
+    }
+    if (isNaN(new Date(val).getTime())) {
+      throw new FatalError(`Invalid "tokenExpiresAt": "${val}" is not a valid ISO 8601 date`);
+    }
+    tokenExpiresAt = val;
+  }
+
   // Build set of known "owner/name" for cron repo matching
   const repoKeys = new Set(repos.map(r => `${r.owner}/${r.name}`));
 
@@ -398,6 +413,9 @@ export function validateConfig(config: unknown): AgentRouterConfig {
   }
   if (notifyOnSessionEnd !== undefined) {
     result.notifyOnSessionEnd = notifyOnSessionEnd;
+  }
+  if (tokenExpiresAt !== undefined) {
+    result.tokenExpiresAt = tokenExpiresAt;
   }
   return result;
 }
