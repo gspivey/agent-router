@@ -3,8 +3,10 @@ import * as fs from 'node:fs';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import cron from 'node-cron';
-import { loadConfig } from './config.js';
+import { loadConfig, classifyConfigChange } from './config.js';
 import type { AgentRouterConfig } from './config.js';
+import { watchConfig } from './config-watch.js';
+import type { ConfigWatcher } from './config-watch.js';
 import { createLogger } from './log.js';
 import type { Logger } from './log.js';
 import { initDatabase } from './db.js';
@@ -88,14 +90,15 @@ function composePromptFromEvent(event: QueuedEvent): string | null {
 
 function createEventProcessor(deps: {
   db: Database;
-  config: AgentRouterConfig;
+  getConfig: () => AgentRouterConfig;
   sessionMgr: SessionManager;
   log: Logger;
 }): (event: QueuedEvent) => Promise<void> {
-  const { db, config, sessionMgr, log } = deps;
+  const { db, getConfig, sessionMgr, log } = deps;
 
   return async (event: QueuedEvent): Promise<void> => {
     const eventLog = log.child({ event_id: event.id, event_type: event.eventType, repo: event.repo });
+    const config = getConfig();
 
     try {
       // Run wake policy
@@ -192,6 +195,8 @@ function setupCronJobs(deps: {
 
 import { canCronRefire } from './cron-guard.js';
 
+import { reconcileCronJobs } from './cron-reconcile.js';
+
 async function handleCronFire(
   cronEntry: AgentRouterConfig['cron'][number],
   sessionMgr: SessionManager,
@@ -257,6 +262,7 @@ interface DaemonState {
   pendingWakeSweeper: PendingWakeSweeper | null;
   checkWatchdog: CheckWatchdog | null;
   tokenExpiryChecker: { stop: () => void } | null;
+  configWatcher: ConfigWatcher | null;
   sessionMgr: SessionManager | null;
   db: Database | null;
   log: Logger;
@@ -313,6 +319,12 @@ function installShutdownHandlers(state: DaemonState): void {
       if (state.tokenExpiryChecker) {
         state.tokenExpiryChecker.stop();
         state.log.info('Token expiry checker stopped');
+      }
+
+      // 1d. Close config watcher
+      if (state.configWatcher) {
+        state.configWatcher.close();
+        state.log.info('Config watcher closed');
       }
 
       // 2. Stop HTTP webhook server (stop accepting new webhooks, 5s drain)
@@ -385,7 +397,8 @@ async function main(): Promise<void> {
   // ---- Task 19.1a: Foundation startup ----
 
   // Load config
-  const config = loadConfig(configPath);
+  let config = loadConfig(configPath);
+  const configHolder = { current: config };
 
   // Init logger
   const log = createLogger({
@@ -434,8 +447,8 @@ async function main(): Promise<void> {
   if (config.defaultGithubToken !== undefined) {
     resolverCfg.defaultToken = config.defaultGithubToken;
   }
-  const tokenResolver = createTokenResolver(resolverCfg);
-  const github = createGitHubClient({ tokenResolver });
+  let tokenResolver = createTokenResolver(resolverCfg);
+  const github = createGitHubClient({ tokenResolver: (o, r) => tokenResolver(o, r) });
   const verifySession = createVerifier({ sessionFiles, github, log });
   log.info('Verification core initialized');
 
@@ -464,8 +477,8 @@ async function main(): Promise<void> {
           log.warn('Failed to create worktree; session proceeds without WORKDIR', { repo, sessionId, error: msg });
         }
       }
-      const allowlist = config.childEnvAllowlist
-        ? [...DEFAULT_CHILD_ENV_ALLOWLIST, ...config.childEnvAllowlist]
+      const allowlist = configHolder.current.childEnvAllowlist
+        ? [...DEFAULT_CHILD_ENV_ALLOWLIST, ...configHolder.current.childEnvAllowlist]
         : undefined;
       const env = buildChildEnv(process.env as Record<string, string | undefined>, overrides, allowlist);
       return adapter.spawn({ sessionId, env });
@@ -498,7 +511,7 @@ async function main(): Promise<void> {
   const globalQueue = createEventQueue();
 
   // Wire event processor
-  const processEvent = createEventProcessor({ db, config, sessionMgr, log });
+  const processEvent = createEventProcessor({ db, getConfig: () => configHolder.current, sessionMgr, log });
   globalQueue.startWorker(processEvent);
   log.info('Event queue worker started');
 
@@ -559,7 +572,7 @@ async function main(): Promise<void> {
   log.info('HTTP server listening', { port: config.port });
 
   // ---- Task 19.3: Register cron jobs ----
-  const cronTasks = setupCronJobs({ config, db, sessionMgr, sessionFiles, log });
+  let cronTasks = setupCronJobs({ config, db, sessionMgr, sessionFiles, log });
 
   // Start CLI IPC server on Unix socket
   const socketPath = path.join(rootDir, 'sock');
@@ -598,6 +611,57 @@ async function main(): Promise<void> {
 
   const webServer = startWebServer(webApp, effectiveConfig, log);
 
+  // ---- Config hot-reload ----
+  const configWatcher = watchConfig(configPath, (next) => {
+    const old = configHolder.current;
+    const changes = classifyConfigChange(old, next);
+
+    if (changes.restartRequired.length > 0) {
+      log.warn('Config reload: restart-required fields changed (ignored until restart)', {
+        fields: changes.restartRequired,
+      });
+    }
+
+    if (changes.reloadable.length === 0 && changes.restartRequired.length === 0) {
+      return; // No changes
+    }
+
+    // Rebuild token resolver
+    const nextPerRepo: Record<string, string> = {};
+    for (const r of next.repos) {
+      if (r.token !== undefined) nextPerRepo[`${r.owner}/${r.name}`] = r.token;
+    }
+    const nextResolverCfg: Parameters<typeof createTokenResolver>[0] = {
+      perRepoTokens: nextPerRepo,
+      envFallback: true,
+    };
+    if (next.defaultGithubToken !== undefined) {
+      nextResolverCfg.defaultToken = next.defaultGithubToken;
+    }
+    tokenResolver = createTokenResolver(nextResolverCfg);
+
+    // Reconcile cron jobs
+    cronTasks = reconcileCronJobs({
+      oldTasks: cronTasks,
+      oldCron: old.cron,
+      nextCron: next.cron,
+      db,
+      sessionMgr,
+      sessionFiles,
+      log,
+      handleCronFire: (entry) => { void handleCronFire(entry, sessionMgr, sessionFiles, log); },
+    });
+
+    // Update config holder
+    configHolder.current = next;
+    config = next;
+
+    log.info('Config reloaded', { reloadable: changes.reloadable, restartRequired: changes.restartRequired });
+  }, (err) => {
+    log.error('Config reload failed (retaining previous config)', { error: err.message });
+  });
+  log.info('Config watcher started', { configPath });
+
   // ---- Task 19.4: Install graceful shutdown handlers ----
   const state: DaemonState = {
     httpServer,
@@ -608,6 +672,7 @@ async function main(): Promise<void> {
     pendingWakeSweeper,
     checkWatchdog,
     tokenExpiryChecker,
+    configWatcher,
     sessionMgr,
     db,
     log,

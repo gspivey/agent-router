@@ -442,6 +442,52 @@ export function validateConfig(config: unknown): AgentRouterConfig {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Config change classification (pure)
+// ---------------------------------------------------------------------------
+
+export interface ConfigChangeResult {
+  reloadable: string[];
+  restartRequired: string[];
+}
+
+const RESTART_REQUIRED_FIELDS = new Set([
+  'port',
+  'controlPort',
+  'bindPublic',
+  'kiroPath',
+  'trustedProxy',
+]);
+
+export function classifyConfigChange(
+  old: AgentRouterConfig,
+  next: AgentRouterConfig,
+): ConfigChangeResult {
+  const reloadable: string[] = [];
+  const restartRequired: string[] = [];
+
+  const allKeys = new Set([
+    ...Object.keys(old) as (keyof AgentRouterConfig)[],
+    ...Object.keys(next) as (keyof AgentRouterConfig)[],
+  ]);
+
+  for (const key of allKeys) {
+    if (JSON.stringify(old[key]) !== JSON.stringify(next[key])) {
+      if (RESTART_REQUIRED_FIELDS.has(key)) {
+        restartRequired.push(key);
+      } else {
+        reloadable.push(key);
+      }
+    }
+  }
+
+  return { reloadable, restartRequired };
+}
+
+// ---------------------------------------------------------------------------
+// Config loading
+// ---------------------------------------------------------------------------
+
 export function loadConfig(configPath: string): AgentRouterConfig {
   let raw: string;
   try {

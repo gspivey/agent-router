@@ -33,20 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 24. Config hot-reload
-
-Pick up `config.json` changes without a restart. Add `src/config-watch.ts` (debounced
-`fs.watch` → `loadConfig`, retain-on-invalid) and a pure `classifyConfigChange(old, next)`;
-apply reloadable fields (`repos`, `cron`, `rateLimit`, `sessionTimeout`, `defaultGithubToken`,
-`allowedEmails`) to running components via a mutable holder + `reconcileCronJobs`, without
-touching active sessions. Restart-required fields are left for item 25. Tier 1 (classify,
-debounce) + Tier 2 (reload adds repo/cron, rejects invalid, no session dropped).
-
-- Spec: `.kiro/specs/operator-controls/` · tasks `5.1`, `5.2`, `5.3`
-- [ ] Complete · PR: —
-
----
-
 ### 25. Restart-required surfacing (env caveat)
 
 Surface changes that a hot-reload cannot apply. Record a `restart_required` condition
@@ -114,6 +100,20 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 24. Config hot-reload
+
+Pick up `config.json` changes without a restart. Add `src/config-watch.ts` (debounced
+`fs.watch` → `loadConfig`, retain-on-invalid) and a pure `classifyConfigChange(old, next)`;
+apply reloadable fields (`repos`, `cron`, `rateLimit`, `sessionTimeout`, `defaultGithubToken`,
+`allowedEmails`) to running components via a mutable holder + `reconcileCronJobs`, without
+touching active sessions. Restart-required fields are left for item 25. Tier 1 (classify,
+debounce) + Tier 2 (reload adds repo/cron, rejects invalid, no session dropped).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `5.1`, `5.2`, `5.3`
+- [x] Complete · PR: #64
+
+---
 
 ### 23. CI-reconciliation nudge (wake watchdog)
 
