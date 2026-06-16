@@ -33,20 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 20. Git worktrees per session
-
-Add `src/worktree-manager.ts`: ensure a canonical clone per repo under
-`~/.agent-router/repos/<owner>/<repo>`, create a session worktree via `git worktree add` (its
-own branch off the default branch), and `git worktree remove --force` on any termination.
-Replace the per-session `git clone` with a daemon-provided `WORKDIR` pointing at the worktree.
-This obsoletes interim collision detection (P0.4) and shares `.git/objects` across runs.
-Tier 2-test: two simultaneous sessions on one repo get isolated worktrees and both clean up.
-
-- Spec: `BACKLOG.md § P1.7`
-- [ ] Complete · PR: —
-
----
-
 ### 21. Child-environment secret hygiene (env-scrub)
 
 Stop leaking every repo's PAT into every spawned session. Add a pure
@@ -168,6 +154,20 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 20. Git worktrees per session
+
+Add `src/worktree-manager.ts`: ensure a canonical clone per repo under
+`~/.agent-router/repos/<owner>/<repo>`, create a session worktree via `git worktree add` (its
+own branch off the default branch), and `git worktree remove --force` on any termination.
+Replace the per-session `git clone` with a daemon-provided `WORKDIR` pointing at the worktree.
+This obsoletes interim collision detection (P0.4) and shares `.git/objects` across runs.
+Tier 2-test: two simultaneous sessions on one repo get isolated worktrees and both clean up.
+
+- Spec: `BACKLOG.md § P1.7`
+- [x] Complete · PR: #60
+
+---
 
 ### 19. Session resumption across daemon restarts
 
