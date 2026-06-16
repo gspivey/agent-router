@@ -80,7 +80,7 @@ export class TestCli {
     });
   }
 
-  private send<T>(msg: Record<string, unknown>): Promise<T> {
+  send<T>(msg: Record<string, unknown>): Promise<T> {
     return new Promise((resolve, reject) => {
       const socket = net.createConnection(this.socketPath);
       let buffer = '';

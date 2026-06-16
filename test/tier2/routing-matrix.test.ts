@@ -67,6 +67,9 @@ function makeDb(state: DbState = {}): Database {
     getDuePendingWakes: vi.fn(() => []),
     clearPendingWake: vi.fn(),
     getEventById: vi.fn(() => undefined),
+    getCronState: vi.fn(() => null),
+    setCronPaused: vi.fn(),
+    getAllCronStates: vi.fn(() => []),
     walCheckpoint: vi.fn(),
     shutdown: vi.fn(() => Promise.resolve()),
   };

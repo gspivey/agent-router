@@ -576,6 +576,62 @@ async function cmdCompleteSession(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: cron
+// ---------------------------------------------------------------------------
+
+async function cmdCron(args: string[]): Promise<void> {
+  const socketPath = resolveSocketPath();
+  const sub = args[0];
+
+  if (sub === 'list' || sub === undefined) {
+    const result = await sendToDaemon(socketPath, { op: 'cron_list' });
+    if (result['error'] !== undefined) {
+      process.stderr.write(`Error: ${result['error'] as string}\n`);
+      process.exit(1);
+    }
+    const entries = result['entries'] as Array<{
+      name: string;
+      repo: string;
+      schedule: string;
+      paused: boolean;
+    }>;
+    if (entries.length === 0) {
+      process.stdout.write('No cron entries configured.\n');
+      return;
+    }
+    const header = 'NAME'.padEnd(20) + 'REPO'.padEnd(25) + 'SCHEDULE'.padEnd(20) + 'STATE';
+    process.stdout.write(header + '\n');
+    process.stdout.write('-'.repeat(header.length) + '\n');
+    for (const e of entries) {
+      const state = e.paused ? 'paused' : 'active';
+      process.stdout.write(
+        e.name.padEnd(20) + e.repo.padEnd(25) + e.schedule.padEnd(20) + state + '\n',
+      );
+    }
+    return;
+  }
+
+  if (sub === 'pause' || sub === 'resume') {
+    const name = args[1];
+    if (name === undefined || name.length === 0) {
+      process.stderr.write(`Usage: agent-router cron ${sub} <name>\n`);
+      process.exit(1);
+    }
+    const op = sub === 'pause' ? 'cron_pause' : 'cron_resume';
+    const result = await sendToDaemon(socketPath, { op, name });
+    if (result['error'] !== undefined) {
+      process.stderr.write(`Error: ${result['error'] as string}\n`);
+      process.exit(1);
+    }
+    process.stderr.write(`Cron "${name}" ${sub}d.\n`);
+    return;
+  }
+
+  process.stderr.write(`Usage: agent-router cron [list|pause <name>|resume <name>]\n`);
+  process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatch
 // ---------------------------------------------------------------------------
 
@@ -592,6 +648,7 @@ Commands:
   kill <session_id> [--reason <reason>]    Kill a session (default: killed_by_operator)
   complete-session --session-id <id> --reason <reason>
                                            Signal session completion
+  cron [list|pause <name>|resume <name>]   Manage cron schedules
 `);
 }
 
@@ -624,6 +681,9 @@ async function main(): Promise<void> {
       break;
     case 'complete-session':
       await cmdCompleteSession(subArgs);
+      break;
+    case 'cron':
+      await cmdCron(subArgs);
       break;
     default:
       process.stderr.write(`Unknown command: ${command}\n`);

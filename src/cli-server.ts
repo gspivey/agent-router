@@ -4,6 +4,14 @@ import type { Logger } from './log.js';
 import type { SessionManager } from './session-mgr.js';
 import { OpenPRsError } from './session-mgr.js';
 import type { SessionFiles } from './session-files.js';
+import type { Database } from './db.js';
+import type { ScheduledTask } from 'node-cron';
+
+export interface CronEntry {
+  name: string;
+  schedule: string;
+  repo: string;
+}
 
 export interface CliRequest {
   op:
@@ -15,7 +23,10 @@ export interface CliRequest {
     | 'register_pr'
     | 'merge_pr'
     | 'session_status'
-    | 'complete_session';
+    | 'complete_session'
+    | 'cron_list'
+    | 'cron_pause'
+    | 'cron_resume';
   [key: string]: unknown;
 }
 
@@ -31,8 +42,11 @@ export function createCliServer(deps: {
   sessionMgr: SessionManager;
   sessionFiles: SessionFiles;
   log: Logger;
+  db?: Database;
+  cronTasks?: ScheduledTask[];
+  cronEntries?: CronEntry[];
 }): CliServer {
-  const { socketPath, sessionMgr, sessionFiles, log } = deps;
+  const { socketPath, sessionMgr, sessionFiles, log, db, cronTasks, cronEntries } = deps;
 
   let server: net.Server | null = null;
   const activeConnections = new Set<net.Socket>();
@@ -169,6 +183,57 @@ export function createCliServer(deps: {
         }
         throw err;
       }
+      return { ok: true };
+    },
+
+    async cron_list(): Promise<Record<string, unknown>> {
+      if (!cronEntries || !db) {
+        return { error: 'Cron not configured' };
+      }
+      const states = db.getAllCronStates();
+      const stateMap = new Map(states.map((s) => [s.name, s.paused]));
+      const entries = cronEntries.map((e) => ({
+        name: e.name,
+        repo: e.repo,
+        schedule: e.schedule,
+        paused: stateMap.get(e.name) ?? false,
+      }));
+      return { entries };
+    },
+
+    async cron_pause(req: CliRequest): Promise<Record<string, unknown>> {
+      if (!cronEntries || !cronTasks || !db) {
+        return { error: 'Cron not configured' };
+      }
+      const name = req['name'];
+      if (typeof name !== 'string' || name.length === 0) {
+        throw new Error('Missing or empty "name" parameter');
+      }
+      const idx = cronEntries.findIndex((e) => e.name === name);
+      if (idx === -1) {
+        const known = cronEntries.map((e) => e.name);
+        throw new Error(`Unknown cron name "${name}". Known: ${known.join(', ')}`);
+      }
+      db.setCronPaused(name, true);
+      cronTasks[idx]!.stop();
+      return { ok: true };
+    },
+
+    async cron_resume(req: CliRequest): Promise<Record<string, unknown>> {
+      if (!cronEntries || !cronTasks || !db) {
+        return { error: 'Cron not configured' };
+      }
+      const name = req['name'];
+      if (typeof name !== 'string' || name.length === 0) {
+        throw new Error('Missing or empty "name" parameter');
+      }
+      const idx = cronEntries.findIndex((e) => e.name === name);
+      if (idx === -1) {
+        const known = cronEntries.map((e) => e.name);
+        throw new Error(`Unknown cron name "${name}". Known: ${known.join(', ')}`);
+      }
+      db.setCronPaused(name, false);
+      cronTasks[idx]!.start();
       return { ok: true };
     },
   };
