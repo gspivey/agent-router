@@ -8,6 +8,13 @@ import type { Logger } from './log.js';
 import type { DaemonTokenStore } from './daemon-token.js';
 import type { VerifySessionFn } from './verify-session.js';
 import type { RepoConfig } from './config.js';
+import { buildHealthResponse } from './health.js';
+
+export interface HealthDeps {
+  startedAtMs: number;
+  activeSessionCount: () => number;
+  checkDb: () => boolean;
+}
 
 /**
  * If AGENT_ROUTER_CAPTURE_PAYLOADS is set to a directory path, write the raw
@@ -161,6 +168,10 @@ export function createApp(deps: {
    * Optional: verification fn for /hooks/event. Required if tokenStore is set.
    */
   verifySession?: VerifySessionFn;
+  /**
+   * Optional: when set, registers GET /health returning daemon health status.
+   */
+  health?: HealthDeps;
 }): Hono {
   const app = new Hono();
 
@@ -324,6 +335,20 @@ export function createApp(deps: {
     c.header('Allow', 'POST');
     return c.text('Method Not Allowed', 405);
   });
+
+  // GET /health — daemon health check
+  if (deps.health !== undefined) {
+    const health = deps.health;
+    app.get('/health', (c) => {
+      const result = buildHealthResponse({
+        startedAtMs: health.startedAtMs,
+        nowMs: Date.now(),
+        activeSessionCount: health.activeSessionCount(),
+        dbOk: health.checkDb(),
+      });
+      return c.json(result.body, result.status as 200);
+    });
+  }
 
   // Catch-all → 404
   app.all('*', (c) => {

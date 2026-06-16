@@ -5,6 +5,7 @@ import type { Database, NewEvent } from '../../src/db.js';
 import type { QueuedEvent } from '../../src/queue.js';
 import type { Logger } from '../../src/log.js';
 import type { RepoConfig } from '../../src/config.js';
+import type { HealthDeps } from '../../src/server.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -585,5 +586,59 @@ describe('POST /webhook signature verification logging', () => {
       repo: 'org/alpha',
       secret_source: 'per_repo',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /health
+// ---------------------------------------------------------------------------
+
+describe('GET /health', () => {
+  function makeHealthApp(overrides?: Partial<HealthDeps>) {
+    const health: HealthDeps = {
+      startedAtMs: Date.now() - 120_000,
+      activeSessionCount: () => 2,
+      checkDb: () => true,
+      ...overrides,
+    };
+    const app = createApp({
+      webhookSecret: WEBHOOK_SECRET,
+      db: makeDb(),
+      enqueue: vi.fn(),
+      log: makeLogger(),
+      health,
+    });
+    return app;
+  }
+
+  it('returns 200 with correct JSON shape when DB is ok', async () => {
+    const app = makeHealthApp();
+    const res = await app.request('/health');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body['status']).toBe('ok');
+    expect(typeof body['uptime_seconds']).toBe('number');
+    expect(body['active_sessions']).toBe(2);
+    expect(body['db_ok']).toBe(true);
+  });
+
+  it('returns 503 when DB check fails', async () => {
+    const app = makeHealthApp({ checkDb: () => false });
+    const res = await app.request('/health');
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body['status']).toBe('degraded');
+    expect(body['db_ok']).toBe(false);
+  });
+
+  it('returns 404 when health deps are not provided', async () => {
+    const app = createApp({
+      webhookSecret: WEBHOOK_SECRET,
+      db: makeDb(),
+      enqueue: vi.fn(),
+      log: makeLogger(),
+    });
+    const res = await app.request('/health');
+    expect(res.status).toBe(404);
   });
 });
