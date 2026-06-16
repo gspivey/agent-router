@@ -33,18 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 5. `ls` pagination
-
-Give `agent-router ls` (`bin/agent-router.ts`, `cmdLs`) a default cap of 20 rows with active
-sessions always shown, an `--all` flag to print everything, and a `--limit N` override.
-Pure CLI change, no daemon involvement. Add Tier 1 tests for the row-selection logic
-(default cap, `--all`, `--limit`, active-always-shown).
-
-- Spec: `BACKLOG.md § P2.11`
-- [ ] Complete · PR: —
-
----
-
 ### 6. Session-id prefix matching and `--full`
 
 Let every CLI subcommand that takes a session-id (`tail`, `terminate`, `complete-session`,
@@ -368,6 +356,18 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 5. `ls` pagination
+
+Give `agent-router ls` (`bin/agent-router.ts`, `cmdLs`) a default cap of 20 rows with active
+sessions always shown, an `--all` flag to print everything, and a `--limit N` override.
+Pure CLI change, no daemon involvement. Add Tier 1 tests for the row-selection logic
+(default cap, `--all`, `--limit`, active-always-shown).
+
+- Spec: `BACKLOG.md § P2.11`
+- [x] Complete · PR: #45
+
+---
 
 ### 4. Reject non-JSON webhooks cleanly
 
