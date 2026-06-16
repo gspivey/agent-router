@@ -169,6 +169,18 @@ export function createSessionManager(deps: {
   // Track per-session completion flags (set when complete_session MCP call is received)
   const completionFlags = new Set<string>();
 
+  /** Clear pending wakes for all PRs registered to a session. */
+  function clearPendingWakesForSession(sessionId: string): void {
+    try {
+      const meta = sessionFiles.readMeta(sessionId);
+      for (const pr of meta.prs) {
+        db.clearPendingWake(pr.repo, pr.pr_number);
+      }
+    } catch {
+      // Best effort — meta may not be readable
+    }
+  }
+
   /** Clear all timers for a session. */
   function clearSessionTimers(sessionId: string): void {
     const inactTimer = inactivityTimers.get(sessionId);
@@ -271,6 +283,7 @@ export function createSessionManager(deps: {
         // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
         registry.remove(sessionId);
         clearSessionTimers(sessionId);
+        clearPendingWakesForSession(sessionId);
         completionFlags.delete(sessionId);
 
         acp.kill().catch((err: unknown) => {
@@ -408,6 +421,7 @@ export function createSessionManager(deps: {
         }
 
         completionFlags.delete(sessionId);
+        clearPendingWakesForSession(sessionId);
         registry.remove(sessionId);
       })
       .catch(() => {});
@@ -452,6 +466,7 @@ export function createSessionManager(deps: {
       // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
       registry.remove(sessionId);
       clearSessionTimers(sessionId);
+      clearPendingWakesForSession(sessionId);
       completionFlags.delete(sessionId);
 
       acp.kill().catch((err: unknown) => {
@@ -671,6 +686,9 @@ export function createSessionManager(deps: {
       // Mark completion so monitorSubprocessExit knows this was intentional
       completionFlags.add(sessionId);
 
+      // Clear pending wakes for this session's PRs
+      clearPendingWakesForSession(sessionId);
+
       // Append session_ended stream entry BEFORE writing terminal meta
       try {
         sessionFiles.appendStream(sessionId, {
@@ -740,6 +758,9 @@ export function createSessionManager(deps: {
 
       // Clear all timers
       clearSessionTimers(sessionId);
+
+      // Clear pending wakes for this session's PRs
+      clearPendingWakesForSession(sessionId);
 
       // Remove from registry first to prevent monitorSubprocessExit from double-updating
       registry.remove(sessionId);

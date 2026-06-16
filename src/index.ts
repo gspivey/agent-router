@@ -34,6 +34,8 @@ import { createWebApp, startWebServer } from './web-server.js';
 import { createSSEBroker } from './sse-broker.js';
 import type { SSEBroker } from './sse-broker.js';
 import { FatalError, EventError, WakeError } from './errors.js';
+import { createPendingWakeSweeper } from './pending-wake-sweeper.js';
+import type { PendingWakeSweeper } from './pending-wake-sweeper.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -104,6 +106,14 @@ function createEventProcessor(deps: {
       });
 
       if (!decision.wake) {
+        // On rate_limited, enqueue as a pending wake instead of dropping
+        if (decision.decisionCode === 'rate_limited' && decision.deferUntil !== undefined && decision.prNumber !== undefined) {
+          db.upsertPendingWake(event.repo, decision.prNumber, event.id, decision.deferUntil);
+          eventLog.info('Event deferred as pending wake', {
+            pr_number: decision.prNumber,
+            deferred_until: decision.deferUntil,
+          });
+        }
         db.updateEventProcessed(event.id, false);
         return;
       }
@@ -234,6 +244,7 @@ interface DaemonState {
   sseBroker: SSEBroker | null;
   cliServer: CliServer | null;
   globalQueue: EventQueue | null;
+  pendingWakeSweeper: PendingWakeSweeper | null;
   sessionMgr: SessionManager | null;
   db: Database | null;
   log: Logger;
@@ -273,6 +284,12 @@ function installShutdownHandlers(state: DaemonState): void {
         task.stop();
       }
       state.log.info('Cron jobs stopped');
+
+      // 1b. Stop pending wake sweeper
+      if (state.pendingWakeSweeper) {
+        state.pendingWakeSweeper.stop();
+        state.log.info('Pending wake sweeper stopped');
+      }
 
       // 2. Stop HTTP webhook server (stop accepting new webhooks, 5s drain)
       if (state.httpServer) {
@@ -427,6 +444,11 @@ async function main(): Promise<void> {
   globalQueue.startWorker(processEvent);
   log.info('Event queue worker started');
 
+  // Start pending wake sweeper (checks every 5 seconds for due deferred wakes)
+  const pendingWakeSweeper = createPendingWakeSweeper({ db, sessionMgr, config, log });
+  pendingWakeSweeper.start(5000);
+  log.info('Pending wake sweeper started');
+
   // ---- Task 19.1c: Server surfaces startup ----
 
   // Create and bind Hono HTTP server (now also serves /hooks/event)
@@ -490,6 +512,7 @@ async function main(): Promise<void> {
     sseBroker,
     cliServer,
     globalQueue,
+    pendingWakeSweeper,
     sessionMgr,
     db,
     log,
