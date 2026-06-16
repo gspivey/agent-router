@@ -33,23 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 18. Browser harness: visibility reconnect and `test:browser` script
-
----
-
-### 18. Browser harness: visibility reconnect and `test:browser` script
-
-Add `visibility-reconnect.spec.ts` using a CDP session and `Page.setWebLifecycleState`
-(hidden → active triggers a reconnect with the last event ID; entries appended while hidden
-appear on resume; no duplicate IDs). Wire `"test:browser": "npx playwright test"` into
-`package.json`, and verify `npm test` (vitest) does not pick up `.spec.ts` files and that no
-other test tier or config is modified. Closes out the browser-test-harness spec.
-
-- Spec: `.kiro/specs/browser-test-harness/` · tasks `12.1`, `14.1`
-- [ ] Complete · PR: —
-
----
-
 ### 19. Session resumption across daemon restarts
 
 Add `kiro_session_id?: string` to `SessionMeta` (`src/session-files.ts`), persist it to
@@ -200,6 +183,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 18. Browser harness: visibility reconnect and `test:browser` script
+
+Add `visibility-reconnect.spec.ts` using a CDP session and `Page.setWebLifecycleState`
+(hidden → active triggers a reconnect with the last event ID; entries appended while hidden
+appear on resume; no duplicate IDs). Wire `"test:browser": "npx playwright test"` into
+`package.json`, and verify `npm test` (vitest) does not pick up `.spec.ts` files and that no
+other test tier or config is modified. Closes out the browser-test-harness spec.
+
+- Spec: `.kiro/specs/browser-test-harness/` · tasks `12.1`, `14.1`
+- [x] Complete · PR: #58
+
+---
 
 ### 17. Browser harness: reconnect, inject, and kill tests
 
