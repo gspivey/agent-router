@@ -225,6 +225,18 @@ export class FakeGitHubBackend implements GitHubBackend {
     });
   }
 
+  /** Set a check run status without sending a webhook (for watchdog tests). */
+  setCheckRunSilent(
+    repo: string,
+    prNumber: number,
+    name: string,
+    status: 'queued' | 'in_progress' | 'completed',
+    conclusion: string | null,
+  ): void {
+    const id = this.checkRunCounter++;
+    this.checkRuns.push({ id, name, status, conclusion, prNumber });
+  }
+
   async getAPICalls(): Promise<APICall[]> {
     return [...this.apiCalls];
   }
@@ -323,12 +335,44 @@ export class FakeGitHubBackend implements GitHubBackend {
     const pullMatch = subPath.match(/^\/pulls\/(\d+)$/);
     if (method === 'GET' && pullMatch) {
       const num = parseInt(pullMatch[1]!, 10);
-      try {
-        const pr = await this.getPRState(repoName, num);
-        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(pr));
-      } catch {
+      const repoPRs = this.prs.get(repoName);
+      const pr = repoPRs?.get(num);
+      if (!pr) {
         res.writeHead(404).end(JSON.stringify({ message: 'Not Found' }));
+        return;
       }
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+        number: pr.number,
+        title: pr.title,
+        body: pr.body,
+        state: pr.state === 'merged' ? 'closed' : pr.state,
+        merged: pr.state === 'merged',
+        merge_commit_sha: null,
+        head: { sha: pr.headSha },
+      }));
+      return;
+    }
+
+    // GET /repos/:owner/:repo/commits/:ref/check-runs
+    const checkRunsMatch = subPath.match(/^\/commits\/([^/]+)\/check-runs$/);
+    if (method === 'GET' && checkRunsMatch) {
+      const ref = checkRunsMatch[1]!;
+      // Return check runs whose PR headSha matches the ref
+      const matching = this.checkRuns.filter((cr) => {
+        const repoPRs = this.prs.get(repoName);
+        if (!repoPRs) return false;
+        const pr = repoPRs.get(cr.prNumber);
+        return pr !== undefined && pr.headSha === ref;
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+        total_count: matching.length,
+        check_runs: matching.map((cr) => ({
+          id: cr.id,
+          name: cr.name,
+          status: cr.status,
+          conclusion: cr.conclusion,
+        })),
+      }));
       return;
     }
 

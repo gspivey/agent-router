@@ -65,8 +65,9 @@ describe('verifySession sets merged_at', () => {
     });
 
     const fakeGithub: GitHubClient = {
-      getPullState: async (_o, _r, prNumber) => ({ number: prNumber, state: 'closed', merged: true, mergeCommitSha: 'abc123' }),
+      getPullState: async (_o, _r, prNumber) => ({ number: prNumber, state: 'closed', merged: true, mergeCommitSha: 'abc123', headSha: null }),
       mergePullRequest: async () => ({ sha: 'abc', merged: true, message: 'ok' }),
+      getCheckRunsForRef: async () => [],
     };
 
     const log = createLogger({ level: 'error', output: () => {} });
@@ -92,8 +93,9 @@ describe('verifySession sets merged_at', () => {
     });
 
     const fakeGithub: GitHubClient = {
-      getPullState: async (_o, _r, prNumber) => ({ number: prNumber, state: 'closed', merged: false, mergeCommitSha: null }),
+      getPullState: async (_o, _r, prNumber) => ({ number: prNumber, state: 'closed', merged: false, mergeCommitSha: null, headSha: null }),
       mergePullRequest: async () => ({ sha: 'abc', merged: true, message: 'ok' }),
+      getCheckRunsForRef: async () => [],
     };
 
     const log = createLogger({ level: 'error', output: () => {} });
