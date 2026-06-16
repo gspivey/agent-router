@@ -6,8 +6,8 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
 
 ## Tasks
 
-- [ ] 1. Prove module resolution works
-  - [ ] 1.1 Install `@playwright/test` and create smoke test
+- [x] 1. Prove module resolution works
+  - [x] 1.1 Install `@playwright/test` and create smoke test
     - Install `@playwright/test` as a devDependency (`npm install -D @playwright/test`)
     - Create `playwright.config.ts` at the repo root with: `testDir: './test/browser'`, `testMatch: '**/*.spec.ts'`, `timeout: 30_000`, `retries: 0`, `workers: process.env.CI ? 1 : 4`, `reporter: [['list'], ['html', { open: 'never' }]]`, `use: { browserName: 'chromium', headless: true, trace: 'on-first-retry' }`
     - Create `test/browser/smoke.spec.ts` that imports `createWebApp` from `../../src/web-server.js` and asserts `typeof createWebApp === 'function'`
@@ -15,8 +15,8 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - If resolution fails, add a Playwright `transform` option with an esbuild plugin that rewrites `.js` extensions to `.ts` before resolution
     - _Requirements: 1.4, 1.5, 1.6, 10.2, 10.5_
 
-- [ ] 2. Add `disconnectAll` to SSEBroker
-  - [ ] 2.1 Extend SSEBroker interface and implementation
+- [x] 2. Add `disconnectAll` to SSEBroker
+  - [x] 2.1 Extend SSEBroker interface and implementation
     - Add `disconnectAll(sessionId: string): void` to the `SSEBroker` interface in `src/sse-broker.ts`
     - Implement in `createSSEBroker`: iterate `state.clients.values()`, call each client's `close()`, then `state.clients.clear()`, then stop the poll timer via `clearInterval(state.pollTimer); state.pollTimer = null`, then check heartbeat state (same pattern as the `unsubscribe` cleanup: check if any sessions have clients, if not clear heartbeat timer)
     - This does NOT write a `session_ended` event — it simulates server-initiated stream drop for reconnect testing
