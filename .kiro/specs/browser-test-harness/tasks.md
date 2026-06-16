@@ -72,7 +72,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - _Requirements: 4.1, 4.2, 4.3, 4.6_
 
 - [ ] 8. Implement SSE reconnection tests
-  - [ ] 8.1 Create `test/browser/sse-reconnect.spec.ts`
+  - [x] 8.1 Create `test/browser/sse-reconnect.spec.ts`
     - Seed with `seedSession({ live: false, status: 'active' })` — filesystem-only; SSE broker handles stream.log tailing
     - Call `page.goto(baseUrl)`, navigate to detail view, wait for initial SSE events to render
     - Register `page.on('request')` listener BEFORE calling `sseBroker.disconnectAll()` to capture reconnection requests (the listener only needs to be in place before the disconnect, not before initial connect)
@@ -84,7 +84,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
 - [ ] 9. Implement prompt injection tests
-  - [ ] 9.1 Create `test/browser/inject-prompt.spec.ts`
+  - [x] 9.1 Create `test/browser/inject-prompt.spec.ts`
     - Seed with `seedSession({ live: true })` — MUST use live session via `sessionManager.createSession()` with FakeKiroBackend loaded with `test/scenarios/slow-multi-prompt.json` (inject endpoint calls `sessionMgr.getActiveSession()` and returns 409 without a live handle)
     - Call `page.goto(baseUrl)`, navigate to detail view
     - Test: fill `#prompt-input`, click `#btn-send` → POST to `/sessions/:id/inject` succeeds with 202, textarea cleared, button re-enabled
@@ -95,7 +95,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
 
 - [ ] 10. Implement kill session tests
-  - [ ] 10.1 Create `test/browser/kill-session.spec.ts`
+  - [x] 10.1 Create `test/browser/kill-session.spec.ts`
     - Seed with `seedSession({ live: true })` — MUST use live session via `sessionManager.createSession()` with FakeKiroBackend loaded with `test/scenarios/slow-multi-prompt.json` (kill endpoint calls `sessionMgr.getActiveSession()` and `sessionMgr.terminateSession()` which require a live handle)
     - Call `page.goto(baseUrl)`, navigate to detail view
     - Test: click `#btn-kill` → `.confirm-overlay` appears with "Kill this session? This cannot be undone." text, "Kill" and "Cancel" buttons

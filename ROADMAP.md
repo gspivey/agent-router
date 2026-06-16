@@ -33,17 +33,7 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 17. Browser harness: reconnect, inject, and kill tests
-
-Add the interactive spec files: `sse-reconnect.spec.ts` (drop via `disconnectAll`, reconnect
-with `Last-Event-ID`, no duplicate IDs, no reconnect after `session_ended`, delay reset),
-`inject-prompt.spec.ts` and `kill-session.spec.ts` (both `seedSession({ live: true })` with the
-`slow-multi-prompt.json` scenario — inject yields a `web_inject` stream entry and clears the
-textarea; kill confirms, terminates with `terminated_web`, hides controls). Builds on items
-14–16.
-
-- Spec: `.kiro/specs/browser-test-harness/` · tasks `8.1`, `9.1`, `10.1`
-- [ ] Complete · PR: —
+### 18. Browser harness: visibility reconnect and `test:browser` script
 
 ---
 
@@ -210,6 +200,20 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 17. Browser harness: reconnect, inject, and kill tests
+
+Add the interactive spec files: `sse-reconnect.spec.ts` (drop via `disconnectAll`, reconnect
+with `Last-Event-ID`, no duplicate IDs, no reconnect after `session_ended`, delay reset),
+`inject-prompt.spec.ts` and `kill-session.spec.ts` (both `seedSession({ live: true })` with the
+`slow-multi-prompt.json` scenario — inject yields a `web_inject` stream entry and clears the
+textarea; kill confirms, terminates with `terminated_web`, hides controls). Builds on items
+14–16.
+
+- Spec: `.kiro/specs/browser-test-harness/` · tasks `8.1`, `9.1`, `10.1`
+- [x] Complete · PR: #57
+
+---
 
 ### 16. Browser harness: list, detail, SSE-render, and auth tests
 
