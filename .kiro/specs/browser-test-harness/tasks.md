@@ -108,7 +108,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
   - Ensure all tests pass so far with `npx playwright test`. Ask the user if questions arise.
 
 - [ ] 12. Implement visibility reconnection tests
-  - [ ] 12.1 Create `test/browser/visibility-reconnect.spec.ts`
+  - [x] 12.1 Create `test/browser/visibility-reconnect.spec.ts`
     - Seed with `seedSession({ live: false, status: 'active' })` — filesystem-only; SSE broker handles stream.log tailing
     - Call `page.goto(baseUrl)`, navigate to detail view, wait for SSE events (lastEventId > 0)
     - Use CDP session: `const cdp = await page.context().newCDPSession(page)`
@@ -125,7 +125,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - _Requirements: 9.1, 9.2_
 
 - [ ] 14. Add `test:browser` script and verify compatibility
-  - [ ] 14.1 Update `package.json` and verify existing tests pass
+  - [x] 14.1 Update `package.json` and verify existing tests pass
     - Add `"test:browser": "npx playwright test"` to the `scripts` section of `package.json`
     - Verify `npm test` still passes (vitest does not pick up `test/browser/*.spec.ts` files due to `.spec.ts` extension and include patterns)
     - Verify `npm run test:browser` runs the Playwright suite and exits cleanly
