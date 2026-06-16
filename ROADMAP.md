@@ -33,20 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 15. Browser harness: fixtures and server lifecycle
-
-Create `test/browser/fixtures.ts` with the full per-test server lifecycle (tmpdir → session
-files → db → logger → token store → SSE broker → FakeKiroBackend → session manager → web app →
-`startWebServer` on an ephemeral port), the TCP readiness check, teardown, the `ConsoleCollector`
-(console errors, page errors, dialogs), and the `seedSession` helper with its `live: false`
-(filesystem-only) and `live: true` (`slow-multi-prompt.json` scenario) modes. The page fixture
-must not auto-navigate. Builds on item 14's harness scaffold; unblocks all spec files.
-
-- Spec: `.kiro/specs/browser-test-harness/` · tasks `3.1`
-- [ ] Complete · PR: —
-
----
-
 ### 16. Browser harness: list, detail, SSE-render, and auth tests
 
 Add the read-path spec files against the fixtures from item 15: `list-view.spec.ts` (status
@@ -237,6 +223,20 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 15. Browser harness: fixtures and server lifecycle
+
+Create `test/browser/fixtures.ts` with the full per-test server lifecycle (tmpdir → session
+files → db → logger → token store → SSE broker → FakeKiroBackend → session manager → web app →
+`startWebServer` on an ephemeral port), the TCP readiness check, teardown, the `ConsoleCollector`
+(console errors, page errors, dialogs), and the `seedSession` helper with its `live: false`
+(filesystem-only) and `live: true` (`slow-multi-prompt.json` scenario) modes. The page fixture
+must not auto-navigate. Builds on item 14's harness scaffold; unblocks all spec files.
+
+- Spec: `.kiro/specs/browser-test-harness/` · tasks `3.1`
+- [x] Complete · PR: #55
+
+---
 
 ### 14. Browser harness: module resolution and `disconnectAll`
 
