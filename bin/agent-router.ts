@@ -9,7 +9,7 @@
  * Subcommands:
  *   prompt --new [--quiet] [--file <path>]   Create a new session
  *   prompt --session-id <id>                 Inject prompt into existing session
- *   ls [--all] [--limit N]                   List sessions
+ *   ls [--all] [--full] [--limit N]                   List sessions
  *   tail <session_id> [--raw] [--prompts]    Tail session output
  *   terminate <session_id>                   Terminate a session
  *
@@ -22,6 +22,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as readline from 'node:readline';
 import { selectVisibleSessions, DEFAULT_LS_LIMIT } from '../src/ls-pagination.js';
+import { resolveSessionId } from '../src/session-id.js';
 
 // ---------------------------------------------------------------------------
 // ANSI color helpers
@@ -44,6 +45,37 @@ function resolveSocketPath(): string {
 function resolveSessionsDir(): string {
   const home = process.env['AGENT_ROUTER_HOME'] ?? path.join(os.homedir(), '.agent-router');
   return path.join(home, 'sessions');
+}
+
+/**
+ * Resolve a session-id prefix to a full session ID using the sessions directory.
+ * Exits the process with an error if no match or ambiguous.
+ */
+function resolveSessionPrefix(prefix: string): string {
+  const sessionsDir = resolveSessionsDir();
+  let candidates: string[] = [];
+  try {
+    candidates = fs.readdirSync(sessionsDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+  } catch {
+    // Directory doesn't exist — no candidates
+  }
+
+  const result = resolveSessionId(prefix, candidates);
+  if (result.kind === 'match') return result.sessionId;
+
+  if (result.kind === 'no_match') {
+    process.stderr.write(`Error: no session matching prefix "${prefix}"\n`);
+    process.exit(1);
+  }
+
+  // ambiguous
+  process.stderr.write(`Error: ambiguous prefix "${prefix}" matches ${result.candidates.length} sessions:\n`);
+  for (const c of result.candidates) {
+    process.stderr.write(`  ${c}\n`);
+  }
+  process.exit(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,12 +388,15 @@ function truncate(s: string, maxLen: number): string {
 
 async function cmdLs(args: string[]): Promise<void> {
   let all = false;
+  let full = false;
   let limit = DEFAULT_LS_LIMIT;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--all') {
       all = true;
+    } else if (arg === '--full') {
+      full = true;
     } else if (arg === '--limit') {
       const val = args[++i];
       const parsed = Number(val);
@@ -390,19 +425,20 @@ async function cmdLs(args: string[]): Promise<void> {
   const visible = selectVisibleSessions(sessions, { all, limit });
 
   // Table header
-  const header = padRow('ID', 'Status', 'Age', 'PRs', 'Prompt');
+  const idWidth = full ? 36 : 10;
+  const header = padRow('ID', 'Status', 'Age', 'PRs', 'Prompt', idWidth);
   process.stdout.write(header + '\n');
   process.stdout.write('-'.repeat(header.length) + '\n');
 
   for (const s of visible) {
-    const id = s.session_id.slice(0, 8);
+    const id = full ? s.session_id : s.session_id.slice(0, 8);
     const status = s.status;
     const age = formatAge(s.created_at);
     const prs = s.prs.length > 0
       ? s.prs.map((p) => `${p.repo}#${p.pr_number}`).join(', ')
       : '-';
     const prompt = truncate(s.original_prompt.replace(/\n/g, ' '), 40);
-    process.stdout.write(padRow(id, status, age, prs, prompt) + '\n');
+    process.stdout.write(padRow(id, status, age, prs, prompt, idWidth) + '\n');
   }
 
   const hidden = sessions.length - visible.length;
@@ -411,8 +447,9 @@ async function cmdLs(args: string[]): Promise<void> {
   }
 }
 
-function padRow(id: string, status: string, age: string, prs: string, prompt: string): string {
-  return `${id.padEnd(10)} ${status.padEnd(12)} ${age.padEnd(6)} ${prs.padEnd(20)} ${prompt}`;
+function padRow(id: string, status: string, age: string, prs: string, prompt: string, idWidth?: number): string {
+  const w = idWidth ?? 10;
+  return `${id.padEnd(w)} ${status.padEnd(12)} ${age.padEnd(6)} ${prs.padEnd(20)} ${prompt}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -420,7 +457,7 @@ function padRow(id: string, status: string, age: string, prs: string, prompt: st
 // ---------------------------------------------------------------------------
 
 async function cmdTail(args: string[]): Promise<void> {
-  let sessionId: string | undefined;
+  let sessionPrefix: string | undefined;
   let raw = false;
   let prompts = false;
 
@@ -430,16 +467,17 @@ async function cmdTail(args: string[]): Promise<void> {
       raw = true;
     } else if (arg === '--prompts') {
       prompts = true;
-    } else if (sessionId === undefined && !arg?.startsWith('--')) {
-      sessionId = arg;
+    } else if (sessionPrefix === undefined && !arg?.startsWith('--')) {
+      sessionPrefix = arg;
     }
   }
 
-  if (sessionId === undefined) {
+  if (sessionPrefix === undefined) {
     process.stderr.write('Usage: agent-router tail <session_id> [--raw] [--prompts]\n');
     process.exit(1);
   }
 
+  const sessionId = resolveSessionPrefix(sessionPrefix);
   const sessionsDir = resolveSessionsDir();
   const sessionDir = path.join(sessionsDir, sessionId);
 
@@ -471,12 +509,13 @@ async function cmdTail(args: string[]): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function cmdTerminate(args: string[]): Promise<void> {
-  const sessionId = args[0];
-  if (sessionId === undefined || sessionId.startsWith('--')) {
+  const prefix = args[0];
+  if (prefix === undefined || prefix.startsWith('--')) {
     process.stderr.write('Usage: agent-router terminate <session_id>\n');
     process.exit(1);
   }
 
+  const sessionId = resolveSessionPrefix(prefix);
   const socketPath = resolveSocketPath();
   const result = await sendToDaemon(socketPath, {
     op: 'terminate_session',
@@ -496,21 +535,21 @@ async function cmdTerminate(args: string[]): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function cmdCompleteSession(args: string[]): Promise<void> {
-  let sessionId: string | undefined;
+  let sessionPrefix: string | undefined;
   let reason: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--session-id') {
-      sessionId = args[++i];
+      sessionPrefix = args[++i];
     } else if (arg === '--reason') {
       reason = args[++i];
-    } else if (sessionId === undefined && !arg?.startsWith('--')) {
-      sessionId = arg;
+    } else if (sessionPrefix === undefined && !arg?.startsWith('--')) {
+      sessionPrefix = arg;
     }
   }
 
-  if (sessionId === undefined) {
+  if (sessionPrefix === undefined) {
     process.stderr.write('Usage: agent-router complete-session --session-id <id> --reason <reason>\n');
     process.exit(1);
   }
@@ -519,6 +558,7 @@ async function cmdCompleteSession(args: string[]): Promise<void> {
     process.exit(1);
   }
 
+  const sessionId = resolveSessionPrefix(sessionPrefix);
   const socketPath = resolveSocketPath();
   const result = await sendToDaemon(socketPath, {
     op: 'complete_session',
@@ -545,7 +585,7 @@ Commands:
   prompt --new [--quiet] [--force] [--repo <owner/name>] [--file <path>]
                                            Create a new session
   prompt --session-id <id>                 Inject prompt into existing session
-  ls [--all] [--limit N]                   List sessions (default: 20 rows)
+  ls [--all] [--full] [--limit N]          List sessions (default: 20 rows)
   tail <session_id> [--raw] [--prompts]    Tail session output
   terminate <session_id>                   Terminate a session
   complete-session --session-id <id> --reason <reason>

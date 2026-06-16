@@ -33,20 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 6. Session-id prefix matching and `--full`
-
-Let every CLI subcommand that takes a session-id (`tail`, `terminate`, `complete-session`,
-`kill`) accept any unambiguous prefix of the full UUID, erroring with the candidate list on an
-ambiguous prefix and erroring on no match. Add `agent-router ls --full` to print untruncated
-IDs while keeping the truncated default. Extract a pure `resolveSessionId(prefix, candidates)`
-function and Tier 1-test the unique / none / ambiguous cases. Builds on the `ls` flag parsing
-from item 5.
-
-- Spec: `BACKLOG.md § P2.8`
-- [ ] Complete · PR: —
-
----
-
 ### 7. `kill` subcommand
 
 Add `agent-router kill <session-id> [--reason <reason>]` (`bin/agent-router.ts` + the IPC
@@ -356,6 +342,20 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 6. Session-id prefix matching and `--full`
+
+Let every CLI subcommand that takes a session-id (`tail`, `terminate`, `complete-session`,
+`kill`) accept any unambiguous prefix of the full UUID, erroring with the candidate list on an
+ambiguous prefix and erroring on no match. Add `agent-router ls --full` to print untruncated
+IDs while keeping the truncated default. Extract a pure `resolveSessionId(prefix, candidates)`
+function and Tier 1-test the unique / none / ambiguous cases. Builds on the `ls` flag parsing
+from item 5.
+
+- Spec: `BACKLOG.md § P2.8`
+- [x] Complete · PR: #46
+
+---
 
 ### 5. `ls` pagination
 
