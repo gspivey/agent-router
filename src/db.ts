@@ -23,6 +23,12 @@ export interface PendingWake {
   createdAt: number;
 }
 
+export interface CronState {
+  name: string;
+  paused: boolean;
+  updatedAt: number;
+}
+
 export interface Database {
   insertEvent(event: NewEvent): number;
   updateEventProcessed(id: number, wakeTriggered: boolean): void;
@@ -43,6 +49,9 @@ export interface Database {
   getDuePendingWakes(nowSeconds: number): PendingWake[];
   clearPendingWake(repo: string, prNumber: number): void;
   getEventById(eventId: number): { eventType: string; payload: string } | undefined;
+  getCronState(name: string): CronState | null;
+  setCronPaused(name: string, paused: boolean): void;
+  getAllCronStates(): CronState[];
   walCheckpoint(): void;
   shutdown(): Promise<void>;
 }
@@ -118,6 +127,14 @@ CREATE INDEX IF NOT EXISTS idx_pending_wakes_deferred
   ON pending_wakes(deferred_until);
 `;
 
+const CRON_STATE_DDL = `
+CREATE TABLE IF NOT EXISTS cron_state (
+  name       TEXT PRIMARY KEY,
+  paused     INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`;
+
 export function initDatabase(dbPath: string): Database {
   const db = new BetterSqlite3(dbPath);
 
@@ -134,6 +151,7 @@ export function initDatabase(dbPath: string): Database {
   db.exec(OUTBOUND_COMMENTS_INDEX);
   db.exec(PENDING_WAKES_DDL);
   db.exec(PENDING_WAKES_INDEX);
+  db.exec(CRON_STATE_DDL);
 
   // Prepared statements
   const insertEventStmt = db.prepare<{
@@ -254,6 +272,23 @@ export function initDatabase(dbPath: string): Database {
 
   const getEventByIdStmt = db.prepare<{ id: number }>(
     `SELECT event_type, payload FROM events WHERE id = @id`
+  );
+
+  // Cron state prepared statements
+  const getCronStateStmt = db.prepare<{ name: string }>(
+    `SELECT name, paused, updated_at FROM cron_state WHERE name = @name`
+  );
+
+  const upsertCronStateStmt = db.prepare<{ name: string; paused: number; updated_at: number }>(
+    `INSERT INTO cron_state (name, paused, updated_at)
+     VALUES (@name, @paused, @updated_at)
+     ON CONFLICT(name) DO UPDATE SET
+       paused = excluded.paused,
+       updated_at = excluded.updated_at`
+  );
+
+  const getAllCronStatesStmt = db.prepare(
+    `SELECT name, paused, updated_at FROM cron_state`
   );
 
   // Atomic rate-limit transaction
@@ -403,6 +438,35 @@ export function initDatabase(dbPath: string): Database {
         | undefined;
       if (row === undefined) return undefined;
       return { eventType: row.event_type, payload: row.payload };
+    },
+
+    getCronState(name: string): CronState | null {
+      const row = getCronStateStmt.get({ name }) as
+        | { name: string; paused: number; updated_at: number }
+        | undefined;
+      if (row === undefined) return null;
+      return { name: row.name, paused: row.paused === 1, updatedAt: row.updated_at };
+    },
+
+    setCronPaused(name: string, paused: boolean): void {
+      upsertCronStateStmt.run({
+        name,
+        paused: paused ? 1 : 0,
+        updated_at: Math.floor(Date.now() / 1000),
+      });
+    },
+
+    getAllCronStates(): CronState[] {
+      const rows = getAllCronStatesStmt.all() as Array<{
+        name: string;
+        paused: number;
+        updated_at: number;
+      }>;
+      return rows.map((r) => ({
+        name: r.name,
+        paused: r.paused === 1,
+        updatedAt: r.updated_at,
+      }));
     },
 
     walCheckpoint(): void {

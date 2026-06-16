@@ -166,19 +166,23 @@ function createEventProcessor(deps: {
 
 function setupCronJobs(deps: {
   config: AgentRouterConfig;
+  db: Database;
   sessionMgr: SessionManager;
   sessionFiles: ReturnType<typeof import('./session-files.js').createSessionFiles>;
   log: Logger;
 }): cron.ScheduledTask[] {
-  const { config, sessionMgr, sessionFiles, log } = deps;
+  const { config, db, sessionMgr, sessionFiles, log } = deps;
   const tasks: cron.ScheduledTask[] = [];
 
   for (const cronEntry of config.cron) {
+    const state = db.getCronState(cronEntry.name);
+    const paused = state !== null && state.paused;
+
     const task = cron.schedule(cronEntry.schedule, () => {
       void handleCronFire(cronEntry, sessionMgr, sessionFiles, log);
-    });
+    }, { scheduled: !paused });
     tasks.push(task);
-    log.info('Cron job registered', { name: cronEntry.name, schedule: cronEntry.schedule, repo: cronEntry.repo });
+    log.info('Cron job registered', { name: cronEntry.name, schedule: cronEntry.schedule, repo: cronEntry.repo, paused });
   }
 
   return tasks;
@@ -540,6 +544,9 @@ async function main(): Promise<void> {
   });
   log.info('HTTP server listening', { port: config.port });
 
+  // ---- Task 19.3: Register cron jobs ----
+  const cronTasks = setupCronJobs({ config, db, sessionMgr, sessionFiles, log });
+
   // Start CLI IPC server on Unix socket
   const socketPath = path.join(rootDir, 'sock');
   const cliServer = createCliServer({
@@ -547,6 +554,9 @@ async function main(): Promise<void> {
     sessionMgr,
     sessionFiles,
     log,
+    db,
+    cronTasks,
+    cronEntries: config.cron,
   });
   await cliServer.start();
   log.info('CLI IPC server listening', { socketPath });
@@ -573,9 +583,6 @@ async function main(): Promise<void> {
   });
 
   const webServer = startWebServer(webApp, effectiveConfig, log);
-
-  // ---- Task 19.3: Register cron jobs ----
-  const cronTasks = setupCronJobs({ config, sessionMgr, sessionFiles, log });
 
   // ---- Task 19.4: Install graceful shutdown handlers ----
   const state: DaemonState = {

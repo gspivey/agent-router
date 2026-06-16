@@ -33,18 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 22. Per-repo cron pause / resume
-
-Add a `cron_state` table (`src/db.ts`) and `agent-router cron list|pause <name>|resume <name>`
-(CLI + IPC) so an operator can pause one repo's cron and re-enable it; `setupCronJobs` honors
-the persisted state and live `.stop()`/`.start()` the `ScheduledTask`. State survives restarts.
-Tier 1 (state default/round-trip) + Tier 2 (paused does not fire, persists, resume re-enables).
-
-- Spec: `.kiro/specs/operator-controls/` · tasks `2.1`, `2.2`
-- [ ] Complete · PR: —
-
----
-
 ### 23. CI-reconciliation nudge (wake watchdog)
 
 Eliminate the manual "CI is green, proceed" nudging. Add `src/check-watchdog.ts`: on a bounded
@@ -140,6 +128,18 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 22. Per-repo cron pause / resume
+
+Add a `cron_state` table (`src/db.ts`) and `agent-router cron list|pause <name>|resume <name>`
+(CLI + IPC) so an operator can pause one repo's cron and re-enable it; `setupCronJobs` honors
+the persisted state and live `.stop()`/`.start()` the `ScheduledTask`. State survives restarts.
+Tier 1 (state default/round-trip) + Tier 2 (paused does not fire, persists, resume re-enables).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `2.1`, `2.2`
+- [x] Complete · PR: #62
+
+---
 
 ### 21. Child-environment secret hygiene (env-scrub)
 
