@@ -221,6 +221,13 @@ export function createApp(deps: {
 
   // POST /webhook — the main handler
   app.post('/webhook', async (c) => {
+    // Reject non-JSON content types before attempting any parsing
+    const contentType = c.req.header('content-type') ?? '';
+    if (!contentType.startsWith('application/json')) {
+      deps.log.warn('Rejected non-JSON Content-Type', { content_type: contentType });
+      return c.json({ error: 'Content-Type must be application/json' }, 400);
+    }
+
     // Extract raw body as Buffer for HMAC verification
     const rawBody = Buffer.from(await c.req.arrayBuffer());
 

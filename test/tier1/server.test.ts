@@ -179,6 +179,88 @@ describe('POST /webhook with valid signature', () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /webhook — non-JSON Content-Type → 400
+// ---------------------------------------------------------------------------
+
+describe('POST /webhook with non-JSON Content-Type', () => {
+  it('returns 400 for application/x-www-form-urlencoded', async () => {
+    const { app, db, enqueue } = makeApp();
+    const body = 'foo=bar&baz=qux';
+    const sig = makeSignature(WEBHOOK_SECRET, body);
+
+    const res = await app.request('/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-GitHub-Event': 'check_run',
+        'X-Hub-Signature-256': sig,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ error: 'Content-Type must be application/json' });
+    expect(db.insertEvent).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for text/plain', async () => {
+    const { app, db } = makeApp();
+    const body = 'hello';
+
+    const res = await app.request('/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+        'X-GitHub-Event': 'push',
+        'X-Hub-Signature-256': makeSignature(WEBHOOK_SECRET, body),
+      },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    expect(db.insertEvent).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when Content-Type header is missing', async () => {
+    const { app, db } = makeApp();
+    const body = JSON.stringify(webhookPayload('myorg/myrepo', 1));
+
+    const res = await app.request('/webhook', {
+      method: 'POST',
+      headers: {
+        'X-GitHub-Event': 'check_run',
+        'X-Hub-Signature-256': makeSignature(WEBHOOK_SECRET, body),
+      },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    expect(db.insertEvent).not.toHaveBeenCalled();
+  });
+
+  it('accepts application/json with charset parameter', async () => {
+    const { app, db } = makeApp();
+    const body = JSON.stringify(webhookPayload('myorg/myrepo', 5));
+    const sig = makeSignature(WEBHOOK_SECRET, body);
+
+    const res = await app.request('/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'X-GitHub-Event': 'check_run',
+        'X-Hub-Signature-256': sig,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(200);
+    expect(db.insertEvent).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /webhook — missing signature → 401
 // ---------------------------------------------------------------------------
 
