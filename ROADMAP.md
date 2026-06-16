@@ -33,20 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 23. CI-reconciliation nudge (wake watchdog)
-
-Eliminate the manual "CI is green, proceed" nudging. Add `src/check-watchdog.ts`: on a bounded
-interval, for each active session waiting on an open registered PR, poll the PR's check status
-and, when checks are terminal and not already nudged, inject a wake via
-`sessionMgr.injectPrompt(..., 'router')`. Idempotent on `(pr, head_sha, conclusion)`;
-best-effort on GitHub errors. The agent's no-poll contract is preserved (the daemon polls).
-Tier 1 (terminal/idempotency) + Tier 2 (one wake on terminal, none while in-progress).
-
-- Spec: `.kiro/specs/operator-controls/` · tasks `4.1`, `4.2`
-- [ ] Complete · PR: —
-
----
-
 ### 24. Config hot-reload
 
 Pick up `config.json` changes without a restart. Add `src/config-watch.ts` (debounced
@@ -128,6 +114,20 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 23. CI-reconciliation nudge (wake watchdog)
+
+Eliminate the manual "CI is green, proceed" nudging. Add `src/check-watchdog.ts`: on a bounded
+interval, for each active session waiting on an open registered PR, poll the PR's check status
+and, when checks are terminal and not already nudged, inject a wake via
+`sessionMgr.injectPrompt(..., 'router')`. Idempotent on `(pr, head_sha, conclusion)`;
+best-effort on GitHub errors. The agent's no-poll contract is preserved (the daemon polls).
+Tier 1 (terminal/idempotency) + Tier 2 (one wake on terminal, none while in-progress).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `4.1`, `4.2`
+- [x] Complete · PR: #63
+
+---
 
 ### 22. Per-repo cron pause / resume
 

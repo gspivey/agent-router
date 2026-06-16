@@ -56,13 +56,13 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
     - _Requirements: 6.2, 6.3, 6.4, 6.6_
 
 - [ ] 4. CI-reconciliation nudge (wake watchdog)
-  - [ ] 4.1 Check-status fetch + nudge idempotency (pure parts)
+  - [x] 4.1 Check-status fetch + nudge idempotency (pure parts)
     - GitHub client method for a PR head-sha's combined check conclusion; pure
       `nudgeKey(session, pr, headSha, conclusion)` and "all terminal?" predicate.
     - Tier 1: terminal/in-progress classification; idempotency key stability across re-poll and
       change across a new head sha.
     - _Requirements: 4.4, 4.5_
-  - [ ] 4.2 `check-watchdog` loop + wake injection
+  - [x] 4.2 `check-watchdog` loop + wake injection
     - New `src/check-watchdog.ts` interval (default 30s, configurable) over active sessions with
       an open registered PR that is idle/waiting; on terminal checks not yet nudged, inject a
       wake via `sessionMgr.injectPrompt(..., 'router')`. Best-effort on GitHub errors.
