@@ -531,6 +531,43 @@ async function cmdTerminate(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: kill
+// ---------------------------------------------------------------------------
+
+async function cmdKill(args: string[]): Promise<void> {
+  let sessionPrefix: string | undefined;
+  let reason: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--reason') {
+      reason = args[++i];
+    } else if (sessionPrefix === undefined && !arg?.startsWith('--')) {
+      sessionPrefix = arg;
+    }
+  }
+
+  if (sessionPrefix === undefined) {
+    process.stderr.write('Usage: agent-router kill <session_id> [--reason <reason>]\n');
+    process.exit(1);
+  }
+
+  const sessionId = resolveSessionPrefix(sessionPrefix);
+  const socketPath = resolveSocketPath();
+  const msg: Record<string, unknown> = { op: 'kill_session', session_id: sessionId };
+  if (reason !== undefined) msg['reason'] = reason;
+
+  const result = await sendToDaemon(socketPath, msg);
+
+  if (result['error'] !== undefined) {
+    process.stderr.write(`Error: ${result['error'] as string}\n`);
+    process.exit(1);
+  }
+
+  process.stderr.write(`Session killed (reason: ${reason ?? 'killed_by_operator'}).\n`);
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: complete-session
 // ---------------------------------------------------------------------------
 
@@ -588,6 +625,7 @@ Commands:
   ls [--all] [--full] [--limit N]          List sessions (default: 20 rows)
   tail <session_id> [--raw] [--prompts]    Tail session output
   terminate <session_id>                   Terminate a session
+  kill <session_id> [--reason <reason>]    Kill a session (default: killed_by_operator)
   complete-session --session-id <id> --reason <reason>
                                            Signal session completion
 `);
@@ -616,6 +654,9 @@ async function main(): Promise<void> {
       break;
     case 'terminate':
       await cmdTerminate(subArgs);
+      break;
+    case 'kill':
+      await cmdKill(subArgs);
       break;
     case 'complete-session':
       await cmdCompleteSession(subArgs);

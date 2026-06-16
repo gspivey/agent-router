@@ -24,6 +24,7 @@ export interface SessionMeta {
     | 'failed'
     | 'terminated_cli'
     | 'terminated_web'
+    | 'killed_by_operator'
     | 'shutdown'
     | 'merged'
     | 'closed_without_merge';

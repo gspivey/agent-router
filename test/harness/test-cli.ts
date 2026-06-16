@@ -41,6 +41,12 @@ export class TestCli {
     return this.send<{ ok: boolean }>({ op: 'terminate_session', session_id: sessionId });
   }
 
+  async killSession(sessionId: string, reason?: string): Promise<{ ok?: boolean; error?: string }> {
+    const msg: Record<string, unknown> = { op: 'kill_session', session_id: sessionId };
+    if (reason !== undefined) msg['reason'] = reason;
+    return this.send<{ ok?: boolean; error?: string }>(msg);
+  }
+
   async completeSession(
     sessionId: string,
     reason: string,

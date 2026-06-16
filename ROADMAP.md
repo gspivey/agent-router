@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 7. `kill` subcommand
-
-Add `agent-router kill <session-id> [--reason <reason>]` (`bin/agent-router.ts` + the IPC
-handler) that drives the existing terminate flow, defaulting `termination_reason` to
-`killed_by_operator` (add it to the closed union in `src/session-files.ts`). Error if the
-session is not active. Reuses the prefix resolver from item 6. Add a Tier 2 test that `kill`
-ends a live session and writes the reason.
-
-- Spec: `BACKLOG.md § P2.5`
-- [ ] Complete · PR: —
-
----
-
 ### 8. `tail` renders agent text
 
 Fix the `tail` pretty-printer (`prettyPrint` in `bin/agent-router.ts`) so a plain (non-`--raw`)
@@ -342,6 +329,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 7. `kill` subcommand
+
+Add `agent-router kill <session-id> [--reason <reason>]` (`bin/agent-router.ts` + the IPC
+handler) that drives the existing terminate flow, defaulting `termination_reason` to
+`killed_by_operator` (add it to the closed union in `src/session-files.ts`). Error if the
+session is not active. Reuses the prefix resolver from item 6. Add a Tier 2 test that `kill`
+ends a live session and writes the reason.
+
+- Spec: `BACKLOG.md § P2.5`
+- [x] Complete · PR: #47
+
+---
 
 ### 6. Session-id prefix matching and `--full`
 
