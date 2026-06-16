@@ -146,10 +146,13 @@ export function createSessionManager(deps: {
    * verification).
    */
   verify?: VerifySessionFn;
+  /** Best-effort callback fired after a session reaches terminal state. */
+  onSessionEnd?: (sessionId: string) => void;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
   const verify = deps.verify;
+  const onSessionEnd = deps.onSessionEnd;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
@@ -285,6 +288,8 @@ export function createSessionManager(deps: {
         clearSessionTimers(sessionId);
         clearPendingWakesForSession(sessionId);
         completionFlags.delete(sessionId);
+
+        onSessionEnd?.(sessionId);
 
         acp.kill().catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -423,6 +428,7 @@ export function createSessionManager(deps: {
         completionFlags.delete(sessionId);
         clearPendingWakesForSession(sessionId);
         registry.remove(sessionId);
+        onSessionEnd?.(sessionId);
       })
       .catch(() => {});
   }
@@ -468,6 +474,8 @@ export function createSessionManager(deps: {
       clearSessionTimers(sessionId);
       clearPendingWakesForSession(sessionId);
       completionFlags.delete(sessionId);
+
+      onSessionEnd?.(sessionId);
 
       acp.kill().catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -716,6 +724,8 @@ export function createSessionManager(deps: {
         }
       }
 
+      onSessionEnd?.(sessionId);
+
       // Suppress inactivity timer — replace with grace period timer
       const inactTimer = inactivityTimers.get(sessionId);
       if (inactTimer !== undefined) {
@@ -795,6 +805,8 @@ export function createSessionManager(deps: {
 
       // Shutdown the per-session event queue
       await handle.eventQueue.shutdown(5);
+
+      onSessionEnd?.(sessionId);
 
       log.info('Session terminated', { sessionId, reason, actor });
     },

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import cron from 'node-cron';
 import { FatalError } from './errors.js';
+import type { NotifyOnSessionEndConfig } from './notify.js';
 
 export interface SessionTimeoutConfig {
   inactivityMinutes: number;
@@ -36,6 +37,8 @@ export interface AgentRouterConfig {
   trustedProxy?: TrustedProxyConfig;
   /** Email allowlist for write operations (case-insensitive). */
   allowedEmails?: string[];
+  /** Optional webhook notification on session end. */
+  notifyOnSessionEnd?: NotifyOnSessionEndConfig;
 }
 
 export interface RepoConfig {
@@ -310,6 +313,29 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     }
   }
 
+  // notifyOnSessionEnd (optional)
+  let notifyOnSessionEnd: NotifyOnSessionEndConfig | undefined;
+  if (config['notifyOnSessionEnd'] !== undefined) {
+    const raw = config['notifyOnSessionEnd'];
+    if (!isRecord(raw)) {
+      throw new FatalError('Invalid "notifyOnSessionEnd": must be an object');
+    }
+    const url = raw['url'];
+    if (typeof url !== 'string' || url.length === 0) {
+      throw new FatalError('Invalid "notifyOnSessionEnd.url": must be a non-empty string');
+    }
+    const events = raw['events'];
+    if (!Array.isArray(events)) {
+      throw new FatalError('Invalid "notifyOnSessionEnd.events": must be an array');
+    }
+    for (let i = 0; i < events.length; i++) {
+      if (typeof events[i] !== 'string' || (events[i] as string).length === 0) {
+        throw new FatalError(`Invalid "notifyOnSessionEnd.events[${i}]": must be a non-empty string`);
+      }
+    }
+    notifyOnSessionEnd = { url, events: events as string[] };
+  }
+
   // Build set of known "owner/name" for cron repo matching
   const repoKeys = new Set(repos.map(r => `${r.owner}/${r.name}`));
 
@@ -369,6 +395,9 @@ export function validateConfig(config: unknown): AgentRouterConfig {
   }
   if (allowedEmails !== undefined) {
     result.allowedEmails = allowedEmails;
+  }
+  if (notifyOnSessionEnd !== undefined) {
+    result.notifyOnSessionEnd = notifyOnSessionEnd;
   }
   return result;
 }

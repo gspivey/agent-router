@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 11. Session-end notification webhook
-
-Add a `notifyOnSessionEnd: { url: string, events: string[] }` config field (`src/config.ts`)
-and have the daemon POST `{ session_id, status, termination_reason, prs, started_at,
-ended_at }` to the URL when a session ends with a matching termination reason. Best-effort:
-log and continue on failure, never block cleanup. Tier 2-test against a mock HTTP server,
-asserting the payload and that a failed POST does not stall termination.
-
-- Spec: `BACKLOG.md § P1.3`
-- [ ] Complete · PR: —
-
----
-
 ### 12. PAT expiry alerting
 
 Add an optional `token_expires_at` (ISO 8601) config field and a startup + 24h-interval check
@@ -292,6 +279,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 11. Session-end notification webhook
+
+Add a `notifyOnSessionEnd: { url: string, events: string[] }` config field (`src/config.ts`)
+and have the daemon POST `{ session_id, status, termination_reason, prs, started_at,
+ended_at }` to the URL when a session ends with a matching termination reason. Best-effort:
+log and continue on failure, never block cleanup. Tier 2-test against a mock HTTP server,
+asserting the payload and that a failed POST does not stall termination.
+
+- Spec: `BACKLOG.md § P1.3`
+- [x] Complete · PR: #51
+
+---
 
 ### 10. Track merge timestamp
 

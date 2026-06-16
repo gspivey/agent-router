@@ -36,6 +36,7 @@ import type { SSEBroker } from './sse-broker.js';
 import { FatalError, EventError, WakeError } from './errors.js';
 import { createPendingWakeSweeper } from './pending-wake-sweeper.js';
 import type { PendingWakeSweeper } from './pending-wake-sweeper.js';
+import { shouldNotify, sendSessionEndNotification } from './notify.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -433,6 +434,12 @@ async function main(): Promise<void> {
     shutdownDrainSeconds: config.shutdownDrainSeconds,
     github,
     verify: verifySession,
+    onSessionEnd: (sessionId: string) => {
+      const meta = sessionFiles.readMeta(sessionId);
+      if (shouldNotify(config.notifyOnSessionEnd, meta.termination_reason)) {
+        void sendSessionEndNotification({ config: config.notifyOnSessionEnd!, meta, log });
+      }
+    },
   });
   log.info('Session manager initialized');
 
