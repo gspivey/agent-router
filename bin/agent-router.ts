@@ -330,7 +330,7 @@ interface SessionMetaLike {
   session_id: string;
   status: string;
   created_at: number;
-  prs: Array<{ repo: string; pr_number: number }>;
+  prs: Array<{ repo: string; pr_number: number; merged_at?: number }>;
   original_prompt: string;
 }
 
@@ -350,6 +350,7 @@ function truncate(s: string, maxLen: number): string {
 async function cmdLs(args: string[]): Promise<void> {
   let all = false;
   let full = false;
+  let merged = false;
   let limit = DEFAULT_LS_LIMIT;
 
   for (let i = 0; i < args.length; i++) {
@@ -358,6 +359,8 @@ async function cmdLs(args: string[]): Promise<void> {
       all = true;
     } else if (arg === '--full') {
       full = true;
+    } else if (arg === '--merged') {
+      merged = true;
     } else if (arg === '--limit') {
       const val = args[++i];
       const parsed = Number(val);
@@ -383,7 +386,7 @@ async function cmdLs(args: string[]): Promise<void> {
     return;
   }
 
-  const visible = selectVisibleSessions(sessions, { all, limit });
+  const visible = selectVisibleSessions(sessions, { all, limit, merged });
 
   // Table header
   const idWidth = full ? 36 : 10;
@@ -583,7 +586,7 @@ Commands:
   prompt --new [--quiet] [--force] [--repo <owner/name>] [--file <path>]
                                            Create a new session
   prompt --session-id <id>                 Inject prompt into existing session
-  ls [--all] [--full] [--limit N]          List sessions (default: 20 rows)
+  ls [--all] [--full] [--merged] [--limit N]          List sessions (default: 20 rows)
   tail <session_id> [--raw] [--prompts]    Tail session output
   terminate <session_id>                   Terminate a session
   kill <session_id> [--reason <reason>]    Kill a session (default: killed_by_operator)

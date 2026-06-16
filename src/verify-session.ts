@@ -119,10 +119,16 @@ export function createVerifier(deps: {
         ? 'merged'
         : 'closed_without_merge';
 
+      const now = Math.floor(Date.now() / 1000);
+      const prsWithMergeTimestamp = termination_reason === 'merged'
+        ? meta.prs.map((p) => ({ ...p, merged_at: now }))
+        : meta.prs;
+
       sessionFiles.updateMeta(sessionId, {
         status: 'completed',
-        completed_at: Math.floor(Date.now() / 1000),
+        completed_at: now,
         termination_reason,
+        prs: prsWithMergeTimestamp,
       });
 
       try {

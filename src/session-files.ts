@@ -28,7 +28,7 @@ export interface SessionMeta {
     | 'shutdown'
     | 'merged'
     | 'closed_without_merge';
-  prs: Array<{ repo: string; pr_number: number; registered_at: number }>;
+  prs: Array<{ repo: string; pr_number: number; registered_at: number; merged_at?: number }>;
 }
 
 export type PromptSource = 'cli' | 'webhook' | 'cron' | 'mcp' | 'web';
