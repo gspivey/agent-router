@@ -13,7 +13,8 @@
     "test": "vitest run --project tier1 --project tier2",
     "test:watch": "vitest --project tier1",
     "test:integration": "vitest run --project tier3",
-    "test:all": "vitest run"
+    "test:all": "vitest run",
+    "test:browser": "npx playwright test"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@octokit/rest": "^22.0.1",
+    "@playwright/test": "^1.61.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.15.3",
     "@types/node-cron": "^3.0.11",

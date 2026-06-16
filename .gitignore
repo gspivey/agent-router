@@ -10,3 +10,7 @@ test/fixtures/webhooks/raw/
 
 # FakeGitHubBackend copies the fixture repo to a temp directory at start(),
 # so the tracked fixture files are never mutated by test runs.
+
+# Playwright artifacts
+/playwright-report/
+/test-results/
