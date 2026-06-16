@@ -45,6 +45,23 @@ export interface WakeDecision {
   trustTier?: TrustTier;
   commentId?: number;
   commentAuthor?: string;
+  /** Epoch seconds when the rate-limit window expires (set only when decisionCode === 'rate_limited'). */
+  deferUntil?: number;
+}
+
+/**
+ * Compute the epoch second at which a rate-limited event becomes deliverable.
+ * Pure function for testability.
+ */
+export function computeDeferUntil(
+  lastWakedAt: number | null,
+  nowSeconds: number,
+  cooldownSeconds: number,
+): number {
+  if (lastWakedAt !== null) {
+    return lastWakedAt + cooldownSeconds;
+  }
+  return nowSeconds + cooldownSeconds;
 }
 
 /**
@@ -361,6 +378,10 @@ export function evaluateWakePolicy(
     nowSeconds,
   );
   if (!acquired) {
+    const lastWakedAt = db.getLastWakedAt(event.repo, prNumber);
+    const deferUntil = lastWakedAt !== null
+      ? lastWakedAt + config.rateLimit.perPRSeconds
+      : nowSeconds + config.rateLimit.perPRSeconds;
     return {
       wake: false,
       decisionCode: 'rate_limited',
@@ -368,6 +389,7 @@ export function evaluateWakePolicy(
       sessionId: session.sessionId,
       prNumber,
       trustTier,
+      deferUntil,
       ...diag,
     };
   }

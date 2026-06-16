@@ -15,6 +15,14 @@ export interface Session {
   lastWakedAt: number | null;
 }
 
+export interface PendingWake {
+  repo: string;
+  prNumber: number;
+  eventId: number;
+  deferredUntil: number;
+  createdAt: number;
+}
+
 export interface Database {
   insertEvent(event: NewEvent): number;
   updateEventProcessed(id: number, wakeTriggered: boolean): void;
@@ -26,10 +34,15 @@ export interface Database {
     cooldownSeconds: number,
     nowSeconds: number
   ): boolean;
+  getLastWakedAt(repo: string, prNumber: number): number | null;
   insertSession(repo: string, prNumber: number, sessionId: string): void;
   insertOutboundComment(commentId: number, sessionId: string, repo: string, prNumber: number): void;
   isOutboundComment(commentId: number): boolean;
   pruneOutboundComments(olderThanSeconds: number): void;
+  upsertPendingWake(repo: string, prNumber: number, eventId: number, deferredUntil: number): void;
+  getDuePendingWakes(nowSeconds: number): PendingWake[];
+  clearPendingWake(repo: string, prNumber: number): void;
+  getEventById(eventId: number): { eventType: string; payload: string } | undefined;
   walCheckpoint(): void;
   shutdown(): Promise<void>;
 }
@@ -89,6 +102,22 @@ CREATE INDEX IF NOT EXISTS idx_outbound_comments_created
   ON daemon_outbound_comments(created_at);
 `;
 
+const PENDING_WAKES_DDL = `
+CREATE TABLE IF NOT EXISTS pending_wakes (
+  repo           TEXT NOT NULL,
+  pr_number      INTEGER NOT NULL,
+  event_id       INTEGER NOT NULL,
+  deferred_until INTEGER NOT NULL,
+  created_at     INTEGER NOT NULL,
+  UNIQUE(repo, pr_number)
+);
+`;
+
+const PENDING_WAKES_INDEX = `
+CREATE INDEX IF NOT EXISTS idx_pending_wakes_deferred
+  ON pending_wakes(deferred_until);
+`;
+
 export function initDatabase(dbPath: string): Database {
   const db = new BetterSqlite3(dbPath);
 
@@ -103,6 +132,8 @@ export function initDatabase(dbPath: string): Database {
   db.exec(EVENTS_INDEX_REPO_PR);
   db.exec(OUTBOUND_COMMENTS_DDL);
   db.exec(OUTBOUND_COMMENTS_INDEX);
+  db.exec(PENDING_WAKES_DDL);
+  db.exec(PENDING_WAKES_INDEX);
 
   // Prepared statements
   const insertEventStmt = db.prepare<{
@@ -195,6 +226,36 @@ export function initDatabase(dbPath: string): Database {
     `DELETE FROM daemon_outbound_comments WHERE created_at < @cutoff`
   );
 
+  // Pending wakes prepared statements
+  const upsertPendingWakeStmt = db.prepare<{
+    repo: string;
+    pr_number: number;
+    event_id: number;
+    deferred_until: number;
+    created_at: number;
+  }>(
+    `INSERT INTO pending_wakes (repo, pr_number, event_id, deferred_until, created_at)
+     VALUES (@repo, @pr_number, @event_id, @deferred_until, @created_at)
+     ON CONFLICT(repo, pr_number) DO UPDATE SET
+       event_id = excluded.event_id,
+       deferred_until = excluded.deferred_until,
+       created_at = excluded.created_at`
+  );
+
+  const getDuePendingWakesStmt = db.prepare<{ now: number }>(
+    `SELECT repo, pr_number, event_id, deferred_until, created_at
+     FROM pending_wakes
+     WHERE deferred_until <= @now`
+  );
+
+  const clearPendingWakeStmt = db.prepare<{ repo: string; pr_number: number }>(
+    `DELETE FROM pending_wakes WHERE repo = @repo AND pr_number = @pr_number`
+  );
+
+  const getEventByIdStmt = db.prepare<{ id: number }>(
+    `SELECT event_type, payload FROM events WHERE id = @id`
+  );
+
   // Atomic rate-limit transaction
   const tryAcquireWakeSlotTxn = db.transaction(
     (repo: string, prNumber: number, cooldownSeconds: number, nowSeconds: number): boolean => {
@@ -268,6 +329,14 @@ export function initDatabase(dbPath: string): Database {
       return tryAcquireWakeSlotTxn(repo, prNumber, cooldownSeconds, nowSeconds);
     },
 
+    getLastWakedAt(repo: string, prNumber: number): number | null {
+      const row = checkWakeSlotStmt.get({ repo, pr_number: prNumber }) as
+        | { last_waked_at: number | null }
+        | undefined;
+      if (row === undefined) return null;
+      return row.last_waked_at;
+    },
+
     insertSession(repo: string, prNumber: number, sessionId: string): void {
       insertSessionStmt.run({
         repo,
@@ -295,6 +364,45 @@ export function initDatabase(dbPath: string): Database {
     pruneOutboundComments(olderThanSeconds: number): void {
       const cutoff = Math.floor(Date.now() / 1000) - olderThanSeconds;
       pruneOutboundCommentsStmt.run({ cutoff });
+    },
+
+    upsertPendingWake(repo: string, prNumber: number, eventId: number, deferredUntil: number): void {
+      upsertPendingWakeStmt.run({
+        repo,
+        pr_number: prNumber,
+        event_id: eventId,
+        deferred_until: deferredUntil,
+        created_at: Math.floor(Date.now() / 1000),
+      });
+    },
+
+    getDuePendingWakes(nowSeconds: number): PendingWake[] {
+      const rows = getDuePendingWakesStmt.all({ now: nowSeconds }) as Array<{
+        repo: string;
+        pr_number: number;
+        event_id: number;
+        deferred_until: number;
+        created_at: number;
+      }>;
+      return rows.map((r) => ({
+        repo: r.repo,
+        prNumber: r.pr_number,
+        eventId: r.event_id,
+        deferredUntil: r.deferred_until,
+        createdAt: r.created_at,
+      }));
+    },
+
+    clearPendingWake(repo: string, prNumber: number): void {
+      clearPendingWakeStmt.run({ repo, pr_number: prNumber });
+    },
+
+    getEventById(eventId: number): { eventType: string; payload: string } | undefined {
+      const row = getEventByIdStmt.get({ id: eventId }) as
+        | { event_type: string; payload: string }
+        | undefined;
+      if (row === undefined) return undefined;
+      return { eventType: row.event_type, payload: row.payload };
     },
 
     walCheckpoint(): void {
