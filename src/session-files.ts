@@ -28,7 +28,8 @@ export interface SessionMeta {
     | 'shutdown'
     | 'merged'
     | 'closed_without_merge'
-    | 'terminated_by_restart';
+    | 'terminated_by_restart'
+    | 'no_work_available';
   kiro_session_id?: string;
   prs: Array<{ repo: string; pr_number: number; registered_at: number; merged_at?: number }>;
 }

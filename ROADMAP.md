@@ -33,6 +33,17 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 31. `no_work_available` termination reason
+
+Add `no_work_available` to the closed `termination_reason` union in `src/session-files.ts` so
+an agent that finds no actionable roadmap items can exit cleanly via `complete_session` with
+this reason. The session ends with `status: "completed"`. Tier 1 test (write + read the new
+reason) + Tier 2 test (`complete_session` via IPC with the new reason produces correct meta
+state).
+
+- Spec: `BACKLOG.md § P1.2`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
