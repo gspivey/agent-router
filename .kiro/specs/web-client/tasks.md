@@ -10,7 +10,7 @@ Playwright fixtures these tests use).
 ## Tasks
 
 - [ ] 1. Diagnose and reproduce
-  - [ ] 1.1 Repro the load/SSE failures under the browser harness
+  - [x] 1.1 Repro the load/SSE failures under the browser harness
     - Add browser specs that shape the network (CDP `Network.emulateNetworkConditions`, route
       delay/abort, offline→online) to reproduce: list "Load failed" under request pressure, and
       SSE drop on a mid-stream cut / backgrounding. Capture a repro matrix

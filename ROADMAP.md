@@ -33,18 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 26. Web: diagnose and reproduce load/SSE failures
-
-Reproduce the "Load failed"/SSE-drop failures under the browser harness with network shaping
-(CDP `Network.emulateNetworkConditions`, route delay/abort, offline→online) — desktop-direct vs
-mobile/cloudflared-like — and capture a repro matrix. These specs start as expected-fail and
-become the regression suite for items 27–29. Depends on the browser harness (items 14–18).
-
-- Spec: `.kiro/specs/web-client/` · tasks `1.1`
-- [ ] Complete · PR: —
-
----
-
 ### 27. Web: one-request session list
 
 Kill the N+1 fan-out that causes most mobile "Load failed". Move the per-session waiting-for
@@ -87,6 +75,18 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 26. Web: diagnose and reproduce load/SSE failures
+
+Reproduce the "Load failed"/SSE-drop failures under the browser harness with network shaping
+(CDP `Network.emulateNetworkConditions`, route delay/abort, offline→online) — desktop-direct vs
+mobile/cloudflared-like — and capture a repro matrix. These specs start as expected-fail and
+become the regression suite for items 27–29. Depends on the browser harness (items 14–18).
+
+- Spec: `.kiro/specs/web-client/` · tasks `1.1`
+- [x] Complete · PR: #66
+
+---
 
 ### 25. Restart-required surfacing (env caveat)
 
