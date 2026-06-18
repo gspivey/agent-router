@@ -44,6 +44,7 @@ import { shouldNotify, sendSessionEndNotification } from './notify.js';
 import { startTokenExpiryChecker } from './token-expiry.js';
 import { createWorktreeManager } from './worktree-manager.js';
 import { buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from './acp.js';
+import { createRestartRequiredState } from './restart-required.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -399,6 +400,8 @@ async function main(): Promise<void> {
   // Load config
   let config = loadConfig(configPath);
   const configHolder = { current: config };
+  const startupConfig = config;
+  const restartRequiredState = createRestartRequiredState();
 
   // Init logger
   const log = createLogger({
@@ -562,6 +565,7 @@ async function main(): Promise<void> {
           return false;
         }
       },
+      restartRequired: () => restartRequiredState.get(),
     },
   });
 
@@ -616,9 +620,14 @@ async function main(): Promise<void> {
     const old = configHolder.current;
     const changes = classifyConfigChange(old, next);
 
+    // Update restart-required condition against startup config
+    restartRequiredState.update(startupConfig, next);
+
     if (changes.restartRequired.length > 0) {
+      const condition = restartRequiredState.get();
       log.warn('Config reload: restart-required fields changed (ignored until restart)', {
         fields: changes.restartRequired,
+        since: condition?.since ? new Date(condition.since).toISOString() : undefined,
       });
     }
 

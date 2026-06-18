@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 25. Restart-required surfacing (env caveat)
-
-Surface changes that a hot-reload cannot apply. Record a `restart_required` condition
-(`{ fields, since }`) when a reload sees a restart-required field differ from the startup value;
-log `warn` each reload while it persists and expose it on `/health` (item 9) when present.
-Document the `EnvironmentFile`/`ENV:` limitation (rotated tokens need a restart) in README.
-Builds on item 24. Tier 1 (state logic) + Tier 2 (changed restart-field sets the condition).
-
-- Spec: `.kiro/specs/operator-controls/` · tasks `6.1`
-- [ ] Complete · PR: —
-
----
-
 ### 26. Web: diagnose and reproduce load/SSE failures
 
 Reproduce the "Load failed"/SSE-drop failures under the browser harness with network shaping
@@ -100,6 +87,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 25. Restart-required surfacing (env caveat)
+
+Surface changes that a hot-reload cannot apply. Record a `restart_required` condition
+(`{ fields, since }`) when a reload sees a restart-required field differ from the startup value;
+log `warn` each reload while it persists and expose it on `/health` (item 9) when present.
+Document the `EnvironmentFile`/`ENV:` limitation (rotated tokens need a restart) in README.
+Builds on item 24. Tier 1 (state logic) + Tier 2 (changed restart-field sets the condition).
+
+- Spec: `.kiro/specs/operator-controls/` · tasks `6.1`
+- [x] Complete · PR: #65
+
+---
 
 ### 24. Config hot-reload
 

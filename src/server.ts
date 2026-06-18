@@ -10,10 +10,13 @@ import type { VerifySessionFn } from './verify-session.js';
 import type { RepoConfig } from './config.js';
 import { buildHealthResponse } from './health.js';
 
+import type { RestartRequiredCondition } from './restart-required.js';
+
 export interface HealthDeps {
   startedAtMs: number;
   activeSessionCount: () => number;
   checkDb: () => boolean;
+  restartRequired?: () => RestartRequiredCondition | null;
 }
 
 /**
@@ -340,12 +343,17 @@ export function createApp(deps: {
   if (deps.health !== undefined) {
     const health = deps.health;
     app.get('/health', (c) => {
-      const result = buildHealthResponse({
+      const restartRequired = health.restartRequired?.() ?? null;
+      const state: Parameters<typeof buildHealthResponse>[0] = {
         startedAtMs: health.startedAtMs,
         nowMs: Date.now(),
         activeSessionCount: health.activeSessionCount(),
         dbOk: health.checkDb(),
-      });
+      };
+      if (restartRequired !== null) {
+        state.restartRequired = restartRequired;
+      }
+      const result = buildHealthResponse(state);
       return c.json(result.body, result.status as 200);
     });
   }

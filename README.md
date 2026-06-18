@@ -161,6 +161,35 @@ Alerts fire on daemon startup and every 24 hours. If `notifyOnSessionEnd` is con
 3. Update `tokenExpiresAt` to the new PAT's expiry date.
 4. Restart the daemon (`systemctl restart agent-router`). A restart is required because tokens are resolved from the environment at startup.
 
+## Config hot-reload and `ENV:` limitations
+
+The daemon watches `config.json` for changes and hot-reloads reloadable fields (repos, cron schedules, rate limits, session timeouts, tokens hardcoded in the file) without dropping active sessions. However, some fields require a full daemon restart to take effect:
+
+**Restart-required fields:** `port`, `controlPort`, `bindPublic`, `kiroPath`, `trustedProxy`.
+
+When a reload detects that any of these fields differ from the value loaded at startup, the daemon logs a `warn` and exposes a `restart_required` condition on `GET /health`:
+
+```json
+{
+  "status": "ok",
+  "uptime_seconds": 3600,
+  "active_sessions": 1,
+  "db_ok": true,
+  "restart_required": {
+    "fields": ["port"],
+    "since": "2026-06-18T12:00:00.000Z"
+  }
+}
+```
+
+**`ENV:` values are resolved once at process start.** Config values using `"ENV:VAR_NAME"` syntax read from `process.env` when the daemon starts. Changing the underlying environment variable (e.g. updating an `EnvironmentFile` in systemd) does **not** take effect on a config hot-reload — the daemon still sees the original value. This means:
+
+- Rotating a GitHub PAT stored in an `EnvironmentFile` requires a daemon restart.
+- Changing `GITHUB_WEBHOOK_SECRET` in the environment requires a daemon restart.
+- Any `ENV:`-referenced value is effectively restart-required.
+
+To pick up a changed environment variable, restart the daemon: `systemctl restart agent-router`.
+
 ## Cron sessions
 
 Cron mode lets the daemon spawn agent sessions on a schedule — no incoming webhook required. On each cron fire, the daemon:
