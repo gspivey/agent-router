@@ -34,7 +34,7 @@ Playwright fixtures these tests use).
     - _Requirements: 1.1, 1.4_
 
 - [ ] 3. Client fetch resilience
-  - [ ] 3.1 Resilient fetch wrapper + error/auth UI
+  - [x] 3.1 Resilient fetch wrapper + error/auth UI
     - Replace `apiFetch` with a wrapper: bounded `AbortController` timeout, retry-with-backoff
       for network/5xx (not `401`), typed outcome. List/detail show an error state with a Retry
       button on exhaustion and an auth-specific message on `401`. Mutations are not auto-retried.
