@@ -12,8 +12,8 @@ test('server starts and responds to health check', async ({ baseUrl, token }) =>
     headers: { Authorization: `Bearer ${token}` },
   });
   expect(res.status).toBe(200);
-  const body = (await res.json()) as unknown[];
-  expect(Array.isArray(body)).toBe(true);
+  const body = (await res.json()) as { sessions: unknown[] };
+  expect(Array.isArray(body.sessions)).toBe(true);
 });
 
 test('seedSession live:false creates filesystem-only session', async ({
@@ -32,8 +32,8 @@ test('seedSession live:false creates filesystem-only session', async ({
   const res = await fetch(`${baseUrl}/sessions`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const body = (await res.json()) as Array<{ session_id: string }>;
-  const found = body.find((s) => s.session_id === sessionId);
+  const body = (await res.json()) as { sessions: Array<{ session_id: string }> };
+  const found = body.sessions.find((s) => s.session_id === sessionId);
   expect(found).toBeDefined();
 });
 

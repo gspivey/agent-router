@@ -160,7 +160,7 @@ async function apiFetch(path, options) {
 // --- State ---
 let currentPage = 0;
 const PAGE_SIZE = 20;
-let sessions = [];
+let totalSessions = 0;
 
 // --- Identity display ---
 async function displayIdentity() {
@@ -187,13 +187,13 @@ function renderPRLinks(prs) {
   }).join(' ');
 }
 
-function renderSessionItem(session, waitingFor) {
+function renderSessionItem(session) {
   const badge = statusToBadge(session.status);
   const shortId = session.session_id.slice(0, 8);
   const repoDisplay = session.repo || 'no repo';
   const prLinks = renderPRLinks(session.prs);
-  const waitingLine = waitingFor
-    ? '<div class="session-waiting">' + waitingFor + '</div>'
+  const waitingLine = session.waiting_for
+    ? '<div class="session-waiting">' + session.waiting_for + '</div>'
     : '';
 
   return '<a href="#/sessions/' + session.session_id + '" style="text-decoration:none;color:inherit">' +
@@ -213,67 +213,40 @@ function renderSessionItem(session, waitingFor) {
     '</div></a>';
 }
 
-async function fetchWaitingFor(sessionId) {
-  try {
-    const resp = await apiFetch('/sessions/' + sessionId + '?lines=1');
-    if (!resp.ok) return undefined;
-    const data = await resp.json();
-    if (data.entries && data.entries.length > 0) {
-      return deriveWaitingFor(data.entries[data.entries.length - 1].type);
-    }
-  } catch (e) {
-    // Ignore fetch errors for waiting-for
-  }
-  return undefined;
-}
-
 async function loadAllSessions() {
   const listView = document.getElementById('list-view');
   listView.innerHTML = '<div class="empty-state">Loading sessions...</div>';
 
   try {
-    const resp = await apiFetch('/sessions?limit=500');
+    const offset = currentPage * PAGE_SIZE;
+    const resp = await apiFetch('/sessions?limit=' + PAGE_SIZE + '&offset=' + offset);
     if (!resp.ok) {
       listView.innerHTML = '<div class="empty-state">Failed to load sessions</div>';
       return;
     }
-    sessions = await resp.json();
+    const data = await resp.json();
+    totalSessions = data.total;
+    renderList(data.sessions);
   } catch (e) {
     listView.innerHTML = '<div class="empty-state">Error: ' + e.message + '</div>';
-    return;
   }
-
-  renderList();
 }
 
-async function renderList() {
+function renderList(sessions) {
   const listView = document.getElementById('list-view');
-  const start = currentPage * PAGE_SIZE;
-  const end = start + PAGE_SIZE;
-  const page = sessions.slice(start, end);
 
-  if (sessions.length === 0) {
+  if (sessions.length === 0 && totalSessions === 0) {
     listView.innerHTML = '<div class="empty-state">No sessions found</div>';
     return;
   }
 
-  // Fetch waiting-for for active sessions in parallel
-  const waitingForMap = new Map();
-  const activePromises = page
-    .filter(function(s) { return s.status === 'active'; })
-    .map(async function(s) {
-      const wf = await fetchWaitingFor(s.session_id);
-      if (wf) waitingForMap.set(s.session_id, wf);
-    });
-  await Promise.all(activePromises);
-
   let html = '';
-  for (const session of page) {
-    html += renderSessionItem(session, waitingForMap.get(session.session_id));
+  for (const session of sessions) {
+    html += renderSessionItem(session);
   }
 
   // Pagination controls
-  const totalPages = Math.ceil(sessions.length / PAGE_SIZE);
+  const totalPages = Math.ceil(totalSessions / PAGE_SIZE);
   if (totalPages > 1) {
     html += '<div class="pagination">';
     html += '<button id="prev-btn"' + (currentPage === 0 ? ' disabled' : '') + '>&laquo; Prev</button>';
@@ -287,8 +260,8 @@ async function renderList() {
   // Attach pagination handlers
   const prevBtn = document.getElementById('prev-btn');
   const nextBtn = document.getElementById('next-btn');
-  if (prevBtn) prevBtn.addEventListener('click', function() { currentPage--; renderList(); });
-  if (nextBtn) nextBtn.addEventListener('click', function() { currentPage++; renderList(); });
+  if (prevBtn) prevBtn.addEventListener('click', function() { currentPage--; loadAllSessions(); });
+  if (nextBtn) nextBtn.addEventListener('click', function() { currentPage++; loadAllSessions(); });
 }
 
 // --- Detail view ---

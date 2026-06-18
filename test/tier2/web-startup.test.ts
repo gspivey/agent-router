@@ -128,8 +128,12 @@ describe('Web server startup wiring (task 11.1)', () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(Array.isArray(body)).toBe(true);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).toHaveProperty('sessions');
+    expect(Array.isArray(body['sessions'])).toBe(true);
+    expect(body).toHaveProperty('total');
+    expect(body).toHaveProperty('offset');
+    expect(body).toHaveProperty('limit');
   });
 
   it('web server rejects GET /sessions without auth', async () => {

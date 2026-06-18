@@ -45,29 +45,28 @@ test.describe('List load failures under network pressure', () => {
     await page.waitForTimeout(1000);
 
     // The N+1 bug: client issues 1 list request + N per-session detail requests.
-    // A fixed client (item 27) would issue exactly 1 request.
+    // Item 27 fixed this: the client now issues exactly 1 request.
     const listRequests = requests.filter(r => r.startsWith('/sessions?'));
     const detailRequests = requests.filter(r => /^\/sessions\/[^/]+\?lines=/.test(r));
 
-    // This test PASSES today (proving the bug exists) — the N+1 fires.
-    // After item 27 fixes it, detailRequests should be 0 and this assertion
-    // should be flipped to expect(detailRequests.length).toBe(0).
-    expect(detailRequests.length).toBeGreaterThan(0);
+    // Fixed by item 27: zero per-session detail requests.
+    expect(detailRequests.length).toBe(0);
     expect(listRequests.length).toBe(1);
 
-    // Record: total requests = 1 + N (demonstrating the problem)
-    expect(requests.length).toBeGreaterThan(1);
+    // Total requests = exactly 1 (the list request only)
+    expect(requests.length).toBe(1);
   });
 
-  test.fail('mobile-cloudflared: list renders within 5s under 200ms route delay per request', async ({
+  test('mobile-cloudflared: list renders within 5s under 200ms route delay per request', async ({
     page, baseUrl, seedSession,
   }) => {
-    // Seed 20 active sessions
+    // Seed 20 active sessions with stream entries so waiting_for is populated
     for (let i = 0; i < 20; i++) {
-      await seedSession({ live: false, status: 'active' });
+      await seedSession({ live: false, status: 'active', streamEntries: [{ type: 'tool_call' }] });
     }
 
     // Add 200ms delay to per-session detail requests (cloudflared proxy overhead)
+    // With item 27 fix, no detail requests are made so this delay doesn't matter.
     await page.route('**/sessions/*', async (route) => {
       const url = route.request().url();
       if (url.includes('?lines=')) {
@@ -78,9 +77,8 @@ test.describe('List load failures under network pressure', () => {
 
     await page.goto(baseUrl);
 
-    // With 20 sessions × 200ms each, the fan-out takes 4s+ even with parallelism.
-    // The waiting-for info should all be present within 5s on a fixed client
-    // (which would get it from the list response in one request).
+    // Fixed by item 27: the list response includes waiting_for, so no fan-out.
+    // All sessions load in one request, well within 5s.
     await page.waitForSelector('.session-item', { timeout: 5000 });
 
     // All active sessions should show their waiting-for info

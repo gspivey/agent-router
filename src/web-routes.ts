@@ -6,6 +6,7 @@ import type { SessionFiles, SessionMeta } from './session-files.js';
 import type { SSEBroker } from './sse-broker.js';
 import type { Logger } from './log.js';
 import type { AuthResult } from './web-auth.js';
+import { deriveWaitingFor } from './ui/logic.js';
 
 type WebEnv = { Variables: { auth: AuthResult } };
 
@@ -39,6 +40,12 @@ export function validateLines(value: string): number | null {
   return n;
 }
 
+export function validateOffset(value: string): number | null {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) return null;
+  return n;
+}
+
 export function validatePrompt(body: unknown): { valid: true; prompt: string } | { valid: false; reason: string } {
   if (body === null || typeof body !== 'object') {
     return { valid: false, reason: 'Request body must be a JSON object' };
@@ -65,9 +72,10 @@ export interface SessionSummary {
   completed_at: number | null;
   termination_reason: string | null;
   prs: Array<{ repo: string; pr_number: number; registered_at: number }>;
+  waiting_for: string | null;
 }
 
-export function metaToSummary(meta: SessionMeta): SessionSummary {
+export function metaToSummary(meta: SessionMeta, waitingFor?: string): SessionSummary {
   return {
     session_id: meta.session_id,
     repo: meta.repo ?? null,
@@ -76,6 +84,7 @@ export function metaToSummary(meta: SessionMeta): SessionSummary {
     completed_at: meta.completed_at,
     termination_reason: meta.termination_reason ?? null,
     prs: meta.prs,
+    waiting_for: waitingFor ?? null,
   };
 }
 
@@ -92,7 +101,92 @@ export function filterSessions(
   if (since !== undefined) {
     filtered = filtered.filter(s => s.created_at >= since);
   }
-  return filtered.slice(0, limit).map(metaToSummary);
+  return filtered.slice(0, limit).map(m => metaToSummary(m));
+}
+
+/**
+ * Read the type field of the last NDJSON entry in a stream.log file.
+ * Returns undefined if the file is empty or unreadable.
+ */
+export function getLastStreamEntryType(streamPath: string): string | undefined {
+  let content: string;
+  try {
+    content = fs.readFileSync(streamPath, 'utf-8');
+  } catch {
+    return undefined;
+  }
+  if (content.length === 0) return undefined;
+  // Find the last non-empty line
+  const lines = content.trimEnd().split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (line && line.length > 0) {
+      try {
+        const entry = JSON.parse(line) as { type?: string };
+        return entry.type;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return undefined;
+}
+
+export interface PaginatedResult {
+  sessions: SessionSummary[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+/**
+ * Paginate sessions with the rule that active sessions are always included.
+ * Active sessions appear first, then non-active sessions fill the remaining slots.
+ * The offset/limit apply to the non-active portion only; all active sessions are
+ * always returned regardless of offset.
+ */
+export function paginateSessions(
+  sessions: SessionMeta[],
+  status: SessionMeta['status'] | undefined,
+  since: number | undefined,
+  limit: number,
+  offset: number,
+  waitingForFn: (meta: SessionMeta) => string | undefined,
+): PaginatedResult {
+  let filtered = sessions;
+  if (status !== undefined) {
+    filtered = filtered.filter(s => s.status === status);
+  }
+  if (since !== undefined) {
+    filtered = filtered.filter(s => s.created_at >= since);
+  }
+
+  const total = filtered.length;
+
+  // If a specific status is requested, simple slice pagination
+  if (status !== undefined) {
+    const page = filtered.slice(offset, offset + limit);
+    return {
+      sessions: page.map(m => metaToSummary(m, waitingForFn(m))),
+      total,
+      offset,
+      limit,
+    };
+  }
+
+  // Split into active (always shown) and non-active (paginated)
+  const active = filtered.filter(s => s.status === 'active');
+  const nonActive = filtered.filter(s => s.status !== 'active');
+
+  const nonActivePage = nonActive.slice(offset, offset + limit);
+  const combined = [...active, ...nonActivePage];
+
+  return {
+    sessions: combined.map(m => metaToSummary(m, waitingForFn(m))),
+    total,
+    offset,
+    limit,
+  };
 }
 
 export function tailStreamLog(
@@ -144,6 +238,7 @@ export function createWebRoutes(deps: {
     const statusParam = c.req.query('status');
     const sinceParam = c.req.query('since');
     const limitParam = c.req.query('limit');
+    const offsetParam = c.req.query('offset');
 
     let status: SessionMeta['status'] | undefined;
     if (statusParam !== undefined) {
@@ -162,7 +257,7 @@ export function createWebRoutes(deps: {
       since = parsed;
     }
 
-    let limit = 50;
+    let limit = 20;
     if (limitParam !== undefined) {
       const parsed = validateLimit(limitParam);
       if (parsed === null) {
@@ -171,9 +266,26 @@ export function createWebRoutes(deps: {
       limit = parsed;
     }
 
+    let offset = 0;
+    if (offsetParam !== undefined) {
+      const parsed = validateOffset(offsetParam);
+      if (parsed === null) {
+        return c.json(errorEnvelope('invalid_param', 'Invalid offset value', { param: 'offset', constraint: 'must be a non-negative integer' }), 400);
+      }
+      offset = parsed;
+    }
+
     const sessions = sessionFiles.listSessions();
-    const results = filterSessions(sessions, status, since, limit);
-    return c.json(results);
+
+    const waitingForFn = (meta: SessionMeta): string | undefined => {
+      if (meta.status !== 'active') return undefined;
+      const streamPath = path.join(rootDir, 'sessions', meta.session_id, 'stream.log');
+      const lastType = getLastStreamEntryType(streamPath);
+      return deriveWaitingFor(lastType);
+    };
+
+    const result = paginateSessions(sessions, status, since, limit, offset, waitingForFn);
+    return c.json(result);
   });
 
   // GET /sessions/:id
