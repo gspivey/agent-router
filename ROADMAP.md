@@ -33,19 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 27. Web: one-request session list
-
-Kill the N+1 fan-out that causes most mobile "Load failed". Move the per-session waiting-for
-computation server-side so the `/sessions` list response carries status/repo/timestamps/waiting-for
-(`src/web-routes.ts`), add bounded pagination (replace `limit=500`, active always shown), and
-make the client (`src/web-ui.ts`) render from a single request — deleting `fetchWaitingFor` and
-the per-row loop. Tier 2 (list shape + pagination) + browser test (exactly one list request).
-
-- Spec: `.kiro/specs/web-client/` · tasks `2.1`, `2.2`
-- [ ] Complete · PR: —
-
----
-
 ### 28. Web: client fetch resilience
 
 Replace the bare `apiFetch` with a wrapper that has a bounded `AbortController` timeout and
@@ -75,6 +62,19 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 27. Web: one-request session list
+
+Kill the N+1 fan-out that causes most mobile "Load failed". Move the per-session waiting-for
+computation server-side so the `/sessions` list response carries status/repo/timestamps/waiting-for
+(`src/web-routes.ts`), add bounded pagination (replace `limit=500`, active always shown), and
+make the client (`src/web-ui.ts`) render from a single request — deleting `fetchWaitingFor` and
+the per-row loop. Tier 2 (list shape + pagination) + browser test (exactly one list request).
+
+- Spec: `.kiro/specs/web-client/` · tasks `2.1`, `2.2`
+- [x] Complete · PR: #67
+
+---
 
 ### 26. Web: diagnose and reproduce load/SSE failures
 

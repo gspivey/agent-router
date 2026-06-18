@@ -19,14 +19,14 @@ Playwright fixtures these tests use).
     - _Requirements: 4.2, 4.3_
 
 - [ ] 2. One-request session list (kill the N+1)
-  - [ ] 2.1 Server-side list aggregation + pagination
+  - [x] 2.1 Server-side list aggregation + pagination
     - Extend the `/sessions` list handler (`src/web-routes.ts`) so each item includes status,
       repo, timestamps, and the waiting-for summary (computed server-side from the last stream
       entry). Add bounded pagination (`limit`/`offset` or cursor) with active sessions always
       included; remove the `limit=500` path. Additive wire shape.
     - Tier 2: list response includes waiting-for and paginates; active always shown.
     - _Requirements: 1.2, 1.3, 1.4_
-  - [ ] 2.2 Client renders the list from one request
+  - [x] 2.2 Client renders the list from one request
     - `loadSessions` (`src/web-ui.ts`) issues a single request and renders from it; delete
       `fetchWaitingFor` and the per-row loop; add pagination/"load more" UI.
     - Browser test: exactly one `/sessions` request, zero `/sessions/<id>` follow-ups on list
