@@ -79,6 +79,13 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 .confirm-dialog button{margin:0 8px}
 @media(max-width:480px){main{padding:8px}body{font-size:16px}.session-header{flex-direction:column;align-items:flex-start}.controls{flex-direction:column}.controls textarea{min-width:100%}}
 @media(max-width:768px){#log-container{overflow-x:auto;font-size:14px}}
+.error-state{text-align:center;padding:40px 16px;color:#f85149}
+.error-state p{margin:8px 0}
+.error-state .error-message{font-size:14px;color:#8b949e}
+.error-state button{margin-top:12px;background:#238636;color:#fff;border:none;border-radius:6px;padding:10px 20px;font-size:14px;cursor:pointer;min-width:44px;min-height:44px}
+.error-state button:hover{background:#2ea043}
+.auth-error{color:#d29922}
+.auth-error p{color:#d29922}
 </style>
 </head>
 <body>
@@ -157,6 +164,63 @@ async function apiFetch(path, options) {
   return resp;
 }
 
+const FETCH_TIMEOUT_MS = 10000;
+const FETCH_MAX_RETRIES = 3;
+
+function isRetryableStatus(status) {
+  return status >= 500;
+}
+
+function computeFetchRetryDelay(attempt) {
+  const delay = 500 * Math.pow(2, attempt);
+  return Math.min(delay, 5000);
+}
+
+/**
+ * Resilient fetch: AbortController timeout + retry-with-backoff for network/5xx.
+ * NOT retried for 401. Returns { ok, response, outcome }.
+ * outcome: 'success' | 'auth' | 'network' | 'timeout'
+ */
+async function resilientFetch(path, options) {
+  let lastError = null;
+  for (let attempt = 0; attempt < FETCH_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(function() { controller.abort(); }, FETCH_TIMEOUT_MS);
+    try {
+      const resp = await fetch(path, {
+        headers: getAuthHeaders(),
+        signal: controller.signal,
+        ...(options || {}),
+      });
+      clearTimeout(timer);
+      if (resp.status === 401) {
+        return { ok: false, response: resp, outcome: 'auth' };
+      }
+      if (isRetryableStatus(resp.status)) {
+        lastError = { response: resp, outcome: 'network' };
+        if (attempt < FETCH_MAX_RETRIES - 1) {
+          await new Promise(function(r) { setTimeout(r, computeFetchRetryDelay(attempt)); });
+          continue;
+        }
+        return { ok: false, response: resp, outcome: 'network' };
+      }
+      return { ok: resp.ok, response: resp, outcome: 'success' };
+    } catch (e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') {
+        lastError = { response: null, outcome: 'timeout' };
+      } else {
+        lastError = { response: null, outcome: 'network' };
+      }
+      if (attempt < FETCH_MAX_RETRIES - 1) {
+        await new Promise(function(r) { setTimeout(r, computeFetchRetryDelay(attempt)); });
+        continue;
+      }
+    }
+  }
+  return { ok: false, response: lastError ? lastError.response : null, outcome: lastError ? lastError.outcome : 'network' };
+}
+
 // --- State ---
 let currentPage = 0;
 const PAGE_SIZE = 20;
@@ -217,19 +281,30 @@ async function loadAllSessions() {
   const listView = document.getElementById('list-view');
   listView.innerHTML = '<div class="empty-state">Loading sessions...</div>';
 
-  try {
-    const offset = currentPage * PAGE_SIZE;
-    const resp = await apiFetch('/sessions?limit=' + PAGE_SIZE + '&offset=' + offset);
-    if (!resp.ok) {
-      listView.innerHTML = '<div class="empty-state">Failed to load sessions</div>';
-      return;
+  const offset = currentPage * PAGE_SIZE;
+  const result = await resilientFetch('/sessions?limit=' + PAGE_SIZE + '&offset=' + offset);
+
+  if (!result.ok) {
+    if (result.outcome === 'auth') {
+      listView.innerHTML = '<div class="error-state auth-error">' +
+        '<p>Authentication failed</p>' +
+        '<p class="error-message">Your session token is invalid or expired. Re-authenticate to continue.</p>' +
+        '</div>';
+    } else {
+      listView.innerHTML = '<div class="error-state">' +
+        '<p>Failed to load sessions</p>' +
+        '<p class="error-message">' + (result.outcome === 'timeout' ? 'Request timed out' : 'Network error') + '</p>' +
+        '<button id="retry-list-btn">Retry</button>' +
+        '</div>';
+      const retryBtn = document.getElementById('retry-list-btn');
+      if (retryBtn) retryBtn.addEventListener('click', function() { loadAllSessions(); });
     }
-    const data = await resp.json();
-    totalSessions = data.total;
-    renderList(data.sessions);
-  } catch (e) {
-    listView.innerHTML = '<div class="empty-state">Error: ' + e.message + '</div>';
+    return;
   }
+
+  const data = await result.response.json();
+  totalSessions = data.total;
+  renderList(data.sessions);
 }
 
 function renderList(sessions) {
@@ -411,14 +486,32 @@ async function loadDetailView(sessionId) {
   const detailView = document.getElementById('detail-view');
   detailView.innerHTML = '<a href="#/" class="btn btn-back">&larr; Back</a><div class="empty-state">Loading...</div>';
 
-  try {
-    const resp = await apiFetch('/sessions/' + sessionId + '?lines=200');
-    if (!resp.ok) {
+  const result = await resilientFetch('/sessions/' + sessionId + '?lines=200');
+
+  if (!result.ok) {
+    if (result.outcome === 'auth') {
+      detailView.innerHTML = '<a href="#/" class="btn btn-back">&larr; Back</a>' +
+        '<div class="error-state auth-error">' +
+        '<p>Authentication failed</p>' +
+        '<p class="error-message">Your session token is invalid or expired. Re-authenticate to continue.</p>' +
+        '</div>';
+    } else if (result.response && result.response.status >= 400 && result.response.status < 500) {
       detailView.innerHTML = '<a href="#/" class="btn btn-back">&larr; Back</a><div class="empty-state">Session not found</div>';
-      return;
+    } else {
+      detailView.innerHTML = '<a href="#/" class="btn btn-back">&larr; Back</a>' +
+        '<div class="error-state">' +
+        '<p>Failed to load session</p>' +
+        '<p class="error-message">' + (result.outcome === 'timeout' ? 'Request timed out' : 'Network error') + '</p>' +
+        '<button id="retry-detail-btn">Retry</button>' +
+        '</div>';
+      const retryBtn = document.getElementById('retry-detail-btn');
+      if (retryBtn) retryBtn.addEventListener('click', function() { loadDetailView(sessionId); });
     }
-    const data = await resp.json();
-    const meta = data.meta;
+    return;
+  }
+
+  const data = await result.response.json();
+  const meta = data.meta;
 
     let html = '<a href="#/" class="btn btn-back">&larr; Back</a>';
     html += renderDetailMeta(meta);
@@ -485,10 +578,6 @@ async function loadDetailView(sessionId) {
 
     // Start SSE stream
     connectSSE(sessionId, 0);
-
-  } catch (e) {
-    detailView.innerHTML = '<a href="#/" class="btn btn-back">&larr; Back</a><div class="empty-state">Error: ' + e.message + '</div>';
-  }
 }
 
 function showKillConfirm(sessionId) {

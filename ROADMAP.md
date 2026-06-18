@@ -33,18 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 28. Web: client fetch resilience
-
-Replace the bare `apiFetch` with a wrapper that has a bounded `AbortController` timeout and
-retry-with-backoff for network/5xx (not `401`), and add a clear error state with a Retry action
-plus an auth-specific message. Transient blips self-heal; mutations are not auto-retried.
-Browser tests: fail-then-recover, permanent-fail → Retry, `401` → auth message, hung → timeout.
-
-- Spec: `.kiro/specs/web-client/` · tasks `3.1`
-- [ ] Complete · PR: —
-
----
-
 ### 29. Web: SSE hardening for Cloudflare / mobile
 
 Make the live stream survive proxy buffering and mobile network transitions. Server: set
@@ -62,6 +50,18 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 28. Web: client fetch resilience
+
+Replace the bare `apiFetch` with a wrapper that has a bounded `AbortController` timeout and
+retry-with-backoff for network/5xx (not `401`), and add a clear error state with a Retry action
+plus an auth-specific message. Transient blips self-heal; mutations are not auto-retried.
+Browser tests: fail-then-recover, permanent-fail → Retry, `401` → auth message, hung → timeout.
+
+- Spec: `.kiro/specs/web-client/` · tasks `3.1`
+- [x] Complete · PR: #68
+
+---
 
 ### 27. Web: one-request session list
 

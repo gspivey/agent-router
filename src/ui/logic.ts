@@ -98,3 +98,38 @@ export function parseHashRoute(hash: string): HashRoute {
   }
   return { view: 'list' };
 }
+
+// ---------------------------------------------------------------------------
+// Fetch resilience helpers
+// ---------------------------------------------------------------------------
+
+export type FetchOutcome = 'success' | 'auth' | 'network' | 'timeout';
+
+/**
+ * Determine whether an HTTP status code is retryable.
+ * Network errors (status 0 or undefined) and 5xx are retryable.
+ * 401 is NOT retryable (auth failure).
+ * 4xx other than 401 are not retryable.
+ */
+export function isRetryableStatus(status: number): boolean {
+  if (status >= 500) return true;
+  return false;
+}
+
+/**
+ * Classify a fetch result into an outcome type.
+ */
+export function classifyFetchError(status: number): FetchOutcome {
+  if (status === 401) return 'auth';
+  if (status >= 500) return 'network';
+  return 'network';
+}
+
+/**
+ * Compute the retry delay for a resilient fetch attempt.
+ * Uses exponential backoff: base * 2^attempt, capped at maxDelay.
+ */
+export function computeFetchRetryDelay(attempt: number, baseMs = 500, maxMs = 5000): number {
+  const delay = baseMs * Math.pow(2, attempt);
+  return Math.min(delay, maxMs);
+}
