@@ -334,6 +334,9 @@ export function createWebRoutes(deps: {
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
 
+    // Initial flush: comment line + retry hint so proxies open the stream promptly
+    writer.write(encoder.encode(':ok\nretry: 1000\n\n')).catch(() => {});
+
     const clientId = sseBroker.subscribe(
       id,
       lastEventId,
@@ -350,7 +353,8 @@ export function createWebRoutes(deps: {
     return new Response(readable as ReadableStream<Uint8Array>, {
       headers: {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
         'Connection': 'keep-alive',
       },
     });

@@ -340,7 +340,7 @@ function renderList(sessions) {
 }
 
 // --- Detail view ---
-let activeSSE = null; // { eventSource, sessionId, reconnectTimer, attempt, lastId }
+let activeSSE = null; // { eventSource, sessionId, reconnectTimer, attempt, lastId, ended }
 
 function closeSSE() {
   if (!activeSSE) return;
@@ -392,7 +392,7 @@ function connectSSE(sessionId, lastId) {
 
   // Use fetch-based SSE since EventSource doesn't support custom headers
   const controller = new AbortController();
-  activeSSE = { eventSource: { close: function() { controller.abort(); } }, sessionId: sessionId, reconnectTimer: null, attempt: 0, lastId: lastId };
+  activeSSE = { eventSource: { close: function() { controller.abort(); } }, sessionId: sessionId, reconnectTimer: null, attempt: 0, lastId: lastId, ended: false };
 
   fetch(url, { headers: headers, signal: controller.signal }).then(function(resp) {
     if (!resp.ok || !resp.body) {
@@ -426,9 +426,19 @@ function connectSSE(sessionId, lastId) {
           } else if (line === '' && currentData) {
             // End of SSE message
             const id = parseInt(currentId, 10);
-            if (!isNaN(id)) activeSSE.lastId = trackLastEventId(activeSSE.lastId, id);
+            if (!isNaN(id)) {
+              // De-dupe: skip events already seen
+              if (id <= activeSSE.lastId) {
+                currentEvent = '';
+                currentId = '';
+                currentData = '';
+                continue;
+              }
+              activeSSE.lastId = trackLastEventId(activeSSE.lastId, id);
+            }
             appendLogEntry(currentData);
             if (currentEvent === 'session_ended') {
+              activeSSE.ended = true;
               updateSSEStatus('Stream ended');
               hideControls();
               return; // don't continue reading
@@ -452,6 +462,7 @@ function connectSSE(sessionId, lastId) {
 
 function scheduleReconnect(sessionId) {
   if (!activeSSE || activeSSE.sessionId !== sessionId) return;
+  if (activeSSE.ended) return;
   const delay = computeBackoff(activeSSE.attempt);
   activeSSE.attempt++;
   updateSSEStatus('Reconnecting in ' + (delay / 1000) + 's...');
@@ -611,8 +622,18 @@ function showKillConfirm(sessionId) {
 
 // --- Reconnect on visibility change ---
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'visible' && activeSSE) {
+  if (document.visibilityState === 'visible' && activeSSE && !activeSSE.ended) {
     // Force reconnect with last known ID
+    const sessionId = activeSSE.sessionId;
+    const lastId = activeSSE.lastId;
+    closeSSE();
+    connectSSE(sessionId, lastId);
+  }
+});
+
+// --- Reconnect on network online ---
+window.addEventListener('online', function() {
+  if (activeSSE && !activeSSE.ended) {
     const sessionId = activeSSE.sessionId;
     const lastId = activeSSE.lastId;
     closeSSE();

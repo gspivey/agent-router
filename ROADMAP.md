@@ -33,6 +33,12 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
+Items move here after they merge to `development`.
+
 ### 29. Web: SSE hardening for Cloudflare / mobile
 
 Make the live stream survive proxy buffering and mobile network transitions. Server: set
@@ -43,13 +49,9 @@ resume via `Last-Event-ID` with de-dupe, stop on `session_ended`. Browser tests 
 without duplicates. Builds on items 17/18 reconnect coverage.
 
 - Spec: `.kiro/specs/web-client/` · tasks `4.1`, `4.2`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #69
 
 ---
-
-## Completed
-
-Items move here after they merge to `development`.
 
 ### 28. Web: client fetch resilience
 

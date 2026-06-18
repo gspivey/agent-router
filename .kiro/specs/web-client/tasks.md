@@ -44,14 +44,14 @@ Playwright fixtures these tests use).
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
 - [ ] 4. SSE hardening for Cloudflare / mobile
-  - [ ] 4.1 Server SSE header/flush + heartbeat
+  - [x] 4.1 Server SSE header/flush + heartbeat
     - In the SSE route (`src/web-server.ts`) / broker (`src/sse-broker.ts`): set
       `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`, explicit event-stream
       content type; write an initial flush; ensure each event has an `id:` and emit a `retry:`
       hint; make heartbeat interval configurable (documented vs Cloudflare idle cap).
     - Tier 2: SSE response carries the headers + initial flush; events carry ids.
     - _Requirements: 3.1, 3.4_
-  - [ ] 4.2 Client reconnect on visibility/online + resume
+  - [x] 4.2 Client reconnect on visibility/online + resume
     - Drive reconnect from `visibilitychange` and `online` (plus existing stream-error); send
       `Last-Event-ID` on reconnect and de-dupe by id; stop reconnecting on `session_ended`.
     - Browser tests: simulated drop + foreground/online → reconnect with no duplicate ids;
