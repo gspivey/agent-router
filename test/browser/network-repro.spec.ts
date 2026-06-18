@@ -86,7 +86,7 @@ test.describe('List load failures under network pressure', () => {
     expect(waitingElements).toBeGreaterThan(0);
   });
 
-  test.fail('transient network failure on list fetch shows recovery', async ({
+  test('transient network failure on list fetch shows recovery', async ({
     page, baseUrl, seedSession,
   }) => {
     await seedSession({ live: false, status: 'active' });
@@ -104,8 +104,7 @@ test.describe('List load failures under network pressure', () => {
 
     await page.goto(baseUrl);
 
-    // Without retry logic, the first failure shows "Load failed" permanently.
-    // A resilient client (item 28) would retry and eventually show the list.
+    // With retry logic (item 28), the first failure is retried and the list renders.
     await expect(page.locator('.session-item').first()).toBeVisible({ timeout: 8_000 });
   });
 });
@@ -154,9 +153,10 @@ test.describe('SSE failures on mid-stream network cut', () => {
     expect(streamRequestAfterOnline).toBe(true);
   });
 
-  test.fail('hung fetch (no timeout): client shows loading forever', async ({
+  test('hung fetch (no timeout): client times out and shows error', async ({
     page, baseUrl, seedSession,
   }) => {
+    test.setTimeout(90_000);
     await seedSession({ live: false, status: 'active' });
 
     // Make the list request hang forever (simulates a proxy that accepts but doesn't respond)
@@ -167,14 +167,8 @@ test.describe('SSE failures on mid-stream network cut', () => {
 
     await page.goto(baseUrl);
 
-    // Without a fetch timeout (item 28), the "Loading sessions..." state persists forever.
-    // A fixed client would timeout and show an error with a Retry button.
-    // Wait 10s — if the client had a timeout, it would show error state by now.
-    await page.waitForTimeout(10_000);
-
-    // Should show an error/retry state, not "Loading sessions..."
-    const loadingText = await page.locator('.empty-state').textContent();
-    expect(loadingText).not.toContain('Loading');
+    // With a fetch timeout (item 28), the client times out and shows an error with Retry.
+    await expect(page.locator('.error-state')).toBeVisible({ timeout: 75_000 });
   });
 });
 
