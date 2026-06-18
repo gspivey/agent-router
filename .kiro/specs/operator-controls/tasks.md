@@ -91,7 +91,7 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
     - _Requirements: 1.3, 1.5, 1.6_
 
 - [ ] 6. Restart-required surfacing (env caveat)
-  - [ ] 6.1 `restart_required` condition + surfacing
+  - [x] 6.1 `restart_required` condition + surfacing
     - Record `{ fields, since }` when a reload sees a restart-required field differ from the
       startup value; log `warn` each reload while it persists; expose `restart_required` on
       `/health` (if present) — otherwise log-only. Document the `EnvironmentFile`/`ENV:`
