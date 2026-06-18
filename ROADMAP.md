@@ -33,6 +33,12 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
+Items move here after they merge to `development`.
+
 ### 31. `no_work_available` termination reason
 
 Add `no_work_available` to the closed `termination_reason` union in `src/session-files.ts` so
@@ -42,13 +48,9 @@ reason) + Tier 2 test (`complete_session` via IPC with the new reason produces c
 state).
 
 - Spec: `BACKLOG.md § P1.2`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #70
 
 ---
-
-## Completed
-
-Items move here after they merge to `development`.
 
 ### 29. Web: SSE hardening for Cloudflare / mobile
 
