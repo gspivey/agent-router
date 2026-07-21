@@ -35,20 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 40. Webhook token lookup + CLI `tokens status`
-
-Extend webhook handler to use Token_Store reverse lookup (repo → project → PAT) for outgoing API
-calls. Add `tokens_status` IPC op to `src/cli-server.ts` with optional `--check` live validation
-(GET /user per token, 1h cache). Implement CLI daemon-offline fallback (read tokens.json
-directly). Property test for cache validity. Unit tests for output format, cache hit/miss, offline
-fallback. Tier 2 tests: correct PAT used for webhook outgoing calls, unknown repo warning.
-Builds on item 34 (Token_Store).
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `19`, `20.1`, `20.2`, `21`, `22.1`, `22.2`, `22.3`
-- [ ] Complete · PR: —
-
----
-
 ### 41. Token_Store startup integration
 
 Wire Token_Store into `src/index.ts` startup: create after config load with `tokensFilePath` and
@@ -65,6 +51,20 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 40. Webhook token lookup + CLI `tokens status`
+
+Extend webhook handler to use Token_Store reverse lookup (repo → project → PAT) for outgoing API
+calls. Add `tokens_status` IPC op to `src/cli-server.ts` with optional `--check` live validation
+(GET /user per token, 1h cache). Implement CLI daemon-offline fallback (read tokens.json
+directly). Property test for cache validity. Unit tests for output format, cache hit/miss, offline
+fallback. Tier 2 tests: correct PAT used for webhook outgoing calls, unknown repo warning.
+Builds on item 34 (Token_Store).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `19`, `20.1`, `20.2`, `21`, `22.1`, `22.2`, `22.3`
+- [x] Complete · PR: #79
+
+---
 
 ### 39. MCP `git_credential` tool + IPC contract tests
 

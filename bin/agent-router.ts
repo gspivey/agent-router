@@ -576,6 +576,202 @@ async function cmdCompleteSession(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: tokens
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a token-check cache entry is still valid (less than 1 hour old).
+ */
+import { isCacheEntryValid } from '../src/token-check-cache.js';
+export { isCacheEntryValid };
+
+interface TokenCheckCache {
+  checked_at: string;
+  results: Record<string, { valid: boolean; error?: string; checked_at: string }>;
+}
+
+function resolveTokensFilePath(): string {
+  const home = process.env['AGENT_ROUTER_HOME'] ?? path.join(os.homedir(), '.agent-router');
+  return path.join(home, 'tokens.json');
+}
+
+function resolveCacheFilePath(): string {
+  const home = process.env['AGENT_ROUTER_HOME'] ?? path.join(os.homedir(), '.agent-router');
+  return path.join(home, '.token-check-cache.json');
+}
+
+function readCacheFile(): TokenCheckCache | null {
+  const cachePath = resolveCacheFilePath();
+  try {
+    const content = fs.readFileSync(cachePath, 'utf-8');
+    return JSON.parse(content) as TokenCheckCache;
+  } catch {
+    return null;
+  }
+}
+
+function writeCacheFile(cache: TokenCheckCache): void {
+  const cachePath = resolveCacheFilePath();
+  const dir = path.dirname(cachePath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmpPath = `${cachePath}.tmp.${process.pid}`;
+  const fd = fs.openSync(tmpPath, 'w', 0o600);
+  try {
+    fs.writeFileSync(fd, JSON.stringify(cache, null, 2));
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmpPath, cachePath);
+}
+
+interface TokenStatusProject {
+  name: string;
+  repoCount: number;
+  expiryStatus: string;
+  validationResult?: { valid: boolean; error?: string; checked_at: string };
+}
+
+function formatTokenStatus(projects: TokenStatusProject[], source: string): string {
+  const lines: string[] = [];
+  lines.push(`Source: ${source}`);
+  lines.push('');
+
+  if (projects.length === 0) {
+    lines.push('No projects configured.');
+    return lines.join('\n');
+  }
+
+  const header = 'PROJECT'.padEnd(20) + 'REPOS'.padEnd(8) + 'EXPIRY'.padEnd(16) + 'CHECK';
+  lines.push(header);
+  lines.push('-'.repeat(header.length));
+
+  for (const p of projects) {
+    const check = p.validationResult
+      ? (p.validationResult.valid ? 'ok' : `FAIL: ${p.validationResult.error ?? 'unknown'}`)
+      : '-';
+    lines.push(
+      p.name.padEnd(20) +
+      String(p.repoCount).padEnd(8) +
+      p.expiryStatus.padEnd(16) +
+      check
+    );
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Read tokens.json directly for offline fallback.
+ * Returns project status without live validation.
+ */
+function readTokensOffline(): TokenStatusProject[] | null {
+  const filePath = resolveTokensFilePath();
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(content) as { projects?: Record<string, { token: string; repos: string[]; expires_at?: string }> };
+    if (!parsed.projects || typeof parsed.projects !== 'object') return null;
+
+    const now = new Date();
+    const projects: TokenStatusProject[] = [];
+
+    for (const [name, entry] of Object.entries(parsed.projects)) {
+      if (!entry || typeof entry !== 'object') continue;
+      const repos = Array.isArray(entry.repos) ? entry.repos : [];
+      let expiryStatus: string;
+      if (entry.expires_at === undefined || entry.expires_at === null) {
+        expiryStatus = 'no-expiry-set';
+      } else {
+        const expiresAt = new Date(entry.expires_at as string);
+        const msUntilExpiry = expiresAt.getTime() - now.getTime();
+        const daysUntilExpiry = Math.ceil(msUntilExpiry / (24 * 60 * 60 * 1000));
+        if (daysUntilExpiry <= 0) {
+          expiryStatus = 'expired';
+        } else if (daysUntilExpiry <= 14) {
+          expiryStatus = 'expiring-soon';
+        } else {
+          expiryStatus = 'valid';
+        }
+      }
+      projects.push({ name, repoCount: repos.length, expiryStatus });
+    }
+
+    return projects;
+  } catch {
+    return null;
+  }
+}
+
+async function cmdTokens(args: string[]): Promise<void> {
+  const sub = args[0];
+
+  if (sub !== 'status' && sub !== undefined) {
+    process.stderr.write('Usage: agent-router tokens status [--check]\n');
+    process.exit(1);
+  }
+
+  let check = false;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--check') {
+      check = true;
+    }
+  }
+
+  const socketPath = resolveSocketPath();
+
+  // Try daemon first
+  try {
+    const result = await sendToDaemon(socketPath, { op: 'tokens_status', check });
+
+    if (result['error'] !== undefined) {
+      process.stderr.write(`Error: ${result['error'] as string}\n`);
+      process.exit(1);
+    }
+
+    const projects = result['projects'] as TokenStatusProject[];
+
+    // If --check, update cache with results
+    if (check) {
+      const now = new Date();
+      const cacheResults: Record<string, { valid: boolean; error?: string; checked_at: string }> = {};
+      for (const p of projects) {
+        if (p.validationResult) {
+          cacheResults[p.name] = p.validationResult;
+        }
+      }
+      writeCacheFile({ checked_at: now.toISOString(), results: cacheResults });
+    }
+
+    process.stdout.write(formatTokenStatus(projects, 'daemon (live)') + '\n');
+  } catch {
+    // Daemon unreachable — fall back to reading tokens.json directly
+    const projects = readTokensOffline();
+    if (projects === null) {
+      process.stderr.write('Error: daemon offline and unable to read tokens.json\n');
+      process.exit(1);
+    }
+
+    // If --check was requested, try to use cached results
+    if (check) {
+      const cache = readCacheFile();
+      const now = new Date();
+      if (cache) {
+        for (const p of projects) {
+          const cached = cache.results[p.name];
+          if (cached && isCacheEntryValid(cached.checked_at, now)) {
+            p.validationResult = cached;
+          }
+        }
+      }
+    }
+
+    process.stdout.write(
+      formatTokenStatus(projects, 'file (daemon offline; --check unavailable)') + '\n'
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: cron
 // ---------------------------------------------------------------------------
 
@@ -649,6 +845,7 @@ Commands:
   complete-session --session-id <id> --reason <reason>
                                            Signal session completion
   cron [list|pause <name>|resume <name>]   Manage cron schedules
+  tokens status [--check]                  Show token health and expiry status
 `);
 }
 
@@ -684,6 +881,9 @@ async function main(): Promise<void> {
       break;
     case 'cron':
       await cmdCron(subArgs);
+      break;
+    case 'tokens':
+      await cmdTokens(subArgs);
       break;
     default:
       process.stderr.write(`Unknown command: ${command}\n`);

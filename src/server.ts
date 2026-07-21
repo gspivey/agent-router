@@ -9,6 +9,8 @@ import type { DaemonTokenStore } from './daemon-token.js';
 import type { VerifySessionFn } from './verify-session.js';
 import type { RepoConfig } from './config.js';
 import { buildHealthResponse } from './health.js';
+import type { TokenStore } from './token-store.js';
+import type { Secret } from './secret.js';
 
 import type { RestartRequiredCondition } from './restart-required.js';
 
@@ -149,6 +151,36 @@ export function resolveWebhookSecret(
 }
 
 /**
+ * Resolve the project-scoped PAT for a webhook's repo using Token_Store reverse lookup.
+ *
+ * This implements Requirement 8: webhook handlers use the correct project-scoped token
+ * when posting status comments. The lookup is: repo → project → PAT.
+ *
+ * Returns the Secret if found, or undefined if the repo is not in any project
+ * (in which case the caller should log a warning and skip the outgoing API call).
+ */
+export function resolveWebhookToken(
+  repo: string,
+  credentialTokenStore: TokenStore,
+  log: Logger,
+): Secret | undefined {
+  const project = credentialTokenStore.findProjectByRepo(repo);
+  if (project === undefined) {
+    log.warn('No project found for webhook repo — skipping outgoing API call', { repo });
+    return undefined;
+  }
+  const token = credentialTokenStore.getToken(project);
+  if (token === undefined) {
+    log.warn('Token lookup failed for webhook repo project — skipping outgoing API call', {
+      repo,
+      project,
+    });
+    return undefined;
+  }
+  return token;
+}
+
+/**
  * Create the Hono HTTP app for the webhook server.
  *
  * Routes:
@@ -171,6 +203,12 @@ export function createApp(deps: {
    * Optional: verification fn for /hooks/event. Required if tokenStore is set.
    */
   verifySession?: VerifySessionFn;
+  /**
+   * Optional: credential Token_Store for webhook outgoing API calls.
+   * Used for reverse lookup: repo → project → PAT (Requirement 8).
+   * Always present when the credential proxy is configured (including fallback mode).
+   */
+  credentialTokenStore?: TokenStore;
   /**
    * Optional: when set, registers GET /health returning daemon health status.
    */

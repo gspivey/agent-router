@@ -29,7 +29,8 @@ export interface CliRequest {
     | 'cron_pause'
     | 'cron_resume'
     | 'get_session_project'
-    | 'get_token';
+    | 'get_token'
+    | 'tokens_status';
   [key: string]: unknown;
 }
 
@@ -283,7 +284,88 @@ export function createCliServer(deps: {
         : null;
       return { token: secret.reveal(), expires_at: expiresAt };
     },
+
+    async tokens_status(req: CliRequest): Promise<Record<string, unknown>> {
+      if (!tokenStore) {
+        return { error: 'Token store not configured' };
+      }
+      const check = req['check'] === true;
+      const tokenMap = tokenStore.getTokenMap();
+      const now = new Date();
+
+      const projects: Array<{
+        name: string;
+        repoCount: number;
+        expiryStatus: string;
+        validationResult?: { valid: boolean; error?: string; checked_at: string };
+      }> = [];
+
+      for (const [name, entry] of tokenMap.projects) {
+        let expiryStatus: string;
+        if (entry.expiresAt === undefined) {
+          expiryStatus = 'no-expiry-set';
+        } else {
+          const msUntilExpiry = entry.expiresAt.getTime() - now.getTime();
+          const daysUntilExpiry = Math.ceil(msUntilExpiry / (24 * 60 * 60 * 1000));
+          if (daysUntilExpiry <= 0) {
+            expiryStatus = 'expired';
+          } else if (daysUntilExpiry <= 14) {
+            expiryStatus = 'expiring-soon';
+          } else {
+            expiryStatus = 'valid';
+          }
+        }
+
+        const projectResult: typeof projects[number] = { name, repoCount: entry.repos.length, expiryStatus };
+
+        if (check) {
+          const validationResult = await validateTokenLive(entry.token.reveal());
+          projectResult.validationResult = {
+            ...validationResult,
+            checked_at: now.toISOString(),
+          };
+        }
+
+        projects.push(projectResult);
+      }
+
+      return { projects };
+    },
   };
+
+  // --- Live token validation helper ---
+
+  async function validateTokenLive(token: string): Promise<{ valid: boolean; error?: string }> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => { controller.abort(); }, 10_000);
+      const response = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'agent-router',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (response.status === 200) {
+        return { valid: true };
+      }
+      if (response.status === 401) {
+        return { valid: false, error: '401 Unauthorized' };
+      }
+      if (response.status === 403) {
+        return { valid: false, error: '403 Forbidden' };
+      }
+      if (response.status === 429) {
+        return { valid: false, error: 'rate-limited' };
+      }
+      return { valid: false, error: `HTTP ${response.status}` };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { valid: false, error: msg };
+    }
+  }
 
   // --- Connection handler ---
 
