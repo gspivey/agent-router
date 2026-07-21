@@ -300,8 +300,8 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Test daemon-offline fallback reads tokens.json directly
     - _Requirements: 12.3, 12.4, 12.5_
 
-- [ ] 23. Integrate Token_Store into daemon startup
-  - [ ] 23.1 Update `src/index.ts` startup sequence
+- [x] 23. Integrate Token_Store into daemon startup
+  - [x] 23.1 Update `src/index.ts` startup sequence
     - After config load: create `TokenStore` with `tokensFilePath` and optional `GITHUB_TOKEN` fallback
     - Register `SIGHUP` handler that calls `tokenStore.reload()`
     - Call `tokenStore.startWatching()` for fs.watch + polling
@@ -310,12 +310,12 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - If Token_Store is in fallback mode (Req 1.5) AND `credentialMode` is `"mcp"`, refuse to start with `FatalError`. Error message instructs operator to either provide `tokens.json` or set `credentialMode: env`
     - On shutdown: call `tokenStore.stopWatching()`
     - _Requirements: 1.1, 1.5, 2.1, 2.2, 4.4_
-  - [ ] 23.2 Update `src/index.ts` shutdown sequence
+  - [x] 23.2 Update `src/index.ts` shutdown sequence
     - Add `tokenStore.stopWatching()` to graceful shutdown handler
     - Ensure stopWatching is called before database shutdown
     - _Requirements: 2.2_
 
-- [ ] 24. Checkpoint — All Tier 1 and Tier 2 tests green
+- [x] 24. Checkpoint — All Tier 1 and Tier 2 tests green
   - Run full test suite (`npm test`). All tests in scope must pass. If any task scope changed during implementation, post a checkpoint comment summarizing changes and unresolved questions. Only proceed to the next batch when this checkpoint passes.
 
 - [ ] 25. Write Tier 3 integration tests

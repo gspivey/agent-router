@@ -35,6 +35,14 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+## Active Roadmap
+
+---
+
+## Completed
+
+Items move here after they merge to `development`.
+
 ### 41. Token_Store startup integration
 
 Wire Token_Store into `src/index.ts` startup: create after config load with `tokensFilePath` and
@@ -44,13 +52,9 @@ optional `GITHUB_TOKEN` fallback, register SIGHUP → `tokenStore.reload()`, cal
 prior credential items (34–40).
 
 - Spec: `.kiro/specs/auth-credential-proxy/` · tasks `23.1`, `23.2`, `24`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #80
 
 ---
-
-## Completed
-
-Items move here after they merge to `development`.
 
 ### 40. Webhook token lookup + CLI `tokens status`
 
