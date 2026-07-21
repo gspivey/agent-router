@@ -35,20 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 39. MCP `git_credential` tool + IPC contract tests
-
-Implement `git_credential` MCP tool: validate repo in Bound_Project repos, per-call `get_token`
-IPC, return `{ protocol, host, username, password }` in git credential format. Structured logging
-with same Property 14 fields. Tier 2 tests: correct credential format returned, unauthorized repo
-rejected, token lookup failure returns error. Tier 2 IPC contract tests: `get_session_project`
-returns correct data, `get_token` returns token with `expires_at`. Builds on item 38 (shared MCP
-infrastructure).
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `17.1`, `17.2`, `18`
-- [ ] Complete · PR: —
-
----
-
 ### 40. Webhook token lookup + CLI `tokens status`
 
 Extend webhook handler to use Token_Store reverse lookup (repo → project → PAT) for outgoing API
@@ -79,6 +65,20 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 39. MCP `git_credential` tool + IPC contract tests
+
+Implement `git_credential` MCP tool: validate repo in Bound_Project repos, per-call `get_token`
+IPC, return `{ protocol, host, username, password }` in git credential format. Structured logging
+with same Property 14 fields. Tier 2 tests: correct credential format returned, unauthorized repo
+rejected, token lookup failure returns error. Tier 2 IPC contract tests: `get_session_project`
+returns correct data, `get_token` returns token with `expires_at`. Builds on item 38 (shared MCP
+infrastructure).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `17.1`, `17.2`, `18`
+- [x] Complete · PR: #78
+
+---
 
 ### 38. MCP `github_http_forward` tool
 
