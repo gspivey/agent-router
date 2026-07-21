@@ -83,7 +83,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
   - _Requirements: 1.2, 1.3, 1.7, 9.2, 9.3, 9.4, 9.6_
 
 - [ ] 6. Implement Token_Store factory with reload and file watching
-  - [ ] 6.1 Implement `createTokenStore` factory function in `src/token-store.ts`
+  - [x] 6.1 Implement `createTokenStore` factory function in `src/token-store.ts`
     - Accept `{ tokensFilePath, log, fallbackToken? }` deps
     - On creation: read and parse tokens file, or fall back to `GITHUB_TOKEN` env var with deprecation warning, or throw `FatalError` if neither available
     - Fallback creates a synthetic single-project entry with all configured repos
@@ -96,12 +96,12 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - `startWatching()` → register `fs.watch` + 30s polling interval, `reloadInProgress` guard, re-register watcher after reload
     - `stopWatching()` → close watcher, clear interval, set `reloadInProgress` to suppress in-flight
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
-  - [ ]* 6.2 Write property tests for Token_Store lookups (Properties 4, 5)
+  - [x]* 6.2 Write property tests for Token_Store lookups (Properties 4, 5)
     - **Property 4: Repo-to-project lookup**
     - **Property 5: Token lookup by project**
     - Generate valid `TokenMap`, create store, verify `findProjectByRepo` and `getToken` return correct results for all entries and `undefined` for missing
     - **Validates: Requirements 3.1, 3.3, 3.5, 8.1**
-  - [ ] 6.3 Write unit tests for Token_Store lifecycle
+  - [x] 6.3 Write unit tests for Token_Store lifecycle
     - Test fallback to `GITHUB_TOKEN` when tokens file missing (Req 1.5)
     - Test `FatalError` when both tokens file and env var missing (Req 1.6)
     - Test `FatalError` on invalid JSON in tokens file (Req 1.7)
@@ -110,7 +110,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Test file permissions warning (Req 1.4)
     - _Requirements: 1.4, 1.5, 1.6, 1.7, 2.5, 2.6_
 
-- [ ] 7. Write Tier 2 Token_Store tests
+- [x] 7. Write Tier 2 Token_Store tests
   - Create `test/tier2/token-store.test.ts`
   - Test with real filesystem (temp dir): write tokens.json, create store, verify lookups
   - Test SIGHUP-triggered reload: modify file, send reload, verify new map
