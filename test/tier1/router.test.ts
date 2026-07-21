@@ -446,6 +446,7 @@ describe('evaluateWakePolicy', () => {
     controlPort: 3100,
     bindPublic: false,
     shutdownDrainSeconds: 60,
+    credentialMode: 'env',
   };
 
   it('returns wake=true for check_run with trustTier=n/a', () => {
@@ -709,6 +710,7 @@ describe('evaluateWakePolicy — self-wake prevention', () => {
     controlPort: 3100,
     bindPublic: false,
     shutdownDrainSeconds: 60,
+    credentialMode: 'env',
   };
 
   it('blocks wake when comment is self-authored (in outbound table)', () => {

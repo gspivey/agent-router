@@ -43,6 +43,8 @@ export interface AgentRouterConfig {
   tokenExpiresAt?: string;
   /** Optional extra env var names to forward to child processes (on top of the built-in allowlist). */
   childEnvAllowlist?: string[];
+  /** Credential delivery mode: 'env' injects GITHUB_TOKEN into agent env, 'mcp' relies on MCP tools. Default: 'env'. */
+  credentialMode: 'env' | 'mcp';
 }
 
 export interface RepoConfig {
@@ -370,6 +372,16 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     }
   }
 
+  // credentialMode (optional, default 'env')
+  let credentialMode: 'env' | 'mcp' = 'env';
+  if (config['credentialMode'] !== undefined) {
+    const val = config['credentialMode'];
+    if (val !== 'env' && val !== 'mcp') {
+      throw new FatalError(`Invalid "credentialMode": must be "env" or "mcp", got ${JSON.stringify(val)}`);
+    }
+    credentialMode = val;
+  }
+
   // Build set of known "owner/name" for cron repo matching
   const repoKeys = new Set(repos.map(r => `${r.owner}/${r.name}`));
 
@@ -420,6 +432,7 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     controlPort,
     bindPublic,
     shutdownDrainSeconds,
+    credentialMode,
   };
   if (defaultGithubToken !== undefined) {
     result.defaultGithubToken = defaultGithubToken;
