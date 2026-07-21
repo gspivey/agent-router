@@ -45,6 +45,9 @@ import { startTokenExpiryChecker } from './token-expiry.js';
 import { createWorktreeManager } from './worktree-manager.js';
 import { buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from './acp.js';
 import { createRestartRequiredState } from './restart-required.js';
+import { createTokenStore } from './token-store.js';
+import type { TokenStore } from './token-store.js';
+import { validateTokenStoreStartup } from './token-store-startup.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -264,6 +267,7 @@ interface DaemonState {
   checkWatchdog: CheckWatchdog | null;
   tokenExpiryChecker: { stop: () => void } | null;
   configWatcher: ConfigWatcher | null;
+  credentialTokenStore: TokenStore | null;
   sessionMgr: SessionManager | null;
   db: Database | null;
   log: Logger;
@@ -326,6 +330,12 @@ function installShutdownHandlers(state: DaemonState): void {
       if (state.configWatcher) {
         state.configWatcher.close();
         state.log.info('Config watcher closed');
+      }
+
+      // 1e. Stop credential token store watching
+      if (state.credentialTokenStore) {
+        state.credentialTokenStore.stopWatching();
+        state.log.info('Credential token store watcher stopped');
       }
 
       // 2. Stop HTTP webhook server (stop accepting new webhooks, 5s drain)
@@ -423,6 +433,31 @@ async function main(): Promise<void> {
   db.pruneOutboundComments(SEVEN_DAYS_SECONDS);
   log.info('Outbound comments pruned');
 
+  // ---- Credential Token_Store startup ----
+
+  // Create credential TokenStore for project-scoped PAT management.
+  // Path: $AGENT_ROUTER_HOME/tokens.json (per spec Requirement 1.1)
+  const tokensFilePath = path.join(rootDir, 'tokens.json');
+  const githubTokenEnv = process.env['GITHUB_TOKEN'];
+  const credentialTokenStore = createTokenStore(
+    githubTokenEnv !== undefined
+      ? { tokensFilePath, log, fallbackToken: githubTokenEnv }
+      : { tokensFilePath, log }
+  );
+
+  // Validate: cannot use MCP credential mode with fallback (single GITHUB_TOKEN)
+  validateTokenStoreStartup(credentialTokenStore, config.credentialMode);
+
+  // Register SIGHUP handler for manual token reload (Requirement 2.1)
+  process.on('SIGHUP', () => {
+    log.info('SIGHUP received — reloading token store');
+    credentialTokenStore.reload();
+  });
+
+  // Start file watching (fs.watch + 30s polling) for automatic reload (Requirement 2.2)
+  credentialTokenStore.startWatching();
+  log.info('Credential token store initialized', { tokensFilePath });
+
   // ---- Task 19.1b: Session infrastructure startup ----
 
   // Create session files root
@@ -464,6 +499,8 @@ async function main(): Promise<void> {
   const sessionMgr = createSessionManager({
     db,
     sessionFiles,
+    tokenStore: credentialTokenStore,
+    credentialMode: config.credentialMode,
     acpSpawner: (sessionId: string, repo?: string) => {
       const tokenEnv = resolveSessionTokenEnv(repo, tokenResolver);
       if (repo !== undefined && tokenEnv['GITHUB_TOKEN'] === undefined) {
@@ -553,6 +590,7 @@ async function main(): Promise<void> {
     log,
     tokenStore,
     verifySession,
+    credentialTokenStore,
     health: {
       startedAtMs: Date.now(),
       activeSessionCount: () =>
@@ -588,6 +626,7 @@ async function main(): Promise<void> {
     db,
     cronTasks,
     cronEntries: config.cron,
+    tokenStore: credentialTokenStore,
   });
   await cliServer.start();
   log.info('CLI IPC server listening', { socketPath });
@@ -682,6 +721,7 @@ async function main(): Promise<void> {
     checkWatchdog,
     tokenExpiryChecker,
     configWatcher,
+    credentialTokenStore,
     sessionMgr,
     db,
     log,
