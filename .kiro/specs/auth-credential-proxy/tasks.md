@@ -118,16 +118,16 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
   - Test atomic swap: verify no partial state observable during reload
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.7_
 
-- [ ] 8. Checkpoint — Tier 1 token-store and secret tests green
+- [x] 8. Checkpoint — Tier 1 token-store and secret tests green
   - Run full test suite (`npm test`). All tests in scope must pass. If any task scope changed during implementation, post a checkpoint comment summarizing changes and unresolved questions. Only proceed to the next batch when this checkpoint passes.
 
 - [ ] 9. Add `credentialMode` to config
-  - [ ] 9.1 Extend `AgentRouterConfig` in `src/config.ts`
+  - [x] 9.1 Extend `AgentRouterConfig` in `src/config.ts`
     - Add `credentialMode: 'env' | 'mcp'` field
     - Default to `'env'` when omitted from JSON
     - Validate during `validateConfig`: must be `'env'` or `'mcp'`, reject other values with `FatalError`
     - _Requirements: 4.4_
-  - [ ] 9.2 Write Tier 1 config validation tests
+  - [x] 9.2 Write Tier 1 config validation tests
     - Test default value when `credentialMode` omitted
     - Test valid values `'env'` and `'mcp'` accepted
     - Test invalid values rejected with `FatalError`
@@ -135,15 +135,15 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - _Requirements: 4.4_
 
 - [ ] 10. Session manager — Bound_Project resolution and credential injection
-  - [ ] 10.1 Extend `SessionMeta` in `src/session-files.ts`
+  - [x] 10.1 Extend `SessionMeta` in `src/session-files.ts`
     - Add optional fields: `bound_project`, `bound_project_repos`, `bound_project_read_repos`, `credential_mode`
     - Fields are optional for backward compatibility with legacy sessions
     - _Requirements: 3.2_
-  - [ ] 10.2 Extend `SessionHandle` and `createSessionManager` deps in `src/session-mgr.ts`
+  - [x] 10.2 Extend `SessionHandle` and `createSessionManager` deps in `src/session-mgr.ts`
     - Add `boundProject`, `boundProjectRepos` to `SessionHandle`
     - Accept `tokenStore: TokenStore` and `credentialMode: 'env' | 'mcp'` in deps
     - _Requirements: 3.1, 3.2, 4.4_
-  - [ ] 10.3 Implement `createSession` Bound_Project resolution and credential injection
+  - [x] 10.3 Implement `createSession` Bound_Project resolution and credential injection
     - Extract target repo from prompt, call `tokenStore.findProjectByRepo(repo)` to resolve `Bound_Project`
     - If not found → reject session with error (Req 3.8)
     - If `credentialMode === 'env'` → inject `GITHUB_TOKEN` into subprocess env via `tokenStore.getToken(project).reveal()`
@@ -151,7 +151,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Record `boundProject`, `boundProjectRepos`, `credential_mode` in session metadata
     - Log Bound_Project name and repos (not token value) on injection
     - _Requirements: 3.1, 3.5, 3.7, 3.8, 4.1, 4.2, 4.3, 4.5_
-  - [ ] 10.4 Write Tier 2 session credential tests in `test/tier2/session-credential.test.ts`
+  - [x] 10.4 Write Tier 2 session credential tests in `test/tier2/session-credential.test.ts`
     - Test `GITHUB_TOKEN` present in env for `credentialMode: "env"`
     - Test `GITHUB_TOKEN` absent in env for `credentialMode: "mcp"`
     - Test `Bound_Project` recorded in session metadata

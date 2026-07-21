@@ -512,4 +512,41 @@ describe('validateConfig', () => {
       validateConfig(validConfig({ sessionTimeout: { gracePeriodAfterMergeSeconds: '60' } }))
     ).toThrow(FatalError);
   });
+
+  // --- credentialMode ---
+
+  it('defaults credentialMode to env when omitted', () => {
+    const cfg = validConfig();
+    const result = validateConfig(cfg);
+    expect(result.credentialMode).toBe('env');
+  });
+
+  it('accepts credentialMode env', () => {
+    const cfg = validConfig({ credentialMode: 'env' });
+    const result = validateConfig(cfg);
+    expect(result.credentialMode).toBe('env');
+  });
+
+  it('accepts credentialMode mcp', () => {
+    const cfg = validConfig({ credentialMode: 'mcp' });
+    const result = validateConfig(cfg);
+    expect(result.credentialMode).toBe('mcp');
+  });
+
+  it('throws FatalError when credentialMode is an invalid string', () => {
+    expect(() => validateConfig(validConfig({ credentialMode: 'hybrid' }))).toThrow(FatalError);
+    expect(() => validateConfig(validConfig({ credentialMode: 'hybrid' }))).toThrow(/credentialMode/);
+  });
+
+  it('throws FatalError when credentialMode is a number', () => {
+    expect(() => validateConfig(validConfig({ credentialMode: 1 }))).toThrow(FatalError);
+  });
+
+  it('throws FatalError when credentialMode is a boolean', () => {
+    expect(() => validateConfig(validConfig({ credentialMode: true }))).toThrow(FatalError);
+  });
+
+  it('throws FatalError when credentialMode is an empty string', () => {
+    expect(() => validateConfig(validConfig({ credentialMode: '' }))).toThrow(FatalError);
+  });
 });

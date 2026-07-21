@@ -16,6 +16,7 @@ function baseConfig(overrides?: Partial<AgentRouterConfig>): AgentRouterConfig {
     controlPort: 3100,
     bindPublic: false,
     shutdownDrainSeconds: 60,
+    credentialMode: 'env',
     ...overrides,
   };
 }

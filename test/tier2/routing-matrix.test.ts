@@ -86,6 +86,7 @@ const config: AgentRouterConfig = {
   controlPort: 3100,
   bindPublic: false,
   shutdownDrainSeconds: 60,
+  credentialMode: 'env',
 };
 
 const SESSION_FOR_PR: Session = {

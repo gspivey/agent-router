@@ -12,6 +12,7 @@ import type { VerifySessionFn, VerifyResult } from './verify-session.js';
 import type { TurnQueue } from './turn-queue.js';
 import { createTurnQueue } from './turn-queue.js';
 import type { WorktreeManager } from './worktree-manager.js';
+import type { TokenStore } from './token-store.js';
 
 export interface SessionHandle {
   sessionId: string;
@@ -21,6 +22,10 @@ export interface SessionHandle {
   eventQueue: EventQueue;
   turnQueue: TurnQueue;
   kiroPid: number;
+  /** Project name this session is bound to for write operations. */
+  boundProject?: string | undefined;
+  /** Repos in the bound project (write-authorized). */
+  boundProjectRepos?: string[] | undefined;
 }
 
 /** Thrown by completeSession when one or more registered PRs are still open on GitHub. */
@@ -152,12 +157,18 @@ export function createSessionManager(deps: {
   onSessionEnd?: (sessionId: string) => void;
   /** Optional worktree manager for isolated per-session working directories. */
   worktreeManager?: WorktreeManager;
+  /** Optional Token_Store for project-scoped credential resolution. */
+  tokenStore?: TokenStore;
+  /** Credential delivery mode. Default: 'env'. */
+  credentialMode?: 'env' | 'mcp';
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
   const verify = deps.verify;
   const onSessionEnd = deps.onSessionEnd;
   const worktreeManager = deps.worktreeManager;
+  const tokenStore = deps.tokenStore;
+  const credentialMode = deps.credentialMode ?? 'env';
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
@@ -512,10 +523,44 @@ export function createSessionManager(deps: {
       const sessionId = crypto.randomUUID();
       const sessionLog = log.child({ sessionId });
 
+      // 0. Resolve Bound_Project from Token_Store when available
+      let boundProject: string | undefined;
+      let boundProjectRepos: string[] | undefined;
+      if (tokenStore !== undefined && repo !== undefined) {
+        const projectName = tokenStore.findProjectByRepo(repo);
+        if (projectName === undefined) {
+          throw new Error(
+            `Cannot create session: repo "${repo}" is not present in any project in the Token_Store`
+          );
+        }
+        const project = tokenStore.getProject(projectName);
+        if (project === undefined) {
+          throw new Error(
+            `Cannot create session: project "${projectName}" not found in Token_Store`
+          );
+        }
+        boundProject = projectName;
+        boundProjectRepos = [...project.repos];
+        sessionLog.info('Bound_Project resolved', {
+          project: projectName,
+          repos: boundProjectRepos,
+          credentialMode,
+        });
+      }
+
       // 1. Create session files on disk
       const paths = sessionFiles.createSession(sessionId, originalPrompt);
       if (repo !== undefined) {
         sessionFiles.updateMeta(sessionId, { repo });
+      }
+
+      // Write credential metadata to session
+      if (boundProject !== undefined && boundProjectRepos !== undefined) {
+        sessionFiles.updateMeta(sessionId, {
+          bound_project: boundProject,
+          bound_project_repos: boundProjectRepos,
+          credential_mode: credentialMode,
+        });
       }
       sessionLog.info('Session files created');
 
@@ -551,6 +596,8 @@ export function createSessionManager(deps: {
         eventQueue,
         turnQueue,
         kiroPid: 0, // Will be set if available; subprocess PID is internal to ACPClient
+        boundProject,
+        boundProjectRepos,
       };
 
       // 6. Insert into registry
@@ -899,6 +946,8 @@ export function createSessionManager(deps: {
             eventQueue,
             turnQueue,
             kiroPid: 0,
+            boundProject: meta.bound_project,
+            boundProjectRepos: meta.bound_project_repos,
           };
 
           registry.add(handle);

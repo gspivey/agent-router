@@ -32,6 +32,14 @@ export interface SessionMeta {
     | 'no_work_available';
   kiro_session_id?: string;
   prs: Array<{ repo: string; pr_number: number; registered_at: number; merged_at?: number }>;
+  /** Project name this session is bound to for write operations. */
+  bound_project?: string;
+  /** Repos in the bound project (write-authorized). */
+  bound_project_repos?: string[];
+  /** Additional repos authorized for read-only access. */
+  bound_project_read_repos?: string[];
+  /** Credential delivery mode used for this session. */
+  credential_mode?: 'env' | 'mcp';
 }
 
 export type PromptSource = 'cli' | 'webhook' | 'cron' | 'mcp' | 'web' | 'router';

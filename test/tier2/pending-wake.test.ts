@@ -89,6 +89,7 @@ describe('Tier 2: rate-limit wake deferral', () => {
     controlPort: 3100,
     bindPublic: false,
     shutdownDrainSeconds: 60,
+    credentialMode: 'env',
   };
 
   beforeEach(async () => {

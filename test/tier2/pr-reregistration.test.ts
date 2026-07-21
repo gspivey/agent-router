@@ -81,6 +81,7 @@ describe('PR re-registration: webhook routes to new session', () => {
     controlPort: 3100,
     bindPublic: false,
     shutdownDrainSeconds: 60,
+    credentialMode: 'env' as const,
   };
 
   beforeEach(async () => {

@@ -109,6 +109,7 @@ describe('E2E: webhook → wake → session loop', () => {
     controlPort: 3100,
     bindPublic: false,
     shutdownDrainSeconds: 60,
+    credentialMode: 'env' as const,
   };
 
   beforeEach(async () => {
