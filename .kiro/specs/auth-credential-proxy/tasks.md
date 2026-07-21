@@ -159,19 +159,19 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Test cross-project write rejection (Req 3.7)
     - _Requirements: 3.1, 3.2, 3.7, 3.8, 4.1, 4.3_
 
-- [ ] 11. Session manager — read_repos parsing
-  - [ ] 11.1 Implement YAML frontmatter and explicit-arg `read_repos` parsing in `src/session-mgr.ts`
+- [x] 11. Session manager — read_repos parsing
+  - [x] 11.1 Implement YAML frontmatter and explicit-arg `read_repos` parsing in `src/session-mgr.ts`
     - Parse `read_repos` from prompt YAML frontmatter or explicit `read_repos: string[]` parameter
     - _Requirements: 3.6_
-  - [ ] 11.2 Wire `read_repos` into session metadata
+  - [x] 11.2 Wire `read_repos` into session metadata
     - Store parsed `read_repos` in session metadata as `bound_project_read_repos`
     - _Requirements: 3.6_
-  - [ ]* 11.3 Write Tier 1 unit tests for `read_repos` parsing edge cases
+  - [x]* 11.3 Write Tier 1 unit tests for `read_repos` parsing edge cases
     - Test YAML frontmatter parsing with valid/invalid/missing `read_repos`
     - Test explicit parameter parsing
     - Test empty and malformed inputs
     - _Requirements: 3.6_
-  - [ ] 11.4 Write Tier 2 test for `read_repos` in session metadata
+  - [x] 11.4 Write Tier 2 test for `read_repos` in session metadata
     - Verify `read_repos` stored correctly in session metadata and available via IPC
     - _Requirements: 3.6_
 
