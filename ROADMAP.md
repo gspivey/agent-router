@@ -35,21 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 35. Config `credentialMode` + session credential injection
-
-Add `credentialMode: 'env' | 'mcp'` to config with validation. Extend `SessionMeta` with
-optional `bound_project`, `bound_project_repos`, `bound_project_read_repos`, `credential_mode`
-fields. Extend `SessionHandle` and `createSessionManager` deps to accept `TokenStore` and
-`credentialMode`. Implement Bound_Project resolution in `createSession`: resolve repo →
-project, inject `GITHUB_TOKEN` for env mode, omit for mcp mode, reject on unknown repo. Tier 1
-config tests; Tier 2 session credential tests (env present/absent, bound project metadata,
-rejection for unknown repo). Builds on item 34 (Token_Store).
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `8`, `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`
-- [ ] Complete · PR: —
-
----
-
 ### 36. Session `read_repos` parsing
 
 Implement YAML frontmatter and explicit-arg `read_repos` parsing in `src/session-mgr.ts`. Store
@@ -136,6 +121,21 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 35. Config `credentialMode` + session credential injection
+
+Add `credentialMode: 'env' | 'mcp'` to config with validation. Extend `SessionMeta` with
+optional `bound_project`, `bound_project_repos`, `bound_project_read_repos`, `credential_mode`
+fields. Extend `SessionHandle` and `createSessionManager` deps to accept `TokenStore` and
+`credentialMode`. Implement Bound_Project resolution in `createSession`: resolve repo →
+project, inject `GITHUB_TOKEN` for env mode, omit for mcp mode, reject on unknown repo. Tier 1
+config tests; Tier 2 session credential tests (env present/absent, bound project metadata,
+rejection for unknown repo). Builds on item 34 (Token_Store).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `8`, `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`
+- [x] Complete · PR: #74
+
+---
 
 ### 34. Token_Store factory + lifecycle tests
 
