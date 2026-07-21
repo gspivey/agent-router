@@ -35,6 +35,152 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 32. Secret type + test harness extensions
+
+Create `src/secret.ts` with a `Secret` wrapper class that prevents raw credential strings from
+leaking into logs, JSON output, or string interpolation. Private constructor, `Secret.of(value)`
+factory (throws on empty), `reveal()` for controlled access, `toString()`/`toJSON()`/custom
+inspect all return `[REDACTED]`. Extend `test/harness/fake-github.ts` with Authorization header
+validation (`requireAuthToken`) and canned response support for credential-tool forwarding tests.
+Create `test/harness/mock-daemon-socket.ts` simulating `get_session_project` and `get_token` IPC
+operations for future MCP credential tool Tier 2 tests. Property tests (fast-check, 100 runs)
+for the Secret redaction guarantee; Tier 2 tests for the harness extensions.
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `1.1`, `1.2`, `1.3`, `2.1`, `2.2`
+- [ ] Complete · PR: —
+
+---
+
+### 33. Pure validation functions + property tests
+
+Create `src/token-store.ts` with exported pure validation functions and type definitions:
+`isValidProjectName`, `isValidRepoString`, `validateProjectEntry`, `validateRepoUniqueness`,
+`parseTokensFile`, `computeReloadDiff`, `evaluateExpiryWarnings`, `serializeTokenMap`. Define
+`ProjectEntry`, `TokenMap`, `ReloadDiff`, `ExpiryWarning`, `TokenStore` interfaces. Property
+tests: tokens-file round-trip (Property 1), project entry validation (Property 2), repo
+uniqueness invariant (Property 3), reload diff correctness (Property 7), project name validation
+(Property 9), expiry warning tiers (Property 10). Unit tests for edge cases (invalid JSON,
+missing fields, duplicate repos). Builds on item 32 (`Secret` type).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `3`, `4.1`, `4.2`, `4.3`, `4.4`, `4.5`, `4.6`, `5`
+- [ ] Complete · PR: —
+
+---
+
+### 34. Token_Store factory + lifecycle tests
+
+Implement `createTokenStore` factory in `src/token-store.ts`: load/parse/validate tokens file,
+fallback to `GITHUB_TOKEN` env with deprecation warning, `FatalError` when neither available.
+Implement `getToken`, `getProject`, `findProjectByRepo`, `getTokenMap`, `reload` (re-read,
+re-validate, atomic swap, retain-on-failure), `startWatching` (fs.watch + 30s poll),
+`stopWatching`. Property tests for lookups (Properties 4, 5). Unit tests for lifecycle (fallback,
+missing file, invalid reload retains old, permissions warning). Tier 2 tests with real filesystem:
+write tokens.json, create store, verify lookups; SIGHUP reload; fs.watch automatic reload. Builds
+on item 33 (validation functions).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `6.1`, `6.2`, `6.3`, `7`
+- [ ] Complete · PR: —
+
+---
+
+### 35. Config `credentialMode` + session credential injection
+
+Add `credentialMode: 'env' | 'mcp'` to config with validation. Extend `SessionMeta` with
+optional `bound_project`, `bound_project_repos`, `bound_project_read_repos`, `credential_mode`
+fields. Extend `SessionHandle` and `createSessionManager` deps to accept `TokenStore` and
+`credentialMode`. Implement Bound_Project resolution in `createSession`: resolve repo →
+project, inject `GITHUB_TOKEN` for env mode, omit for mcp mode, reject on unknown repo. Tier 1
+config tests; Tier 2 session credential tests (env present/absent, bound project metadata,
+rejection for unknown repo). Builds on item 34 (Token_Store).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `8`, `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`
+- [ ] Complete · PR: —
+
+---
+
+### 36. Session `read_repos` parsing
+
+Implement YAML frontmatter and explicit-arg `read_repos` parsing in `src/session-mgr.ts`. Store
+parsed `read_repos` in session metadata as `bound_project_read_repos`. Tier 1 unit tests for
+parsing edge cases (valid/invalid/missing YAML frontmatter, explicit parameter, malformed inputs).
+Tier 2 test verifying `read_repos` stored correctly and available via IPC. Builds on item 35
+(session metadata fields).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `11.1`, `11.2`, `11.3`, `11.4`
+- [ ] Complete · PR: —
+
+---
+
+### 37. IPC ops + MCP credential bootstrap + request validation
+
+Add `get_session_project` and `get_token` IPC ops to `src/cli-server.ts`. Implement MCP startup
+`get_session_project` call with caching and register `github_http_forward` / `git_credential`
+tool skeletons. Implement request validators: method (GET/POST/PUT/PATCH/DELETE), path prefix
+(GitHub API), body size (10 MB max), repo authorization (write → Bound_Project repos, read →
+public or `read_repos`). Property tests (Properties 6, 11, 12, 13) for validators. Unit tests
+for edge cases. Tier 2 IPC contract tests. Builds on items 35/36 (session metadata, IPC deps).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `12`, `13`, `14`, `15.1`, `15.2`, `15.3`, `15.4`, `18`
+- [ ] Complete · PR: —
+
+---
+
+### 38. MCP `github_http_forward` tool
+
+Implement the `github_http_forward` MCP tool: per-call `get_token` IPC (not cached — rotation
+propagates), inject `Authorization: Bearer <token>` + `User-Agent` + `Accept` headers, forward
+to `https://api.github.com`, 30s timeout, return status + headers + body. Structured logging
+(Property 14 fields: `tool_name`, `repo`, `project`, `session_id`, `status`, `duration_ms`,
+`error_code`). Never log token values. Property test for log entry structure. Tier 2 tests
+against fake GitHub server (token injection, response passthrough, timeout, body size, read/write
+enforcement). Builds on items 37 (validation + IPC) and 32 (fake GitHub auth).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `16.1`, `16.2`, `16.3`, `16.4`
+- [ ] Complete · PR: —
+
+---
+
+### 39. MCP `git_credential` tool + IPC contract tests
+
+Implement `git_credential` MCP tool: validate repo in Bound_Project repos, per-call `get_token`
+IPC, return `{ protocol, host, username, password }` in git credential format. Structured logging
+with same Property 14 fields. Tier 2 tests: correct credential format returned, unauthorized repo
+rejected, token lookup failure returns error. Tier 2 IPC contract tests: `get_session_project`
+returns correct data, `get_token` returns token with `expires_at`. Builds on item 38 (shared MCP
+infrastructure).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `17.1`, `17.2`, `18`
+- [ ] Complete · PR: —
+
+---
+
+### 40. Webhook token lookup + CLI `tokens status`
+
+Extend webhook handler to use Token_Store reverse lookup (repo → project → PAT) for outgoing API
+calls. Add `tokens_status` IPC op to `src/cli-server.ts` with optional `--check` live validation
+(GET /user per token, 1h cache). Implement CLI daemon-offline fallback (read tokens.json
+directly). Property test for cache validity. Unit tests for output format, cache hit/miss, offline
+fallback. Tier 2 tests: correct PAT used for webhook outgoing calls, unknown repo warning.
+Builds on item 34 (Token_Store).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `19`, `20.1`, `20.2`, `21`, `22.1`, `22.2`, `22.3`
+- [ ] Complete · PR: —
+
+---
+
+### 41. Token_Store startup integration
+
+Wire Token_Store into `src/index.ts` startup: create after config load with `tokensFilePath` and
+optional `GITHUB_TOKEN` fallback, register SIGHUP → `tokenStore.reload()`, call
+`startWatching()`, pass to SessionManager/createApp/CliServer. FatalError if fallback mode +
+`credentialMode: "mcp"`. Add `tokenStore.stopWatching()` to shutdown sequence. Builds on all
+prior credential items (34–40).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `23.1`, `23.2`, `24`
+- [ ] Complete · PR: —
+
+---
+
 ## Completed
 
 Items move here after they merge to `development`.

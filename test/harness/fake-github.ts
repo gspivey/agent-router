@@ -41,6 +41,16 @@ interface CommentRecord {
   prNumber: number;
 }
 
+/**
+ * A canned response that FakeGitHubBackend can return for specific paths.
+ * Used by credential tool forwarding tests to return controlled API responses.
+ */
+export interface CannedResponse {
+  status: number;
+  headers?: Record<string, string>;
+  body: unknown;
+}
+
 export class FakeGitHubBackend implements GitHubBackend {
   private server: http.Server | null = null;
   private port = 0;
@@ -55,6 +65,12 @@ export class FakeGitHubBackend implements GitHubBackend {
   private comments: CommentRecord[] = [];
   private commentCounter = 1;
   private apiCalls: APICall[] = [];
+
+  // Credential testing support
+  /** If set, all API requests must carry this token as a Bearer token, or receive 401. */
+  private requiredAuthToken: string | null = null;
+  /** Canned responses keyed by `METHOD:pathname`. Override default routing for specific paths. */
+  private cannedResponses: Map<string, CannedResponse> = new Map();
 
   constructor(webhookSecret: string) {
     this.webhookSecret = webhookSecret;
@@ -98,7 +114,75 @@ export class FakeGitHubBackend implements GitHubBackend {
     this.comments = [];
     this.commentCounter = 1;
     this.apiCalls = [];
+    this.requiredAuthToken = null;
+    this.cannedResponses.clear();
     this.copyFixture();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Credential testing helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Require all API requests to carry `Bearer <token>` in the Authorization header.
+   * Any request that omits or mismatches the token will receive a 401 response.
+   * Set to `null` to disable token validation (default).
+   */
+  requireAuthToken(token: string | null): void {
+    this.requiredAuthToken = token;
+  }
+
+  /**
+   * Register a canned response for a specific method + path combination.
+   * When a request matches, the canned response is returned instead of the
+   * default routing logic. Useful for credential-tool forwarding tests that
+   * need to verify the request arrives with the correct Authorization header
+   * and to return controlled response data.
+   *
+   * Key format: `"METHOD:pathname"` — e.g. `"GET:/repos/org/repo/pulls"`.
+   * The method is uppercased automatically.
+   */
+  setCannedResponse(method: string, pathname: string, response: CannedResponse): void {
+    this.cannedResponses.set(`${method.toUpperCase()}:${pathname}`, response);
+  }
+
+  /**
+   * Clear all canned responses registered via `setCannedResponse`.
+   */
+  clearCannedResponses(): void {
+    this.cannedResponses.clear();
+  }
+
+  /**
+   * Returns the last recorded Authorization header value from API calls, if any.
+   * Useful for asserting that the credential proxy injected the correct token.
+   */
+  getLastAuthorizationHeader(): string | undefined {
+    for (let i = this.apiCalls.length - 1; i >= 0; i--) {
+      const call = this.apiCalls[i];
+      if (call) {
+        const authHeader =
+          (call.headers as Record<string, string | string[] | undefined>)['authorization'];
+        if (authHeader) {
+          return Array.isArray(authHeader) ? authHeader[0] : authHeader;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Returns all recorded Authorization headers from API calls in order.
+   * Useful for asserting token usage across multiple forwarded requests.
+   */
+  getAllAuthorizationHeaders(): string[] {
+    return this.apiCalls
+      .map((call) => {
+        const h = (call.headers as Record<string, string | string[] | undefined>)['authorization'];
+        if (!h) return undefined;
+        return Array.isArray(h) ? h[0] : h;
+      })
+      .filter((h): h is string => h !== undefined);
   }
 
   private copyFixture(): void {
@@ -305,6 +389,29 @@ export class FakeGitHubBackend implements GitHubBackend {
       headers: req.headers as Record<string, string>,
       body,
     });
+
+    // Authorization header validation — reject if a required token is set and
+    // the request doesn't carry a matching Bearer token.
+    if (this.requiredAuthToken !== null) {
+      const authHeader = req.headers['authorization'] ?? '';
+      const expected = `Bearer ${this.requiredAuthToken}`;
+      if (authHeader !== expected) {
+        res.writeHead(401, { 'Content-Type': 'application/json' }).end(
+          JSON.stringify({ message: 'Bad credentials' })
+        );
+        return;
+      }
+    }
+
+    // Canned response check — if a canned response is registered for this
+    // method + path, return it immediately.
+    const cannedKey = `${method}:${pathname}`;
+    const canned = this.cannedResponses.get(cannedKey);
+    if (canned) {
+      const headers = { 'Content-Type': 'application/json', ...(canned.headers ?? {}) };
+      res.writeHead(canned.status, headers).end(JSON.stringify(canned.body));
+      return;
+    }
 
     // Minimal GitHub REST API subset
     const reposMatch = pathname.match(/^\/repos\/([^/]+\/[^/]+)(\/.*)?$/);
