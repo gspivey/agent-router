@@ -34,7 +34,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Mocks SHALL be standalone modules importable from `test/harness/`. fast-check default iterations set to 100 in test config.
     - _Requirements: 7.3_
 
-- [ ] 3. Implement pure validation functions and interfaces
+- [x] 3. Implement pure validation functions and interfaces
   - Create `src/token-store.ts` with exported pure functions and type definitions
   - Define `ProjectEntry`, `TokenMap`, `ReloadDiff`, `ExpiryWarning`, `TokenStore` interfaces
   - `isValidProjectName(name: string): boolean` — matches `^[a-zA-Z0-9._-]+$`
@@ -47,34 +47,34 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
   - `serializeTokenMap(map: TokenMap): string` — for round-trip testing
   - _Requirements: 1.1, 1.2, 1.3, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 12.1, 12.2_
 
-- [ ] 4. Write property tests for pure validation (Properties 1, 2, 3, 7, 9, 10)
-  - [ ] 4.1 Write property test: tokens file round-trip (Property 1)
+- [x] 4. Write property tests for pure validation (Properties 1, 2, 3, 7, 9, 10)
+  - [x] 4.1 Write property test: tokens file round-trip (Property 1)
     - **Property 1: Tokens file round-trip**
     - Create `test/tier1/token-store.test.ts`
     - Generate arbitrary valid `TokenMap`, serialize via `serializeTokenMap`, parse via `parseTokensFile`, assert same project keys, token values, repo lists, expiry dates
     - **Validates: Requirements 9.5**
-  - [ ]* 4.2 Write property test: project entry validation (Property 2)
+  - [x]* 4.2 Write property test: project entry validation (Property 2)
     - **Property 2: Project entry validation**
     - Generate valid and invalid project entries, verify `validateProjectEntry` accepts iff token non-empty, repos non-empty, all repos match pattern
     - **Validates: Requirements 1.2, 9.3**
-  - [ ] 4.3 Write property test: repo uniqueness invariant (Property 3)
+  - [x] 4.3 Write property test: repo uniqueness invariant (Property 3)
     - **Property 3: Repo uniqueness invariant**
     - Generate project maps with and without duplicate repos, verify `validateRepoUniqueness` throws iff duplicates exist
     - **Validates: Requirements 1.3, 9.4**
-  - [ ]* 4.4 Write property test: reload diff correctness (Property 7)
+  - [x]* 4.4 Write property test: reload diff correctness (Property 7)
     - **Property 7: Reload diff correctness**
     - Generate two valid `TokenMap` instances, verify `computeReloadDiff` partitions all project names into added/removed/changed/unchanged correctly
     - **Validates: Requirements 2.4, 11.4**
-  - [ ]* 4.5 Write property test: project name validation (Property 9)
+  - [x]* 4.5 Write property test: project name validation (Property 9)
     - **Property 9: Project name validation**
     - Generate arbitrary strings, verify `isValidProjectName` returns true iff non-empty and matches `^[a-zA-Z0-9._-]+$`
     - **Validates: Requirements 9.2**
-  - [ ]* 4.6 Write property test: expiry warning tiers (Property 10)
+  - [x]* 4.6 Write property test: expiry warning tiers (Property 10)
     - **Property 10: Expiry warning tiers**
     - Generate project entries with various `expires_at` dates relative to `now`, verify `evaluateExpiryWarnings` emits correct tier (error ≤2d, warn+alert ≤7d, warn ≤14d, none >14d)
     - **Validates: Requirements 12.1, 12.2**
 
-- [ ] 5. Write unit tests for validation edge cases
+- [x] 5. Write unit tests for validation edge cases
   - Test `parseTokensFile` with invalid JSON → `FatalError`
   - Test `parseTokensFile` with missing `projects` key → `FatalError`
   - Test `validateProjectEntry` with empty token, empty repos, invalid repo format, invalid expires_at → `FatalError`

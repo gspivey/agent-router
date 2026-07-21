@@ -35,22 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 33. Pure validation functions + property tests
-
-Create `src/token-store.ts` with exported pure validation functions and type definitions:
-`isValidProjectName`, `isValidRepoString`, `validateProjectEntry`, `validateRepoUniqueness`,
-`parseTokensFile`, `computeReloadDiff`, `evaluateExpiryWarnings`, `serializeTokenMap`. Define
-`ProjectEntry`, `TokenMap`, `ReloadDiff`, `ExpiryWarning`, `TokenStore` interfaces. Property
-tests: tokens-file round-trip (Property 1), project entry validation (Property 2), repo
-uniqueness invariant (Property 3), reload diff correctness (Property 7), project name validation
-(Property 9), expiry warning tiers (Property 10). Unit tests for edge cases (invalid JSON,
-missing fields, duplicate repos). Builds on item 32 (`Secret` type).
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `3`, `4.1`, `4.2`, `4.3`, `4.4`, `4.5`, `4.6`, `5`
-- [ ] Complete · PR: —
-
----
-
 ### 34. Token_Store factory + lifecycle tests
 
 Implement `createTokenStore` factory in `src/token-store.ts`: load/parse/validate tokens file,
@@ -168,6 +152,22 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 33. Pure validation functions + property tests
+
+Create `src/token-store.ts` with exported pure validation functions and type definitions:
+`isValidProjectName`, `isValidRepoString`, `validateProjectEntry`, `validateRepoUniqueness`,
+`parseTokensFile`, `computeReloadDiff`, `evaluateExpiryWarnings`, `serializeTokenMap`. Define
+`ProjectEntry`, `TokenMap`, `ReloadDiff`, `ExpiryWarning`, `TokenStore` interfaces. Property
+tests: tokens-file round-trip (Property 1), project entry validation (Property 2), repo
+uniqueness invariant (Property 3), reload diff correctness (Property 7), project name validation
+(Property 9), expiry warning tiers (Property 10). Unit tests for edge cases (invalid JSON,
+missing fields, duplicate repos). Builds on item 32 (`Secret` type).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `3`, `4.1`, `4.2`, `4.3`, `4.4`, `4.5`, `4.6`, `5`
+- [x] Complete · PR: #PENDING
+
+---
 
 ### 32. Secret type + test harness extensions
 
