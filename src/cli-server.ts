@@ -6,6 +6,7 @@ import { OpenPRsError } from './session-mgr.js';
 import type { SessionFiles } from './session-files.js';
 import type { Database } from './db.js';
 import type { ScheduledTask } from 'node-cron';
+import type { TokenStore } from './token-store.js';
 
 export interface CronEntry {
   name: string;
@@ -26,7 +27,9 @@ export interface CliRequest {
     | 'complete_session'
     | 'cron_list'
     | 'cron_pause'
-    | 'cron_resume';
+    | 'cron_resume'
+    | 'get_session_project'
+    | 'get_token';
   [key: string]: unknown;
 }
 
@@ -45,8 +48,9 @@ export function createCliServer(deps: {
   db?: Database;
   cronTasks?: ScheduledTask[];
   cronEntries?: CronEntry[];
+  tokenStore?: TokenStore;
 }): CliServer {
-  const { socketPath, sessionMgr, sessionFiles, log, db, cronTasks, cronEntries } = deps;
+  const { socketPath, sessionMgr, sessionFiles, log, db, cronTasks, cronEntries, tokenStore } = deps;
 
   let server: net.Server | null = null;
   const activeConnections = new Set<net.Socket>();
@@ -238,6 +242,46 @@ export function createCliServer(deps: {
       db.setCronPaused(name, false);
       cronTasks[idx]!.start();
       return { ok: true };
+    },
+
+    async get_session_project(req: CliRequest): Promise<Record<string, unknown>> {
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        return { error: 'Missing or empty "session_id" parameter' };
+      }
+      const handle = sessionMgr.getActiveSession(sessionId);
+      if (!handle) {
+        return { error: `Session not found: ${sessionId}` };
+      }
+      if (!handle.boundProject || !handle.boundProjectRepos) {
+        return { error: `Session "${sessionId}" has no bound project` };
+      }
+      const meta = sessionFiles.readMeta(sessionId);
+      const readRepos = meta.bound_project_read_repos ?? [];
+      return {
+        project: handle.boundProject,
+        repos: handle.boundProjectRepos,
+        read_repos: readRepos,
+      };
+    },
+
+    async get_token(req: CliRequest): Promise<Record<string, unknown>> {
+      const project = req['project'];
+      if (typeof project !== 'string' || project.length === 0) {
+        return { error: 'Missing or empty "project" parameter' };
+      }
+      if (!tokenStore) {
+        return { error: 'Token store not configured' };
+      }
+      const secret = tokenStore.getToken(project);
+      if (!secret) {
+        return { error: `No token found for project "${project}"` };
+      }
+      const projectEntry = tokenStore.getProject(project);
+      const expiresAt = projectEntry?.expiresAt
+        ? projectEntry.expiresAt.toISOString()
+        : null;
+      return { token: secret.reveal(), expires_at: expiresAt };
     },
   };
 

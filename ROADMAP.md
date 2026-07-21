@@ -35,20 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 37. IPC ops + MCP credential bootstrap + request validation
-
-Add `get_session_project` and `get_token` IPC ops to `src/cli-server.ts`. Implement MCP startup
-`get_session_project` call with caching and register `github_http_forward` / `git_credential`
-tool skeletons. Implement request validators: method (GET/POST/PUT/PATCH/DELETE), path prefix
-(GitHub API), body size (10 MB max), repo authorization (write → Bound_Project repos, read →
-public or `read_repos`). Property tests (Properties 6, 11, 12, 13) for validators. Unit tests
-for edge cases. Tier 2 IPC contract tests. Builds on items 35/36 (session metadata, IPC deps).
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `12`, `13`, `14`, `15.1`, `15.2`, `15.3`, `15.4`, `18`
-- [ ] Complete · PR: —
-
----
-
 ### 38. MCP `github_http_forward` tool
 
 Implement the `github_http_forward` MCP tool: per-call `get_token` IPC (not cached — rotation
@@ -108,6 +94,20 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 37. IPC ops + MCP credential bootstrap + request validation
+
+Add `get_session_project` and `get_token` IPC ops to `src/cli-server.ts`. Implement MCP startup
+`get_session_project` call with caching and register `github_http_forward` / `git_credential`
+tool skeletons. Implement request validators: method (GET/POST/PUT/PATCH/DELETE), path prefix
+(GitHub API), body size (10 MB max), repo authorization (write → Bound_Project repos, read →
+public or `read_repos`). Property tests (Properties 6, 11, 12, 13) for validators. Unit tests
+for edge cases. Tier 2 IPC contract tests. Builds on items 35/36 (session metadata, IPC deps).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `12`, `13`, `14`, `15.1`, `15.2`, `15.3`, `15.4`, `18`
+- [x] Complete · PR: #76
+
+---
 
 ### 36. Session `read_repos` parsing
 
