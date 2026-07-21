@@ -165,7 +165,7 @@ uniqueness invariant (Property 3), reload diff correctness (Property 7), project
 missing fields, duplicate repos). Builds on item 32 (`Secret` type).
 
 - Spec: `.kiro/specs/auth-credential-proxy/` · tasks `3`, `4.1`, `4.2`, `4.3`, `4.4`, `4.5`, `4.6`, `5`
-- [x] Complete · PR: #PENDING
+- [x] Complete · PR: #72
 
 ---
 
