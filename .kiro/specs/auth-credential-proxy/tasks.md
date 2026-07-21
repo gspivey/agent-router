@@ -261,22 +261,22 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
   - Test error responses for unknown session/project
   - _Requirements: 7.3_
 
-- [ ] 19. Checkpoint — MCP credential tools and session integration tests green
+- [x] 19. Checkpoint — MCP credential tools and session integration tests green
   - Run full test suite (`npm test`). All tests in scope must pass. If any task scope changed during implementation, post a checkpoint comment summarizing changes and unresolved questions. Only proceed to the next batch when this checkpoint passes.
 
 - [ ] 20. Implement webhook token reverse lookup
-  - [ ] 20.1 Extend `createApp` in `src/server.ts` to accept `TokenStore` dependency
+  - [x] 20.1 Extend `createApp` in `src/server.ts` to accept `TokenStore` dependency
     - Add `tokenStore: TokenStore` to deps (required — always present, including fallback mode)
     - When webhook handler needs to post status comment: call `tokenStore.findProjectByRepo(repo)` → `tokenStore.getToken(project)` → use `.reveal()` for Authorization header
     - If no project found for repo → log warning, skip outgoing API call (Req 8.3)
     - _Requirements: 8.1, 8.2, 8.3_
-  - [ ] 20.2 Write Tier 2 webhook token tests in `test/tier2/webhook-token.test.ts`
+  - [x] 20.2 Write Tier 2 webhook token tests in `test/tier2/webhook-token.test.ts`
     - Test webhook handler uses correct project-scoped PAT for outgoing API calls
     - Test unknown repo → warning logged, no outgoing call
     - Test fallback mode (single synthetic project) works for webhook lookup
     - _Requirements: 8.1, 8.2, 8.3_
 
-- [ ] 21. Implement CLI `tokens status` IPC op
+- [x] 21. Implement CLI `tokens status` IPC op
   - Add `tokens_status { check?: boolean }` IPC op to `src/cli-server.ts`
   - Returns `{ projects: Array<{ name, repoCount, expiryStatus, validationResult? }> }`
   - When `check: true`: call `GET /user` with each token, cache results for 1 hour in `$AGENT_ROUTER_HOME/.token-check-cache.json`
@@ -284,16 +284,16 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
   - _Requirements: 12.3, 12.4, 12.5_
 
 - [ ] 22. Implement CLI daemon-offline fallback and tests
-  - [ ] 22.1 Implement CLI daemon-offline fallback
+  - [x] 22.1 Implement CLI daemon-offline fallback
     - CLI first attempts daemon socket; if unreachable (missing, refused, timeout >2s), fall back to reading `tokens.json` directly
     - Report project metadata without live `--check` results when daemon offline
     - Output includes `Source:` header: `Source: daemon (live)` or `Source: file (daemon offline; --check unavailable)`
     - _Requirements: 12.3, 12.4_
-  - [ ] 22.2 Write property test for token check cache validity (Property 15)
+  - [x] 22.2 Write property test for token check cache validity (Property 15)
     - **Property 15: Token check cache validity**
     - Generate cache entries with various `checked_at` timestamps, verify valid iff `now - checked_at < 3600000`
     - **Validates: Requirements 12.5**
-  - [ ] 22.3 Write unit tests for CLI tokens status
+  - [x] 22.3 Write unit tests for CLI tokens status
     - Test output format with various project states (valid, expiring-soon, expired, no-expiry-set)
     - Test `--check` flag triggers live validation
     - Test cache hit (within 1 hour) and cache miss (expired)
