@@ -175,33 +175,33 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Verify `read_repos` stored correctly in session metadata and available via IPC
     - _Requirements: 3.6_
 
-- [ ] 12. Checkpoint — Session manager integration tests green
+- [x] 12. Checkpoint — Session manager integration tests green
   - Run full test suite (`npm test`). All tests in scope must pass. If any task scope changed during implementation, post a checkpoint comment summarizing changes and unresolved questions. Only proceed to the next batch when this checkpoint passes.
 
-- [ ] 13. Implement IPC ops for credential tools in `src/cli-server.ts`
+- [x] 13. Implement IPC ops for credential tools in `src/cli-server.ts`
   - Add `get_session_project { session_id }` → `{ project, repos, read_repos }` or `{ error }`
   - Add `get_token { project }` → `{ token, expires_at }` or `{ error }`
   - Wire `TokenStore` and `SessionManager` into `createCliServer` deps
   - IPC op handlers read `Bound_Project` / `read_repos` from session metadata as written by task 10. Coordinate field names between tasks 10.3 and this task to ensure no mismatch.
   - _Requirements: 7.3_
 
-- [ ] 14. MCP credential tools — IPC bootstrap and tool registration
+- [x] 14. MCP credential tools — IPC bootstrap and tool registration
   - Implement startup `get_session_project` IPC call with caching (single call, cached for session lifetime)
   - Register `github_http_forward` and `git_credential` in `MCP_TOOLS` array (skeleton handlers)
   - MCP subprocess receives `session_id` via `AGENT_ROUTER_SESSION_ID` env var at spawn time
   - _Requirements: 7.1, 7.2, 7.3_
 
-- [ ] 15. MCP credential tools — request validation
-  - [ ] 15.1 Implement method, path prefix, body size validators
+- [x] 15. MCP credential tools — request validation
+  - [x] 15.1 Implement method, path prefix, body size validators
     - Method: must be one of GET, POST, PUT, PATCH, DELETE (Property 11)
     - Path: must start with known GitHub API prefix (Property 12)
     - Body size: max 10 MB (Property 13)
     - _Requirements: 10.1, 10.2, 10.3_
-  - [ ] 15.2 Implement repo authorization check (Property 6)
+  - [x] 15.2 Implement repo authorization check (Property 6)
     - Write methods: repo must be in Bound_Project repo list
     - Read methods: public repos allowed; private repos outside Bound_Project require `read_repos` declaration
     - _Requirements: 3.4, 5.2, 6.2_
-  - [ ] 15.3 Write Tier 1 property tests for validators (Properties 6, 11, 12, 13)
+  - [x] 15.3 Write Tier 1 property tests for validators (Properties 6, 11, 12, 13)
     - **Property 6: Write authorization enforcement** — generate sessions with Bound_Project repo sets, verify write methods permitted iff repo in set
     - **Validates: Requirements 3.4, 5.2, 6.2**
     - **Property 11: HTTP method validation** — generate arbitrary strings, verify method validator accepts iff one of GET, POST, PUT, PATCH, DELETE
@@ -210,7 +210,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - **Validates: Requirements 10.1**
     - **Property 13: Request body size enforcement** — generate strings of various byte lengths, verify body validator rejects iff > 10 MB
     - **Validates: Requirements 10.3**
-  - [ ] 15.4 Write Tier 1 unit tests for validation edge cases
+  - [x] 15.4 Write Tier 1 unit tests for validation edge cases
     - Test boundary conditions for body size (exactly 10 MB, 10 MB + 1 byte)
     - Test all valid/invalid method strings
     - Test all valid path prefixes and invalid paths
@@ -253,7 +253,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Test token lookup failure returns error result
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
 
-- [ ] 18. Write Tier 2 IPC contract tests
+- [x] 18. Write Tier 2 IPC contract tests
   - Create `test/tier2/ipc-contract.test.ts`
   - Test `get_session_project` returns correct Bound_Project, repos, and read_repos
   - Test `get_token` returns valid token response with `expires_at` field
