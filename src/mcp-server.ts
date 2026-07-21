@@ -533,8 +533,10 @@ export function createMcpServer(ctx: McpContext): McpServer {
         }
         case 'git_credential': {
           const repo = toolArgs['repo'];
+          const startTime = Date.now();
 
           if (typeof repo !== 'string' || repo.length === 0) {
+            logCredentialCall('git_credential', '', '', startTime, 'error', 'repo_unauthorized');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "repo" argument' }) }],
               isError: true,
@@ -543,36 +545,48 @@ export function createMcpServer(ctx: McpContext): McpServer {
           }
 
           // Get session project for authorization
-          const sessionProject = await getSessionProject();
+          let sessionProject: { project: string; repos: string[]; readRepos: string[] };
+          try {
+            sessionProject = await getSessionProject();
+          } catch (err: unknown) {
+            logCredentialCall('git_credential', repo, '', startTime, 'error', 'token_missing');
+            throw err;
+          }
 
           // git_credential requires the repo to be in the Bound_Project repos (Req 6.2)
           if (!sessionProject.repos.includes(repo)) {
-            const authErr = {
-              code: 'repo_unauthorized',
-              message: `Repository "${repo}" is not in the bound project's repo list. Git credentials are only available for bound project repos.`,
-            };
+            logCredentialCall('git_credential', repo, sessionProject.project, startTime, 'error', 'repo_unauthorized');
             writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: authErr.message, code: authErr.code }) }],
+              content: [{ type: 'text', text: JSON.stringify({ error: `Repository "${repo}" is not in the bound project's repo list. Git credentials are only available for bound project repos.`, code: 'repo_unauthorized' }) }],
               isError: true,
             }));
             return;
           }
 
-          // Fetch token (not cached — fetched per call)
+          // Fetch token (not cached — fetched per call so rotation propagates)
           const tokenResp = await sendToDaemon(daemonSocket, {
             op: 'get_token',
             project: sessionProject.project,
           });
           if (tokenResp['error']) {
+            logCredentialCall('git_credential', repo, sessionProject.project, startTime, 'error', 'token_missing');
             writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: `Token retrieval failed: ${String(tokenResp['error'])}` }) }],
+              content: [{ type: 'text', text: JSON.stringify({ error: `Token retrieval failed: ${String(tokenResp['error'])}`, code: 'token_missing' }) }],
               isError: true,
             }));
             return;
           }
 
-          // Skeleton: full credential delivery not yet implemented
-          result = { error: 'git_credential: credential delivery not yet implemented (pending item 39)' };
+          const token = tokenResp['token'] as string;
+
+          // Return git credential format (Req 6.3)
+          logCredentialCall('git_credential', repo, sessionProject.project, startTime, 'success');
+          result = {
+            protocol: 'https',
+            host: 'github.com',
+            username: 'x-access-token',
+            password: token,
+          };
           break;
         }
         default: {

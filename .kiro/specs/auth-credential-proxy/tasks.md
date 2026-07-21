@@ -241,13 +241,13 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 10.1, 10.2, 10.3, 10.4_
 
 - [ ] 17. MCP credential tools — `git_credential` implementation
-  - [ ] 17.1 Implement git credential format response
+  - [x] 17.1 Implement git credential format response
     - Validate repo in Bound_Project repos
     - Per tool call: issue `get_token` IPC call (not cached)
     - Return `{ protocol: "https", host: "github.com", username: "x-access-token", password: "<token>" }`
     - Log structured entry per call (same Property 14 fields including `error_code`)
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
-  - [ ] 17.2 Write Tier 2 tests for `git_credential`
+  - [x] 17.2 Write Tier 2 tests for `git_credential`
     - Test `git_credential` returns correct credential format
     - Test `git_credential` rejects unauthorized repo
     - Test token lookup failure returns error result
