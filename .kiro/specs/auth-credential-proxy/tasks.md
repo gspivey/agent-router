@@ -7,28 +7,28 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
 ## Tasks
 
 - [ ] 1. Create Secret wrapper type and Tier 1 tests
-  - [ ] 1.1 Create `src/secret.ts` with `Secret` class
+  - [x] 1.1 Create `src/secret.ts` with `Secret` class
     - Private constructor, `Secret.of(value)` factory that throws on empty string
     - `reveal()` returns raw value
     - `toString()`, `toJSON()`, `[Symbol.for('nodejs.util.inspect.custom')]()` all return `'[REDACTED]'`
     - _Requirements: 4.2, 6.5, 11.2_
-  - [ ] 1.2 Write property test for Secret redaction (Property 8)
+  - [x] 1.2 Write property test for Secret redaction (Property 8)
     - **Property 8: Token redaction in logs**
     - Create `test/tier1/secret.test.ts`
     - Generate arbitrary non-empty strings, wrap in `Secret`, verify `toString()`, `toJSON()`, and `JSON.stringify()` never contain the raw value
     - **Validates: Requirements 4.2, 6.5, 11.2**
-  - [ ] 1.3 Write unit tests for Secret edge cases
+  - [x] 1.3 Write unit tests for Secret edge cases
     - Test `Secret.of('')` throws, `Secret.of('abc').reveal()` returns `'abc'`
     - Test that `console.log` / `util.inspect` output contains `[REDACTED]`
     - _Requirements: 4.2, 6.5, 11.2_
 
 - [ ] 2. Extend test harness for credential testing
-  - [ ] 2.1 Extend mock GitHub API server in `test/harness/fake-github.ts`
+  - [x] 2.1 Extend mock GitHub API server in `test/harness/fake-github.ts`
     - Add Authorization header validation on incoming requests
     - Return canned responses for credential tool forwarding tests
     - Make reusable for future specs
     - _Requirements: 5.3, 5.4_
-  - [ ] 2.2 Create mock daemon socket in `test/harness/`
+  - [x] 2.2 Create mock daemon socket in `test/harness/`
     - Simulate `get_session_project` and `get_token` IPC operations
     - Configurable responses for different session/project scenarios
     - Mocks SHALL be standalone modules importable from `test/harness/`. fast-check default iterations set to 100 in test config.

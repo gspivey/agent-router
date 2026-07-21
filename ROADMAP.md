@@ -35,22 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 32. Secret type + test harness extensions
-
-Create `src/secret.ts` with a `Secret` wrapper class that prevents raw credential strings from
-leaking into logs, JSON output, or string interpolation. Private constructor, `Secret.of(value)`
-factory (throws on empty), `reveal()` for controlled access, `toString()`/`toJSON()`/custom
-inspect all return `[REDACTED]`. Extend `test/harness/fake-github.ts` with Authorization header
-validation (`requireAuthToken`) and canned response support for credential-tool forwarding tests.
-Create `test/harness/mock-daemon-socket.ts` simulating `get_session_project` and `get_token` IPC
-operations for future MCP credential tool Tier 2 tests. Property tests (fast-check, 100 runs)
-for the Secret redaction guarantee; Tier 2 tests for the harness extensions.
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `1.1`, `1.2`, `1.3`, `2.1`, `2.2`
-- [ ] Complete · PR: —
-
----
-
 ### 33. Pure validation functions + property tests
 
 Create `src/token-store.ts` with exported pure validation functions and type definitions:
@@ -184,6 +168,22 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 32. Secret type + test harness extensions
+
+Create `src/secret.ts` with a `Secret` wrapper class that prevents raw credential strings from
+leaking into logs, JSON output, or string interpolation. Private constructor, `Secret.of(value)`
+factory (throws on empty), `reveal()` for controlled access, `toString()`/`toJSON()`/custom
+inspect all return `[REDACTED]`. Extend `test/harness/fake-github.ts` with Authorization header
+validation (`requireAuthToken`) and canned response support for credential-tool forwarding tests.
+Create `test/harness/mock-daemon-socket.ts` simulating `get_session_project` and `get_token` IPC
+operations for future MCP credential tool Tier 2 tests. Property tests (fast-check, 100 runs)
+for the Secret redaction guarantee; Tier 2 tests for the harness extensions.
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `1.1`, `1.2`, `1.3`, `2.1`, `2.2`
+- [x] Complete · PR: #71
+
+---
 
 ### 31. `no_work_available` termination reason
 
