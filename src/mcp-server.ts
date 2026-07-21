@@ -6,10 +6,35 @@ import {
   validateBodySize,
   validateRepoAuthorization,
 } from './credential-validators.js';
+import type { Logger } from './log.js';
+
+/** Error codes for credential tool structured logging (Property 14). */
+export type CredentialErrorCode =
+  | 'token_missing'
+  | 'repo_unauthorized'
+  | 'upstream_5xx'
+  | 'upstream_timeout'
+  | 'body_too_large'
+  | 'method_invalid'
+  | 'path_invalid';
+
+/** Structured log entry for credential tool calls (Property 14). */
+export interface CredentialLogEntry {
+  tool_name: string;
+  repo: string;
+  project: string;
+  session_id: string;
+  status: 'success' | 'error';
+  duration_ms: number;
+  error_code?: CredentialErrorCode;
+}
 
 export interface McpContext {
   sessionId: string;
   daemonSocket: string;
+  log?: Logger;
+  /** Override the GitHub API base URL (for testing against fake server). Defaults to https://api.github.com */
+  githubApiBaseUrl?: string;
 }
 
 export interface McpServer {
@@ -173,6 +198,8 @@ function makeSuccessResponse(id: number | string | null, result: unknown): JsonR
 
 export function createMcpServer(ctx: McpContext): McpServer {
   const { sessionId, daemonSocket } = ctx;
+  const log = ctx.log;
+  const githubApiBaseUrl = ctx.githubApiBaseUrl ?? 'https://api.github.com';
   let running = false;
   let rl: ReturnType<typeof createInterface> | null = null;
 
@@ -180,6 +207,38 @@ export function createMcpServer(ctx: McpContext): McpServer {
   // Fetched once from the daemon and reused for the session's lifetime.
   let cachedProject: { project: string; repos: string[]; readRepos: string[] } | null = null;
   let projectFetchFailed: string | null = null;
+
+  /**
+   * Log a structured credential tool call entry (Property 14).
+   * Fields: tool_name, repo, project, session_id, status, duration_ms, error_code.
+   */
+  function logCredentialCall(
+    toolName: string,
+    repo: string,
+    project: string,
+    startTime: number,
+    status: 'success' | 'error',
+    errorCode?: CredentialErrorCode,
+  ): void {
+    if (!log) return;
+    const durationMs = Date.now() - startTime;
+    const fields: Record<string, unknown> = {
+      tool_name: toolName,
+      repo,
+      project,
+      session_id: sessionId,
+      status,
+      duration_ms: durationMs,
+    };
+    if (errorCode) {
+      fields['error_code'] = errorCode;
+    }
+    if (status === 'error') {
+      log.warn('credential tool call failed', fields);
+    } else {
+      log.info('credential tool call', fields);
+    }
+  }
 
   async function getSessionProject(): Promise<{ project: string; repos: string[]; readRepos: string[] }> {
     if (cachedProject) return cachedProject;
@@ -311,8 +370,10 @@ export function createMcpServer(ctx: McpContext): McpServer {
           const path = toolArgs['path'];
           const body = toolArgs['body'];
           const repo = toolArgs['repo'];
+          const startTime = Date.now();
 
           if (typeof method !== 'string' || method.length === 0) {
+            logCredentialCall('github_http_forward', typeof repo === 'string' ? repo : '', '', startTime, 'error', 'method_invalid');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "method" argument' }) }],
               isError: true,
@@ -320,6 +381,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
           if (typeof path !== 'string' || path.length === 0) {
+            logCredentialCall('github_http_forward', typeof repo === 'string' ? repo : '', '', startTime, 'error', 'method_invalid');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "path" argument' }) }],
               isError: true,
@@ -327,6 +389,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
           if (typeof repo !== 'string' || repo.length === 0) {
+            logCredentialCall('github_http_forward', '', '', startTime, 'error', 'repo_unauthorized');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "repo" argument' }) }],
               isError: true,
@@ -339,6 +402,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
           // Validate method
           const methodErr = validateMethod(method);
           if (methodErr) {
+            logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'method_invalid');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: methodErr.message, code: methodErr.code }) }],
               isError: true,
@@ -349,6 +413,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
           // Validate path prefix
           const pathErr = validatePathPrefix(path);
           if (pathErr) {
+            logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'path_invalid');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: pathErr.message, code: pathErr.code }) }],
               isError: true,
@@ -359,6 +424,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
           // Validate body size
           const bodyErr = validateBodySize(bodyStr);
           if (bodyErr) {
+            logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'body_too_large');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: bodyErr.message, code: bodyErr.code }) }],
               isError: true,
@@ -367,7 +433,13 @@ export function createMcpServer(ctx: McpContext): McpServer {
           }
 
           // Get session project for authorization
-          const sessionProject = await getSessionProject();
+          let sessionProject: { project: string; repos: string[]; readRepos: string[] };
+          try {
+            sessionProject = await getSessionProject();
+          } catch (err: unknown) {
+            logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'token_missing');
+            throw err;
+          }
 
           // Validate repo authorization
           const authErr = validateRepoAuthorization(method, repo, {
@@ -375,6 +447,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
             readRepos: sessionProject.readRepos,
           });
           if (authErr) {
+            logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'repo_unauthorized');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: authErr.message, code: authErr.code }) }],
               isError: true,
@@ -382,12 +455,13 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
 
-          // Fetch token (not cached — fetched per call)
+          // Fetch token (not cached — fetched per call so rotation propagates)
           const tokenResp = await sendToDaemon(daemonSocket, {
             op: 'get_token',
             project: sessionProject.project,
           });
           if (tokenResp['error']) {
+            logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'token_missing');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: `Token retrieval failed: ${String(tokenResp['error'])}` }) }],
               isError: true,
@@ -395,8 +469,66 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
 
-          // Skeleton: full HTTP forwarding not yet implemented
-          result = { error: 'github_http_forward: HTTP forwarding not yet implemented (pending item 38)' };
+          const token = tokenResp['token'] as string;
+          const baseUrl = githubApiBaseUrl;
+
+          // Forward request to GitHub API with 30s timeout
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 30_000);
+
+          try {
+            const upstreamUrl = `${baseUrl}${path}`;
+            const fetchOpts: RequestInit = {
+              method,
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'User-Agent': 'agent-router/0.1.0',
+                'Accept': 'application/vnd.github+json',
+              },
+              signal: controller.signal,
+            };
+            if (bodyStr !== undefined) {
+              fetchOpts.body = bodyStr;
+              (fetchOpts.headers as Record<string, string>)['Content-Type'] = 'application/json';
+            }
+
+            const upstreamResp = await fetch(upstreamUrl, fetchOpts);
+            clearTimeout(timeout);
+
+            const responseBody = await upstreamResp.text();
+            const responseHeaders: Record<string, string> = {};
+            upstreamResp.headers.forEach((value, key) => {
+              responseHeaders[key] = value;
+            });
+
+            const errorCode = upstreamResp.status >= 500 ? 'upstream_5xx' as const : undefined;
+            logCredentialCall(
+              'github_http_forward',
+              repo,
+              sessionProject.project,
+              startTime,
+              errorCode ? 'error' : 'success',
+              errorCode,
+            );
+
+            result = {
+              status: upstreamResp.status,
+              headers: responseHeaders,
+              body: responseBody,
+            };
+          } catch (fetchErr: unknown) {
+            clearTimeout(timeout);
+            if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
+              logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'upstream_timeout');
+              writeResponse(makeSuccessResponse(req.id, {
+                content: [{ type: 'text', text: JSON.stringify({ error: 'Request timed out after 30 seconds', code: 'upstream_timeout' }) }],
+                isError: true,
+              }));
+              return;
+            }
+            logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'upstream_timeout');
+            throw fetchErr;
+          }
           break;
         }
         case 'git_credential': {
@@ -562,9 +694,12 @@ if (isMainModule) {
     process.exit(1);
   }
 
+  const envBaseUrl = process.env['GITHUB_API_BASE_URL'];
+
   const server = createMcpServer({
     sessionId: envSessionId,
     daemonSocket: envSocket,
+    ...(envBaseUrl ? { githubApiBaseUrl: envBaseUrl } : {}),
   });
 
   server.start().catch((err: unknown) => {
