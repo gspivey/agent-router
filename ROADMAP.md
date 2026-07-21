@@ -35,19 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 36. Session `read_repos` parsing
-
-Implement YAML frontmatter and explicit-arg `read_repos` parsing in `src/session-mgr.ts`. Store
-parsed `read_repos` in session metadata as `bound_project_read_repos`. Tier 1 unit tests for
-parsing edge cases (valid/invalid/missing YAML frontmatter, explicit parameter, malformed inputs).
-Tier 2 test verifying `read_repos` stored correctly and available via IPC. Builds on item 35
-(session metadata fields).
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `11.1`, `11.2`, `11.3`, `11.4`
-- [ ] Complete · PR: —
-
----
-
 ### 37. IPC ops + MCP credential bootstrap + request validation
 
 Add `get_session_project` and `get_token` IPC ops to `src/cli-server.ts`. Implement MCP startup
@@ -121,6 +108,19 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 36. Session `read_repos` parsing
+
+Implement YAML frontmatter and explicit-arg `read_repos` parsing in `src/session-mgr.ts`. Store
+parsed `read_repos` in session metadata as `bound_project_read_repos`. Tier 1 unit tests for
+parsing edge cases (valid/invalid/missing YAML frontmatter, explicit parameter, malformed inputs).
+Tier 2 test verifying `read_repos` stored correctly and available via IPC. Builds on item 35
+(session metadata fields).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `11.1`, `11.2`, `11.3`, `11.4`
+- [x] Complete · PR: #75
+
+---
 
 ### 35. Config `credentialMode` + session credential injection
 

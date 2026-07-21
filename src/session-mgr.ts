@@ -13,6 +13,196 @@ import type { TurnQueue } from './turn-queue.js';
 import { createTurnQueue } from './turn-queue.js';
 import type { WorktreeManager } from './worktree-manager.js';
 import type { TokenStore } from './token-store.js';
+import { isValidRepoString } from './token-store.js';
+
+// ---------------------------------------------------------------------------
+// read_repos parsing — pure functions for extracting read_repos from prompts
+// ---------------------------------------------------------------------------
+
+/** Result of parsing read_repos from a prompt's YAML frontmatter. */
+export interface ReadReposParseResult {
+  /** Valid read_repos entries (owner/repo format). Empty array if none found. */
+  repos: string[];
+  /** Invalid entries that failed validation (for diagnostics). */
+  invalid: string[];
+}
+
+/**
+ * Extract YAML frontmatter from the beginning of a prompt string.
+ *
+ * Frontmatter is delimited by `---` on the first line and a closing `---`
+ * on a subsequent line. Returns the raw frontmatter content (without
+ * delimiters), or undefined if no valid frontmatter is found.
+ */
+export function extractFrontmatter(prompt: string): string | undefined {
+  // Frontmatter must start at the very beginning of the string
+  if (!prompt.startsWith('---')) return undefined;
+
+  // Find the closing delimiter. The opening `---` may have trailing whitespace
+  // or a newline immediately after it.
+  const firstNewline = prompt.indexOf('\n');
+  if (firstNewline === -1) return undefined;
+
+  // Check that the first line is only `---` (with optional trailing whitespace)
+  const firstLine = prompt.slice(0, firstNewline).trim();
+  if (firstLine !== '---') return undefined;
+
+  // Find the closing `---` on its own line
+  const rest = prompt.slice(firstNewline + 1);
+  const lines = rest.split('\n');
+  let closingIndex = -1;
+  let charCount = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.trim() === '---') {
+      closingIndex = i;
+      break;
+    }
+    charCount += lines[i]!.length + 1; // +1 for the newline
+  }
+
+  if (closingIndex === -1) return undefined;
+
+  // Return the content between the two `---` lines
+  return lines.slice(0, closingIndex).join('\n');
+}
+
+/**
+ * Parse `read_repos` from YAML frontmatter content.
+ *
+ * Supports the common YAML list format:
+ * ```
+ * read_repos:
+ *   - owner/repo
+ *   - owner/other-repo
+ * ```
+ *
+ * Also supports inline flow syntax:
+ * ```
+ * read_repos: [owner/repo, owner/other-repo]
+ * ```
+ *
+ * This is a minimal YAML subset parser — it does NOT handle the full YAML spec.
+ * Only the `read_repos` key is extracted; other keys are ignored.
+ */
+export function parseReadReposFromFrontmatter(frontmatter: string): ReadReposParseResult {
+  const lines = frontmatter.split('\n');
+  const repos: string[] = [];
+  const invalid: string[] = [];
+
+  let inReadRepos = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+
+    // Check for the `read_repos:` key
+    if (/^read_repos\s*:/.test(line)) {
+      inReadRepos = true;
+
+      // Check for inline flow syntax: read_repos: [owner/repo, owner/other]
+      const inlineMatch = line.match(/^read_repos\s*:\s*\[([^\]]*)\]\s*$/);
+      if (inlineMatch !== null) {
+        const items = inlineMatch[1]!.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+        for (const item of items) {
+          if (isValidRepoString(item)) {
+            repos.push(item);
+          } else {
+            invalid.push(item);
+          }
+        }
+        inReadRepos = false;
+        continue;
+      }
+
+      // Check for a single value on the same line: read_repos: owner/repo
+      const singleValue = line.replace(/^read_repos\s*:\s*/, '').trim();
+      if (singleValue.length > 0 && !singleValue.startsWith('-') && !singleValue.startsWith('[')) {
+        if (isValidRepoString(singleValue)) {
+          repos.push(singleValue);
+        } else {
+          invalid.push(singleValue);
+        }
+        inReadRepos = false;
+        continue;
+      }
+
+      continue;
+    }
+
+    // If we're inside the read_repos block, look for list items
+    if (inReadRepos) {
+      // A line that is not indented or is a new key ends the block
+      if (line.trim().length === 0) continue; // blank lines are ok inside the block
+      if (/^\S/.test(line)) {
+        // New top-level key — end of read_repos block
+        inReadRepos = false;
+        continue;
+      }
+
+      // List item: `  - owner/repo`
+      const itemMatch = line.match(/^\s+-\s+(.+)$/);
+      if (itemMatch !== null) {
+        const value = itemMatch[1]!.trim();
+        if (isValidRepoString(value)) {
+          repos.push(value);
+        } else {
+          invalid.push(value);
+        }
+      }
+      // Non-list-item indented lines (e.g., comments) are ignored
+    }
+  }
+
+  return { repos, invalid };
+}
+
+/**
+ * Parse `read_repos` from a prompt string.
+ *
+ * Extracts YAML frontmatter (if present) and parses `read_repos` from it.
+ * Returns an empty result if no frontmatter or no `read_repos` key is found.
+ */
+export function parseReadReposFromPrompt(prompt: string): ReadReposParseResult {
+  const frontmatter = extractFrontmatter(prompt);
+  if (frontmatter === undefined) {
+    return { repos: [], invalid: [] };
+  }
+  return parseReadReposFromFrontmatter(frontmatter);
+}
+
+/**
+ * Resolve the final `read_repos` list for a session.
+ *
+ * Priority:
+ * 1. Explicit `readRepos` parameter (if provided and non-empty, used as-is)
+ * 2. Parsed from prompt YAML frontmatter
+ *
+ * All entries are validated as `owner/repo` format. Invalid entries are
+ * filtered out (logged by the caller).
+ *
+ * Returns the validated repos array and any invalid entries for diagnostic logging.
+ */
+export function resolveReadRepos(
+  prompt: string,
+  explicitReadRepos?: string[],
+): ReadReposParseResult {
+  // Explicit parameter takes priority
+  if (explicitReadRepos !== undefined && explicitReadRepos.length > 0) {
+    const repos: string[] = [];
+    const invalid: string[] = [];
+    for (const repo of explicitReadRepos) {
+      if (isValidRepoString(repo)) {
+        repos.push(repo);
+      } else {
+        invalid.push(repo);
+      }
+    }
+    return { repos, invalid };
+  }
+
+  // Fall back to prompt frontmatter parsing
+  return parseReadReposFromPrompt(prompt);
+}
 
 export interface SessionHandle {
   sessionId: string;
@@ -47,7 +237,7 @@ export interface MergePRResult {
 }
 
 export interface SessionManager {
-  createSession(originalPrompt: string, repo?: string): Promise<SessionHandle>;
+  createSession(originalPrompt: string, repo?: string, readRepos?: string[]): Promise<SessionHandle>;
   hasActiveSessionForRepo(repo: string): boolean;
   injectPrompt(sessionId: string, prompt: string, source: PromptSource): Promise<void>;
   registerPR(sessionId: string, repo: string, prNumber: number): Promise<void>;
@@ -519,7 +709,7 @@ export function createSessionManager(deps: {
   }
 
   const manager: SessionManager = {
-    async createSession(originalPrompt: string, repo?: string): Promise<SessionHandle> {
+    async createSession(originalPrompt: string, repo?: string, readRepos?: string[]): Promise<SessionHandle> {
       const sessionId = crypto.randomUUID();
       const sessionLog = log.child({ sessionId });
 
@@ -548,6 +738,21 @@ export function createSessionManager(deps: {
         });
       }
 
+      // 0b. Resolve read_repos from explicit parameter or prompt frontmatter
+      const readReposResult = resolveReadRepos(originalPrompt, readRepos);
+      const boundProjectReadRepos = readReposResult.repos.length > 0
+        ? readReposResult.repos
+        : undefined;
+
+      if (readReposResult.invalid.length > 0) {
+        sessionLog.warn('Invalid read_repos entries ignored', {
+          invalid: readReposResult.invalid,
+        });
+      }
+      if (boundProjectReadRepos !== undefined) {
+        sessionLog.info('read_repos resolved', { read_repos: boundProjectReadRepos });
+      }
+
       // 1. Create session files on disk
       const paths = sessionFiles.createSession(sessionId, originalPrompt);
       if (repo !== undefined) {
@@ -556,10 +761,19 @@ export function createSessionManager(deps: {
 
       // Write credential metadata to session
       if (boundProject !== undefined && boundProjectRepos !== undefined) {
-        sessionFiles.updateMeta(sessionId, {
+        const credMeta: Partial<SessionMeta> = {
           bound_project: boundProject,
           bound_project_repos: boundProjectRepos,
           credential_mode: credentialMode,
+        };
+        if (boundProjectReadRepos !== undefined) {
+          credMeta.bound_project_read_repos = boundProjectReadRepos;
+        }
+        sessionFiles.updateMeta(sessionId, credMeta);
+      } else if (boundProjectReadRepos !== undefined) {
+        // read_repos can be set even without a bound project (standalone sessions)
+        sessionFiles.updateMeta(sessionId, {
+          bound_project_read_repos: boundProjectReadRepos,
         });
       }
       sessionLog.info('Session files created');

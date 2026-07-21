@@ -66,6 +66,9 @@ export function createCliServer(deps: {
       }
       const repo = typeof req['repo'] === 'string' ? req['repo'] : undefined;
       const force = req['force'] === true;
+      const readRepos = Array.isArray(req['read_repos'])
+        ? (req['read_repos'] as unknown[]).filter((r): r is string => typeof r === 'string')
+        : undefined;
 
       // Collision detection: refuse if an active session exists for this repo
       if (repo !== undefined && !force && sessionMgr.hasActiveSessionForRepo(repo)) {
@@ -74,7 +77,7 @@ export function createCliServer(deps: {
         );
       }
 
-      const handle = await sessionMgr.createSession(prompt, repo);
+      const handle = await sessionMgr.createSession(prompt, repo, readRepos);
       return {
         session_id: handle.sessionId,
         stream_path: handle.paths.stream,
