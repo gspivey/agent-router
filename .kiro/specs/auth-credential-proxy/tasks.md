@@ -218,21 +218,21 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - _Requirements: 10.1, 10.2, 10.3, 3.4, 5.2, 6.2_
 
 - [ ] 16. MCP credential tools — `github_http_forward` implementation
-  - [ ] 16.1 Implement header injection, upstream forwarding, timeout
+  - [x] 16.1 Implement header injection, upstream forwarding, timeout
     - Per tool call: issue `get_token` IPC call (not cached — rotation propagates)
     - Inject `Authorization: Bearer <token>`, `User-Agent: agent-router/<version>`, `Accept: application/vnd.github+json` headers
     - Forward to `https://api.github.com`, 30s timeout, return status + headers + body
     - _Requirements: 5.1, 5.3, 5.4, 10.4, 10.5_
-  - [ ] 16.2 Implement structured logging with Property 14 fields
+  - [x] 16.2 Implement structured logging with Property 14 fields
     - Log structured entry per call: `tool_name`, `repo`, `project`, `session_id`, `status`, `duration_ms`, `error_code`
     - `error_code` field is a string enum: `token_missing`, `repo_unauthorized`, `upstream_5xx`, `upstream_timeout`, `body_too_large`, `method_invalid`, `path_invalid`
     - Never log token values or Authorization header contents (Req 11.2)
     - _Requirements: 11.1, 11.2, 11.3_
-  - [ ] 16.3 Write Tier 1 property test for credential log entry structure (Property 14)
+  - [x] 16.3 Write Tier 1 property test for credential log entry structure (Property 14)
     - **Property 14: Credential log entry structure**
     - Verify every credential tool call log entry contains `tool_name`, `repo`, `project`, `session_id`, `status`, `duration_ms`, `error_code`
     - **Validates: Requirements 11.1**
-  - [ ] 16.4 Write Tier 2 tests against fake GitHub server in `test/tier2/credential-mcp.test.ts`
+  - [x] 16.4 Write Tier 2 tests against fake GitHub server in `test/tier2/credential-mcp.test.ts`
     - Test token injection in Authorization header against mock GitHub API server
     - Test response passthrough (status, headers, body)
     - Test 30s timeout handling

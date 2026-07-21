@@ -35,21 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 38. MCP `github_http_forward` tool
-
-Implement the `github_http_forward` MCP tool: per-call `get_token` IPC (not cached — rotation
-propagates), inject `Authorization: Bearer <token>` + `User-Agent` + `Accept` headers, forward
-to `https://api.github.com`, 30s timeout, return status + headers + body. Structured logging
-(Property 14 fields: `tool_name`, `repo`, `project`, `session_id`, `status`, `duration_ms`,
-`error_code`). Never log token values. Property test for log entry structure. Tier 2 tests
-against fake GitHub server (token injection, response passthrough, timeout, body size, read/write
-enforcement). Builds on items 37 (validation + IPC) and 32 (fake GitHub auth).
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `16.1`, `16.2`, `16.3`, `16.4`
-- [ ] Complete · PR: —
-
----
-
 ### 39. MCP `git_credential` tool + IPC contract tests
 
 Implement `git_credential` MCP tool: validate repo in Bound_Project repos, per-call `get_token`
@@ -94,6 +79,21 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 38. MCP `github_http_forward` tool
+
+Implement the `github_http_forward` MCP tool: per-call `get_token` IPC (not cached — rotation
+propagates), inject `Authorization: Bearer <token>` + `User-Agent` + `Accept` headers, forward
+to `https://api.github.com`, 30s timeout, return status + headers + body. Structured logging
+(Property 14 fields: `tool_name`, `repo`, `project`, `session_id`, `status`, `duration_ms`,
+`error_code`). Never log token values. Property test for log entry structure. Tier 2 tests
+against fake GitHub server (token injection, response passthrough, timeout, body size, read/write
+enforcement). Builds on items 37 (validation + IPC) and 32 (fake GitHub auth).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `16.1`, `16.2`, `16.3`, `16.4`
+- [x] Complete · PR: #77
+
+---
 
 ### 37. IPC ops + MCP credential bootstrap + request validation
 
