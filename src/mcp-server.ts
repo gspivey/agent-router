@@ -1,5 +1,11 @@
 import * as net from 'node:net';
 import { createInterface } from 'node:readline';
+import {
+  validateMethod,
+  validatePathPrefix,
+  validateBodySize,
+  validateRepoAuthorization,
+} from './credential-validators.js';
 
 export interface McpContext {
   sessionId: string;
@@ -84,6 +90,31 @@ const MCP_TOOLS: McpToolDefinition[] = [
       required: ['reason'],
     },
   },
+  {
+    name: 'github_http_forward',
+    description: 'Forward an HTTP request to the GitHub API with project-scoped authentication.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        method: { type: 'string', description: 'HTTP method: GET, POST, PUT, PATCH, DELETE' },
+        path: { type: 'string', description: 'GitHub API path (e.g., /repos/owner/name/pulls)' },
+        body: { type: 'string', description: 'Request body as JSON string (optional)' },
+        repo: { type: 'string', description: 'Repository in owner/repo format' },
+      },
+      required: ['method', 'path', 'repo'],
+    },
+  },
+  {
+    name: 'git_credential',
+    description: 'Get git HTTPS credentials for a repository.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: { type: 'string', description: 'Repository in owner/repo format' },
+      },
+      required: ['repo'],
+    },
+  },
 ];
 
 /**
@@ -144,6 +175,34 @@ export function createMcpServer(ctx: McpContext): McpServer {
   const { sessionId, daemonSocket } = ctx;
   let running = false;
   let rl: ReturnType<typeof createInterface> | null = null;
+
+  // Cached session project info — populated on first tool call that needs it.
+  // Fetched once from the daemon and reused for the session's lifetime.
+  let cachedProject: { project: string; repos: string[]; readRepos: string[] } | null = null;
+  let projectFetchFailed: string | null = null;
+
+  async function getSessionProject(): Promise<{ project: string; repos: string[]; readRepos: string[] }> {
+    if (cachedProject) return cachedProject;
+    if (projectFetchFailed) throw new Error(projectFetchFailed);
+
+    const response = await sendToDaemon(daemonSocket, {
+      op: 'get_session_project',
+      session_id: sessionId,
+    });
+
+    if (response['error']) {
+      const errMsg = `Failed to get session project: ${String(response['error'])}`;
+      projectFetchFailed = errMsg;
+      throw new Error(errMsg);
+    }
+
+    cachedProject = {
+      project: response['project'] as string,
+      repos: response['repos'] as string[],
+      readRepos: response['read_repos'] as string[],
+    };
+    return cachedProject;
+  }
 
   async function handleInitialize(req: JsonRpcRequest): Promise<void> {
     writeResponse(makeSuccessResponse(req.id, {
@@ -245,6 +304,143 @@ export function createMcpServer(ctx: McpContext): McpServer {
             session_id: sessionId,
             reason,
           });
+          break;
+        }
+        case 'github_http_forward': {
+          const method = toolArgs['method'];
+          const path = toolArgs['path'];
+          const body = toolArgs['body'];
+          const repo = toolArgs['repo'];
+
+          if (typeof method !== 'string' || method.length === 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "method" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+          if (typeof path !== 'string' || path.length === 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "path" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+          if (typeof repo !== 'string' || repo.length === 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "repo" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          const bodyStr = typeof body === 'string' ? body : undefined;
+
+          // Validate method
+          const methodErr = validateMethod(method);
+          if (methodErr) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: methodErr.message, code: methodErr.code }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Validate path prefix
+          const pathErr = validatePathPrefix(path);
+          if (pathErr) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: pathErr.message, code: pathErr.code }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Validate body size
+          const bodyErr = validateBodySize(bodyStr);
+          if (bodyErr) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: bodyErr.message, code: bodyErr.code }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Get session project for authorization
+          const sessionProject = await getSessionProject();
+
+          // Validate repo authorization
+          const authErr = validateRepoAuthorization(method, repo, {
+            boundProjectRepos: sessionProject.repos,
+            readRepos: sessionProject.readRepos,
+          });
+          if (authErr) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: authErr.message, code: authErr.code }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Fetch token (not cached — fetched per call)
+          const tokenResp = await sendToDaemon(daemonSocket, {
+            op: 'get_token',
+            project: sessionProject.project,
+          });
+          if (tokenResp['error']) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: `Token retrieval failed: ${String(tokenResp['error'])}` }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Skeleton: full HTTP forwarding not yet implemented
+          result = { error: 'github_http_forward: HTTP forwarding not yet implemented (pending item 38)' };
+          break;
+        }
+        case 'git_credential': {
+          const repo = toolArgs['repo'];
+
+          if (typeof repo !== 'string' || repo.length === 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "repo" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Get session project for authorization
+          const sessionProject = await getSessionProject();
+
+          // git_credential requires the repo to be in the Bound_Project repos (Req 6.2)
+          if (!sessionProject.repos.includes(repo)) {
+            const authErr = {
+              code: 'repo_unauthorized',
+              message: `Repository "${repo}" is not in the bound project's repo list. Git credentials are only available for bound project repos.`,
+            };
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: authErr.message, code: authErr.code }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Fetch token (not cached — fetched per call)
+          const tokenResp = await sendToDaemon(daemonSocket, {
+            op: 'get_token',
+            project: sessionProject.project,
+          });
+          if (tokenResp['error']) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: `Token retrieval failed: ${String(tokenResp['error'])}` }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Skeleton: full credential delivery not yet implemented
+          result = { error: 'git_credential: credential delivery not yet implemented (pending item 39)' };
           break;
         }
         default: {
