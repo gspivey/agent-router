@@ -642,3 +642,158 @@ describe('github_http_forward Tier 2 tests', () => {
     });
   });
 });
+
+/**
+ * Tier 2 tests for MCP `git_credential` tool.
+ *
+ * Covers (task 17.2):
+ * - Correct credential format returned (protocol, host, username, password)
+ * - Unauthorized repo rejected
+ * - Token lookup failure returns error result
+ *
+ * Requirements: 6.1, 6.2, 6.3, 6.4
+ */
+describe('git_credential Tier 2 tests', () => {
+  let mockDaemon: ReturnType<typeof createMockDaemonSocket>;
+  let mcp: McpSubprocess;
+
+  const SESSION_ID = 'test-session-cred-001';
+  const PROJECT_NAME = 'cred-project';
+  const BOUND_REPO = 'org/my-repo';
+  const SECOND_BOUND_REPO = 'org/another-repo';
+  const TOKEN = 'ghp_git_credential_token_xyz';
+
+  beforeAll(async () => {
+    mockDaemon = createMockDaemonSocket();
+    await mockDaemon.start();
+
+    mockDaemon.setSessionProject(SESSION_ID, {
+      project: PROJECT_NAME,
+      repos: [BOUND_REPO, SECOND_BOUND_REPO],
+      read_repos: ['org/read-only'],
+    });
+    mockDaemon.setProjectToken(PROJECT_NAME, TOKEN);
+  });
+
+  afterAll(async () => {
+    await mockDaemon.stop();
+  });
+
+  beforeEach(async () => {
+    mcp = new McpSubprocess(mockDaemon.socketPath(), SESSION_ID, 'http://127.0.0.1:1');
+    await mcp.start();
+  });
+
+  afterEach(async () => {
+    if (mcp) await mcp.stop();
+    mockDaemon.clearRequests();
+    // Restore token config after tests that clear it
+    mockDaemon.setSessionProject(SESSION_ID, {
+      project: PROJECT_NAME,
+      repos: [BOUND_REPO, SECOND_BOUND_REPO],
+      read_repos: ['org/read-only'],
+    });
+    mockDaemon.setProjectToken(PROJECT_NAME, TOKEN);
+  });
+
+  describe('correct credential format', () => {
+    it('returns git credential with protocol, host, username, password', async () => {
+      const resp = await mcp.callTool('git_credential', { repo: BOUND_REPO });
+
+      expect(resp.result?.isError).toBeFalsy();
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.protocol).toBe('https');
+      expect(content.host).toBe('github.com');
+      expect(content.username).toBe('x-access-token');
+      expect(content.password).toBe(TOKEN);
+    });
+
+    it('returns credential for any repo in the bound project', async () => {
+      const resp = await mcp.callTool('git_credential', { repo: SECOND_BOUND_REPO });
+
+      expect(resp.result?.isError).toBeFalsy();
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.protocol).toBe('https');
+      expect(content.host).toBe('github.com');
+      expect(content.username).toBe('x-access-token');
+      expect(content.password).toBe(TOKEN);
+    });
+
+    it('fetches token per call (not cached)', async () => {
+      await mcp.callTool('git_credential', { repo: BOUND_REPO });
+      await mcp.callTool('git_credential', { repo: BOUND_REPO });
+
+      const requests = mockDaemon.getRequests();
+      const tokenRequests = requests.filter((r) => r.op === 'get_token');
+      expect(tokenRequests.length).toBe(2);
+    });
+  });
+
+  describe('unauthorized repo rejection', () => {
+    it('rejects repo not in bound project repos', async () => {
+      const resp = await mcp.callTool('git_credential', { repo: 'org/read-only' });
+
+      expect(resp.result?.isError).toBe(true);
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.code).toBe('repo_unauthorized');
+      expect(content.error).toContain('not in the bound project');
+    });
+
+    it('rejects completely unknown repo', async () => {
+      const resp = await mcp.callTool('git_credential', { repo: 'unknown/repo' });
+
+      expect(resp.result?.isError).toBe(true);
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.code).toBe('repo_unauthorized');
+    });
+
+    it('rejects missing repo argument', async () => {
+      const resp = await mcp.callTool('git_credential', {});
+
+      expect(resp.result?.isError).toBe(true);
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.error).toContain('Missing or empty');
+    });
+
+    it('rejects empty repo argument', async () => {
+      const resp = await mcp.callTool('git_credential', { repo: '' });
+
+      expect(resp.result?.isError).toBe(true);
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.error).toContain('Missing or empty');
+    });
+  });
+
+  describe('token lookup failure', () => {
+    it('returns error when token retrieval fails', async () => {
+      mockDaemon.clearProjectToken(PROJECT_NAME);
+
+      const resp = await mcp.callTool('git_credential', { repo: BOUND_REPO });
+
+      expect(resp.result?.isError).toBe(true);
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.error).toContain('Token retrieval failed');
+      expect(content.code).toBe('token_missing');
+    });
+
+    it('returns error when session project lookup fails', async () => {
+      // Use a session ID that has no configured project
+      const badMcp = new McpSubprocess(
+        mockDaemon.socketPath(),
+        'non-existent-session',
+        'http://127.0.0.1:1',
+      );
+      await badMcp.start();
+
+      try {
+        const resp = await badMcp.callTool('git_credential', { repo: BOUND_REPO });
+
+        expect(resp.result?.isError).toBe(true);
+        const content = JSON.parse(resp.result!.content![0]!.text);
+        expect(content.error).toContain('session project');
+      } finally {
+        await badMcp.stop();
+      }
+    });
+  });
+});
