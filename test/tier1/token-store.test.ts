@@ -5,13 +5,19 @@
  *  - Property 1: Tokens file round-trip (serializeTokenMap → parseTokensFile)
  *  - Property 2: Project entry validation
  *  - Property 3: Repo uniqueness invariant
+ *  - Property 4: Repo-to-project lookup
+ *  - Property 5: Token lookup by project
  *  - Property 7: Reload diff correctness
  *  - Property 9: Project name validation
  *  - Property 10: Expiry warning tiers
  *  - Unit tests for edge cases (invalid JSON, missing fields, duplicate repos)
+ *  - Unit tests for Token_Store lifecycle (createTokenStore factory)
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fc from 'fast-check';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import {
   isValidProjectName,
   isValidRepoString,
@@ -21,10 +27,12 @@ import {
   computeReloadDiff,
   evaluateExpiryWarnings,
   serializeTokenMap,
+  createTokenStore,
 } from '../../src/token-store.js';
 import type { ProjectEntry, TokenMap } from '../../src/token-store.js';
 import { Secret } from '../../src/secret.js';
 import { FatalError } from '../../src/errors.js';
+import type { Logger } from '../../src/log.js';
 
 // ---------------------------------------------------------------------------
 // Generators
@@ -763,3 +771,397 @@ describe('validateProjectEntry — edge cases', () => {
     expect(result.expiresAt).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Property 4: Repo-to-project lookup
+// Feature: auth-credential-proxy, Property 4: Repo-to-project lookup
+// ---------------------------------------------------------------------------
+describe('Property 4: Repo-to-project lookup', () => {
+  it('findProjectByRepo returns the project containing the repo, or undefined', () => {
+    fc.assert(
+      fc.property(arbTokenMap, (map) => {
+        const store = createTokenStoreFromMap(map);
+
+        // Every repo in the map should resolve to its project
+        for (const [repo, expectedProject] of map.repoIndex) {
+          expect(store.findProjectByRepo(repo)).toBe(expectedProject);
+        }
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('returns undefined for repos not in any project', () => {
+    fc.assert(
+      fc.property(arbTokenMap, arbRepoString, (map, randomRepo) => {
+        const store = createTokenStoreFromMap(map);
+
+        // If the random repo is not in the map, should return undefined
+        if (!map.repoIndex.has(randomRepo)) {
+          expect(store.findProjectByRepo(randomRepo)).toBeUndefined();
+        }
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('at most one project can match due to repo uniqueness invariant', () => {
+    fc.assert(
+      fc.property(arbTokenMap, (map) => {
+        const store = createTokenStoreFromMap(map);
+
+        // For each repo, verify the result is consistent with the map's repoIndex
+        for (const [repo, projectName] of map.repoIndex) {
+          const result = store.findProjectByRepo(repo);
+          expect(result).toBe(projectName);
+
+          // Verify the project actually contains this repo
+          const project = store.getProject(projectName);
+          expect(project).toBeDefined();
+          expect(project!.repos).toContain(repo);
+        }
+      }),
+      { numRuns: 100 }
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 5: Token lookup by project
+// Feature: auth-credential-proxy, Property 5: Token lookup by project
+// ---------------------------------------------------------------------------
+describe('Property 5: Token lookup by project', () => {
+  it('getToken returns the token for existing projects', () => {
+    fc.assert(
+      fc.property(arbTokenMap, (map) => {
+        const store = createTokenStoreFromMap(map);
+
+        // Every project in the map should return its token
+        for (const [name, entry] of map.projects) {
+          const token = store.getToken(name);
+          expect(token).toBeDefined();
+          expect(token!.reveal()).toBe(entry.token.reveal());
+        }
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('getToken returns undefined for non-existent projects', () => {
+    fc.assert(
+      fc.property(arbTokenMap, arbProjectName, (map, randomName) => {
+        const store = createTokenStoreFromMap(map);
+
+        // If the random name is not in the map, should return undefined
+        if (!map.projects.has(randomName)) {
+          expect(store.getToken(randomName)).toBeUndefined();
+        }
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('getProject returns the full entry for existing projects', () => {
+    fc.assert(
+      fc.property(arbTokenMap, (map) => {
+        const store = createTokenStoreFromMap(map);
+
+        for (const [name, entry] of map.projects) {
+          const project = store.getProject(name);
+          expect(project).toBeDefined();
+          expect(project!.name).toBe(entry.name);
+          expect(project!.token.reveal()).toBe(entry.token.reveal());
+          expect([...project!.repos]).toEqual([...entry.repos]);
+        }
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('getProject returns undefined for non-existent projects', () => {
+    fc.assert(
+      fc.property(arbTokenMap, arbProjectName, (map, randomName) => {
+        const store = createTokenStoreFromMap(map);
+
+        if (!map.projects.has(randomName)) {
+          expect(store.getProject(randomName)).toBeUndefined();
+        }
+      }),
+      { numRuns: 100 }
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unit tests: createTokenStore lifecycle
+// ---------------------------------------------------------------------------
+describe('createTokenStore — lifecycle', () => {
+  let tmpDir: string;
+  let tokensFilePath: string;
+  let logMessages: Array<{ level: string; msg: string; fields: Record<string, unknown> | undefined }>;
+  let log: Logger;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'token-store-test-'));
+    tokensFilePath = path.join(tmpDir, 'tokens.json');
+    logMessages = [];
+    log = createTestLogger(logMessages);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('loads from a valid tokens.json file', () => {
+    const tokensJson = JSON.stringify({
+      projects: {
+        'my-project': {
+          token: 'github_pat_abc',
+          repos: ['owner/repo-a', 'owner/repo-b'],
+        },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, tokensJson, { mode: 0o600 });
+
+    const store = createTokenStore({ tokensFilePath, log });
+
+    expect(store.getToken('my-project')?.reveal()).toBe('github_pat_abc');
+    expect(store.findProjectByRepo('owner/repo-a')).toBe('my-project');
+    expect(store.findProjectByRepo('owner/repo-b')).toBe('my-project');
+    expect(store.getProject('my-project')?.repos).toEqual(['owner/repo-a', 'owner/repo-b']);
+  });
+
+  it('falls back to GITHUB_TOKEN when tokens.json is missing (Req 1.5)', () => {
+    // tokensFilePath does not exist
+    const store = createTokenStore({
+      tokensFilePath,
+      log,
+      fallbackToken: 'github_pat_fallback',
+    });
+
+    // Should have a synthetic _fallback project
+    expect(store.getToken('_fallback')?.reveal()).toBe('github_pat_fallback');
+
+    // Should log a deprecation warning
+    const warnMsg = logMessages.find(m =>
+      m.level === 'warn' && m.msg.includes('falling back to GITHUB_TOKEN')
+    );
+    expect(warnMsg).toBeDefined();
+  });
+
+  it('throws FatalError when both tokens.json and GITHUB_TOKEN are missing (Req 1.6)', () => {
+    // tokensFilePath does not exist, no fallbackToken
+    expect(() => createTokenStore({ tokensFilePath, log })).toThrow(FatalError);
+    expect(() => createTokenStore({ tokensFilePath, log })).toThrow(
+      /No tokens file found/
+    );
+  });
+
+  it('throws FatalError when tokens.json contains invalid JSON (Req 1.7)', () => {
+    fs.writeFileSync(tokensFilePath, 'not valid json', { mode: 0o600 });
+
+    expect(() => createTokenStore({ tokensFilePath, log })).toThrow(FatalError);
+    expect(() => createTokenStore({ tokensFilePath, log })).toThrow(/invalid JSON/);
+  });
+
+  it('throws FatalError with empty fallbackToken and no file', () => {
+    expect(() => createTokenStore({ tokensFilePath, log, fallbackToken: '' })).toThrow(
+      FatalError
+    );
+  });
+
+  it('logs a warning for insecure file permissions (Req 1.4)', () => {
+    const tokensJson = JSON.stringify({
+      projects: {
+        proj: { token: 'tok', repos: ['o/r'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, tokensJson, { mode: 0o644 });
+
+    createTokenStore({ tokensFilePath, log });
+
+    const warnMsg = logMessages.find(m =>
+      m.level === 'warn' && m.msg.includes('insecure permissions')
+    );
+    expect(warnMsg).toBeDefined();
+  });
+
+  it('does not warn for correct file permissions (mode 600)', () => {
+    const tokensJson = JSON.stringify({
+      projects: {
+        proj: { token: 'tok', repos: ['o/r'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, tokensJson, { mode: 0o600 });
+
+    createTokenStore({ tokensFilePath, log });
+
+    const warnMsg = logMessages.find(m =>
+      m.level === 'warn' && m.msg.includes('insecure permissions')
+    );
+    expect(warnMsg).toBeUndefined();
+  });
+
+  it('reload with valid file replaces the token map (Req 2.4)', () => {
+    const initial = JSON.stringify({
+      projects: {
+        proj: { token: 'tok1', repos: ['o/r1'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, initial, { mode: 0o600 });
+    const store = createTokenStore({ tokensFilePath, log });
+
+    expect(store.getToken('proj')?.reveal()).toBe('tok1');
+
+    // Write a new file
+    const updated = JSON.stringify({
+      projects: {
+        proj: { token: 'tok2', repos: ['o/r1'] },
+        'new-proj': { token: 'tok3', repos: ['o/r2'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, updated, { mode: 0o600 });
+
+    const changed = store.reload();
+    expect(changed).toBe(true);
+    expect(store.getToken('proj')?.reveal()).toBe('tok2');
+    expect(store.getToken('new-proj')?.reveal()).toBe('tok3');
+    expect(store.findProjectByRepo('o/r2')).toBe('new-proj');
+  });
+
+  it('reload with invalid file retains old map (Req 2.5)', () => {
+    const initial = JSON.stringify({
+      projects: {
+        proj: { token: 'tok1', repos: ['o/r'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, initial, { mode: 0o600 });
+    const store = createTokenStore({ tokensFilePath, log });
+
+    // Overwrite with invalid JSON
+    fs.writeFileSync(tokensFilePath, 'not valid json');
+
+    const changed = store.reload();
+    expect(changed).toBe(false);
+    // Old map retained
+    expect(store.getToken('proj')?.reveal()).toBe('tok1');
+
+    // Should have logged a warning
+    const warnMsg = logMessages.find(m =>
+      m.level === 'warn' && m.msg.includes('retaining previous token map')
+    );
+    expect(warnMsg).toBeDefined();
+  });
+
+  it('reload with deleted file retains old map (Req 2.6)', () => {
+    const initial = JSON.stringify({
+      projects: {
+        proj: { token: 'tok1', repos: ['o/r'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, initial, { mode: 0o600 });
+    const store = createTokenStore({ tokensFilePath, log });
+
+    // Delete the file
+    fs.unlinkSync(tokensFilePath);
+
+    const changed = store.reload();
+    expect(changed).toBe(false);
+    // Old map retained
+    expect(store.getToken('proj')?.reveal()).toBe('tok1');
+
+    // Should have logged a warning about deleted file
+    const warnMsg = logMessages.find(m =>
+      m.level === 'warn' && m.msg.includes('deleted')
+    );
+    expect(warnMsg).toBeDefined();
+  });
+
+  it('reload returns false when no changes', () => {
+    const initial = JSON.stringify({
+      projects: {
+        proj: { token: 'tok1', repos: ['o/r'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, initial, { mode: 0o600 });
+    const store = createTokenStore({ tokensFilePath, log });
+
+    // Reload the same content
+    const changed = store.reload();
+    expect(changed).toBe(false);
+  });
+
+  it('startWatching and stopWatching are idempotent', () => {
+    const initial = JSON.stringify({
+      projects: {
+        proj: { token: 'tok', repos: ['o/r'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, initial, { mode: 0o600 });
+    const store = createTokenStore({ tokensFilePath, log });
+
+    // Should not throw
+    store.startWatching();
+    store.stopWatching();
+    store.stopWatching(); // idempotent
+  });
+
+  it('getTokenMap returns the current snapshot', () => {
+    const initial = JSON.stringify({
+      projects: {
+        'proj-a': { token: 'tok-a', repos: ['o/r1'] },
+        'proj-b': { token: 'tok-b', repos: ['o/r2'] },
+      },
+    });
+    fs.writeFileSync(tokensFilePath, initial, { mode: 0o600 });
+    const store = createTokenStore({ tokensFilePath, log });
+
+    const map = store.getTokenMap();
+    expect(map.projects.size).toBe(2);
+    expect(map.repoIndex.size).toBe(2);
+    expect(map.projects.get('proj-a')?.token.reveal()).toBe('tok-a');
+    expect(map.repoIndex.get('o/r1')).toBe('proj-a');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+/** Create a test Logger that captures messages */
+function createTestLogger(
+  messages: Array<{ level: string; msg: string; fields: Record<string, unknown> | undefined }>
+): Logger {
+  const makeLogFn = (level: string) => (msg: string, fields?: Record<string, unknown>) => {
+    messages.push({ level, msg, fields });
+  };
+  const logger: Logger = {
+    debug: makeLogFn('debug'),
+    info: makeLogFn('info'),
+    warn: makeLogFn('warn'),
+    error: makeLogFn('error'),
+    child: () => logger,
+  };
+  return logger;
+}
+
+/**
+ * Create a TokenStore from an in-memory TokenMap (for property tests).
+ * Writes the map to a temp file and creates a store from it.
+ */
+function createTokenStoreFromMap(map: TokenMap): ReturnType<typeof createTokenStore> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'token-store-prop-'));
+  const filePath = path.join(tmpDir, 'tokens.json');
+  const content = serializeTokenMap(map);
+  fs.writeFileSync(filePath, content, { mode: 0o600 });
+
+  const messages: Array<{ level: string; msg: string; fields: Record<string, unknown> | undefined }> = [];
+  const log = createTestLogger(messages);
+
+  const store = createTokenStore({ tokensFilePath: filePath, log });
+
+  // Clean up temp dir (sync, since store has already loaded)
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  return store;
+}

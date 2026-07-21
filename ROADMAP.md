@@ -35,22 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 34. Token_Store factory + lifecycle tests
-
-Implement `createTokenStore` factory in `src/token-store.ts`: load/parse/validate tokens file,
-fallback to `GITHUB_TOKEN` env with deprecation warning, `FatalError` when neither available.
-Implement `getToken`, `getProject`, `findProjectByRepo`, `getTokenMap`, `reload` (re-read,
-re-validate, atomic swap, retain-on-failure), `startWatching` (fs.watch + 30s poll),
-`stopWatching`. Property tests for lookups (Properties 4, 5). Unit tests for lifecycle (fallback,
-missing file, invalid reload retains old, permissions warning). Tier 2 tests with real filesystem:
-write tokens.json, create store, verify lookups; SIGHUP reload; fs.watch automatic reload. Builds
-on item 33 (validation functions).
-
-- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `6.1`, `6.2`, `6.3`, `7`
-- [ ] Complete · PR: —
-
----
-
 ### 35. Config `credentialMode` + session credential injection
 
 Add `credentialMode: 'env' | 'mcp'` to config with validation. Extend `SessionMeta` with
@@ -152,6 +136,22 @@ prior credential items (34–40).
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 34. Token_Store factory + lifecycle tests
+
+Implement `createTokenStore` factory in `src/token-store.ts`: load/parse/validate tokens file,
+fallback to `GITHUB_TOKEN` env with deprecation warning, `FatalError` when neither available.
+Implement `getToken`, `getProject`, `findProjectByRepo`, `getTokenMap`, `reload` (re-read,
+re-validate, atomic swap, retain-on-failure), `startWatching` (fs.watch + 30s poll),
+`stopWatching`. Property tests for lookups (Properties 4, 5). Unit tests for lifecycle (fallback,
+missing file, invalid reload retains old, permissions warning). Tier 2 tests with real filesystem:
+write tokens.json, create store, verify lookups; SIGHUP reload; fs.watch automatic reload. Builds
+on item 33 (validation functions).
+
+- Spec: `.kiro/specs/auth-credential-proxy/` · tasks `6.1`, `6.2`, `6.3`, `7`
+- [x] Complete · PR: #73
+
+---
 
 ### 33. Pure validation functions + property tests
 

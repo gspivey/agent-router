@@ -336,7 +336,8 @@ export function evaluateExpiryWarnings(
  * Used for round-trip property testing.
  */
 export function serializeTokenMap(map: TokenMap): string {
-  const projects: Record<string, { token: string; repos: string[]; expires_at?: string }> = {};
+  const projects: Record<string, { token: string; repos: string[]; expires_at?: string }> =
+    Object.create(null) as Record<string, { token: string; repos: string[]; expires_at?: string }>;
 
   for (const [name, entry] of map.projects) {
     const serialized: { token: string; repos: string[]; expires_at?: string } = {
@@ -353,8 +354,273 @@ export function serializeTokenMap(map: TokenMap): string {
 }
 
 // ---------------------------------------------------------------------------
+// Factory function
+// ---------------------------------------------------------------------------
+
+import * as fs from 'node:fs';
+import type { Logger } from './log.js';
+
+/** Dependencies for createTokenStore. */
+export interface CreateTokenStoreDeps {
+  /** Path to the tokens.json file. */
+  readonly tokensFilePath: string;
+  /** Structured logger. */
+  readonly log: Logger;
+  /** Optional fallback token from GITHUB_TOKEN env var. */
+  readonly fallbackToken?: string;
+}
+
+/**
+ * Create a Token_Store instance.
+ *
+ * On creation:
+ * - Reads and parses the tokens file, OR
+ * - Falls back to GITHUB_TOKEN env var with deprecation warning, OR
+ * - Throws FatalError if neither available.
+ *
+ * The returned store supports reload (re-read, re-validate, atomic swap),
+ * file watching (fs.watch + 30s poll), and standard lookups.
+ */
+export function createTokenStore(deps: CreateTokenStoreDeps): TokenStore {
+  const { tokensFilePath, log, fallbackToken } = deps;
+
+  // Current token map — replaced atomically on reload.
+  let currentMap: TokenMap = loadInitialMap(tokensFilePath, log, fallbackToken);
+
+  // File watching state
+  let watcher: fs.FSWatcher | null = null;
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let reloadInProgress = false;
+
+  function getToken(projectName: string): Secret | undefined {
+    return currentMap.projects.get(projectName)?.token;
+  }
+
+  function getProject(projectName: string): ProjectEntry | undefined {
+    return currentMap.projects.get(projectName);
+  }
+
+  function findProjectByRepo(repo: string): string | undefined {
+    return currentMap.repoIndex.get(repo);
+  }
+
+  function getTokenMap(): TokenMap {
+    return currentMap;
+  }
+
+  function reload(): boolean {
+    if (reloadInProgress) return false;
+    reloadInProgress = true;
+    try {
+      return doReload();
+    } finally {
+      reloadInProgress = false;
+    }
+  }
+
+  function doReload(): boolean {
+    let content: string;
+    try {
+      content = fs.readFileSync(tokensFilePath, 'utf-8');
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        log.warn('Token file deleted during reload — retaining previous token map', {
+          path: tokensFilePath,
+        });
+      } else {
+        log.warn('Failed to read token file during reload — retaining previous token map', {
+          path: tokensFilePath,
+          error: String(err),
+        });
+      }
+      return false;
+    }
+
+    let newMap: TokenMap;
+    try {
+      newMap = parseTokensFile(content);
+    } catch (err) {
+      log.warn('Token file invalid during reload — retaining previous token map', {
+        path: tokensFilePath,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    }
+
+    // Check file permissions
+    checkFilePermissions(tokensFilePath, log);
+
+    // Compute diff for logging
+    const diff = computeReloadDiff(currentMap, newMap);
+    const hasChanges = diff.added.length > 0 || diff.removed.length > 0 || diff.changed.length > 0;
+
+    if (hasChanges) {
+      log.info('Token store reloaded', {
+        added: diff.added.length,
+        removed: diff.removed.length,
+        changed: diff.changed.length,
+        unchanged: diff.unchanged.length,
+      });
+    }
+
+    // Atomic swap — single assignment in one event-loop tick
+    currentMap = newMap;
+
+    // Evaluate expiry warnings on new map
+    const warnings = evaluateExpiryWarnings(newMap.projects, new Date());
+    for (const warning of warnings) {
+      log[warning.level](warning.message, {
+        project: warning.projectName,
+        daysUntilExpiry: warning.daysUntilExpiry,
+        alert: warning.alert,
+      });
+    }
+
+    return hasChanges;
+  }
+
+  function startWatching(): void {
+    registerWatcher();
+    pollInterval = setInterval(() => {
+      reload();
+    }, 30_000);
+  }
+
+  function registerWatcher(): void {
+    try {
+      watcher = fs.watch(tokensFilePath, () => {
+        reload();
+      });
+      watcher.on('error', () => {
+        // fs.watch can be unreliable — polling is the fallback
+        closeWatcher();
+      });
+    } catch {
+      // fs.watch unavailable — rely on polling
+      log.info('fs.watch unavailable for tokens file — relying on 30s polling', {
+        path: tokensFilePath,
+      });
+    }
+  }
+
+  function closeWatcher(): void {
+    if (watcher) {
+      watcher.close();
+      watcher = null;
+    }
+  }
+
+  function stopWatching(): void {
+    reloadInProgress = true; // suppress in-flight reload completion
+    closeWatcher();
+    if (pollInterval !== null) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+
+  return {
+    getToken,
+    getProject,
+    findProjectByRepo,
+    getTokenMap,
+    reload,
+    startWatching,
+    stopWatching,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Load the initial token map. Tries the tokens file first, then the fallback token,
+ * then throws FatalError if neither is available.
+ */
+function loadInitialMap(
+  tokensFilePath: string,
+  log: Logger,
+  fallbackToken: string | undefined,
+): TokenMap {
+  // Try to read the tokens file
+  let content: string | undefined;
+  try {
+    content = fs.readFileSync(tokensFilePath, 'utf-8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') {
+      throw new FatalError(
+        `Failed to read tokens file at ${tokensFilePath}: ${String(err)}`
+      );
+    }
+    // ENOENT — file doesn't exist, try fallback
+  }
+
+  if (content !== undefined) {
+    // Parse and validate the tokens file
+    const map = parseTokensFile(content);
+    checkFilePermissions(tokensFilePath, log);
+
+    // Evaluate expiry warnings on initial load
+    const warnings = evaluateExpiryWarnings(map.projects, new Date());
+    for (const warning of warnings) {
+      log[warning.level](warning.message, {
+        project: warning.projectName,
+        daysUntilExpiry: warning.daysUntilExpiry,
+        alert: warning.alert,
+      });
+    }
+
+    return map;
+  }
+
+  // Tokens file missing — try fallback
+  if (fallbackToken !== undefined && fallbackToken !== '') {
+    log.warn(
+      'tokens.json not found — falling back to GITHUB_TOKEN environment variable. ' +
+      'This is deprecated; create a tokens.json file for project-scoped credentials.',
+      { path: tokensFilePath }
+    );
+
+    // Create a synthetic single-project entry
+    const syntheticEntry: ProjectEntry = {
+      name: '_fallback',
+      token: Secret.of(fallbackToken),
+      repos: [],
+      expiresAt: undefined,
+    };
+    const projects = new Map<string, ProjectEntry>([['_fallback', syntheticEntry]]);
+    const repoIndex = new Map<string, string>();
+    return { projects, repoIndex };
+  }
+
+  // Neither available
+  throw new FatalError(
+    `No tokens file found at ${tokensFilePath} and GITHUB_TOKEN environment variable is not set. ` +
+    'Provide a tokens.json file or set GITHUB_TOKEN.'
+  );
+}
+
+/**
+ * Check file permissions and log a warning if more permissive than owner-read-write (600).
+ */
+function checkFilePermissions(filePath: string, log: Logger): void {
+  try {
+    const stat = fs.statSync(filePath);
+    // mode includes file type bits; mask to just permission bits
+    const permissions = stat.mode & 0o777;
+    if (permissions > 0o600) {
+      log.warn(
+        'Token file has insecure permissions — should be 600 (owner read/write only)',
+        { path: filePath, mode: `0${permissions.toString(8)}` }
+      );
+    }
+  } catch {
+    // Best effort — if we can't stat the file, skip the check
+  }
+}
 
 function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;
