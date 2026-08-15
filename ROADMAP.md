@@ -39,6 +39,25 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+
+### 42. Session reaper: automatic disk reclamation
+
+Delete agent working directories (`~/agent-runs/<session>/`) and prune session metadata
+(`~/.agent-router/sessions/<uuid>/`) after sessions reach a terminal state. Solves an
+immediate disk crisis: 128 unreleased worktrees consuming 65 GB (88% disk) on the VM.
+
+Core design: in-process `src/reaper.ts` wired into the session state machine.
+Event-driven deletion fires after a configurable grace period (default 1h) on session
+terminal transition. A periodic sweep catches sessions missed during downtime. Worktree
+paths registered via new `register_worktree` MCP tool, with timestamp-based discovery
+heuristic and startup backfill for legacy sessions. Safety: `isStrictChild` uses
+`fs.realpathSync` on both sides; active sessions are never touched.
+
+- Spec: `.kiro/specs/session-reaper/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`
+- [ ] Complete · PR: —
+
+---
+
 ## Completed
 
 Items move here after they merge to `development`.
