@@ -1,5 +1,6 @@
 import * as net from 'node:net';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { Logger } from './log.js';
 import type { SessionManager } from './session-mgr.js';
 import { OpenPRsError } from './session-mgr.js';
@@ -30,7 +31,8 @@ export interface CliRequest {
     | 'cron_resume'
     | 'get_session_project'
     | 'get_token'
-    | 'tokens_status';
+    | 'tokens_status'
+    | 'register_worktree';
   [key: string]: unknown;
 }
 
@@ -50,8 +52,9 @@ export function createCliServer(deps: {
   cronTasks?: ScheduledTask[];
   cronEntries?: CronEntry[];
   tokenStore?: TokenStore;
+  agentRunsDir?: string;
 }): CliServer {
-  const { socketPath, sessionMgr, sessionFiles, log, db, cronTasks, cronEntries, tokenStore } = deps;
+  const { socketPath, sessionMgr, sessionFiles, log, db, cronTasks, cronEntries, tokenStore, agentRunsDir } = deps;
 
   let server: net.Server | null = null;
   const activeConnections = new Set<net.Socket>();
@@ -330,6 +333,36 @@ export function createCliServer(deps: {
       }
 
       return { projects };
+    },
+
+    async register_worktree(req: CliRequest): Promise<Record<string, unknown>> {
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('Missing or empty "session_id" parameter');
+      }
+      const worktreePath = req['path'];
+      if (typeof worktreePath !== 'string' || worktreePath.length === 0) {
+        throw new Error('Missing or empty "path" parameter');
+      }
+      // Must be an absolute path
+      if (!path.isAbsolute(worktreePath)) {
+        throw new Error(`Invalid "path": must be an absolute path, got "${worktreePath}"`);
+      }
+      // Must be under agentRunsDir if configured
+      if (agentRunsDir !== undefined) {
+        const resolved = path.resolve(worktreePath);
+        const resolvedBase = path.resolve(agentRunsDir);
+        if (!resolved.startsWith(resolvedBase + path.sep) && resolved !== resolvedBase) {
+          throw new Error(`Invalid "path": must be under "${agentRunsDir}"`);
+        }
+      }
+      // Validate session is active
+      const handle = sessionMgr.getActiveSession(sessionId);
+      if (handle === null) {
+        throw new Error(`No active session found: ${sessionId}`);
+      }
+      sessionFiles.updateMeta(sessionId, { worktree_path: worktreePath });
+      return { ok: true };
     },
   };
 

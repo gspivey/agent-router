@@ -23,5 +23,12 @@
       "webhookSecret": "ENV:WEBHOOK_SECRET_ANOTHER_REPO"
     }
   ],
-  "cron": []
+  "cron": [],
+  "reaper": {
+    "enabled": true,
+    "gracePeriodMinutes": 60,
+    "retentionDays": 30,
+    "agentRunsDir": "~/agent-runs",
+    "sweepIntervalMinutes": 15
+  }
 }

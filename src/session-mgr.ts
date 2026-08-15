@@ -14,6 +14,7 @@ import { createTurnQueue } from './turn-queue.js';
 import type { WorktreeManager } from './worktree-manager.js';
 import type { TokenStore } from './token-store.js';
 import { isValidRepoString } from './token-store.js';
+import type { Reaper } from './reaper.js';
 
 // ---------------------------------------------------------------------------
 // read_repos parsing — pure functions for extracting read_repos from prompts
@@ -351,6 +352,8 @@ export function createSessionManager(deps: {
   tokenStore?: TokenStore;
   /** Credential delivery mode. Default: 'env'. */
   credentialMode?: 'env' | 'mcp';
+  /** Optional session reaper for automatic disk reclamation. */
+  reaper?: Reaper;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
@@ -359,6 +362,7 @@ export function createSessionManager(deps: {
   const worktreeManager = deps.worktreeManager;
   const tokenStore = deps.tokenStore;
   const credentialMode = deps.credentialMode ?? 'env';
+  const reaper = deps.reaper;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
@@ -401,6 +405,17 @@ export function createSessionManager(deps: {
     } catch {
       // Best effort — meta may not be readable
     }
+  }
+
+  /** Set terminal_at on a session's meta and notify the reaper. */
+  function markTerminalAndNotifyReaper(sessionId: string): void {
+    const nowSec = Math.floor(Date.now() / 1000);
+    try {
+      sessionFiles.updateMeta(sessionId, { terminal_at: nowSec });
+    } catch {
+      // Best effort — meta may already have been updated or session might be terminal
+    }
+    reaper?.onSessionTerminal(sessionId);
   }
 
   /** Clear all timers for a session. */
@@ -509,6 +524,7 @@ export function createSessionManager(deps: {
         removeSessionWorktree(sessionId);
         completionFlags.delete(sessionId);
 
+        markTerminalAndNotifyReaper(sessionId);
         onSessionEnd?.(sessionId);
 
         acp.kill().catch((err: unknown) => {
@@ -649,6 +665,7 @@ export function createSessionManager(deps: {
         clearPendingWakesForSession(sessionId);
         removeSessionWorktree(sessionId);
         registry.remove(sessionId);
+        markTerminalAndNotifyReaper(sessionId);
         onSessionEnd?.(sessionId);
       })
       .catch(() => {});
@@ -697,6 +714,7 @@ export function createSessionManager(deps: {
       removeSessionWorktree(sessionId);
       completionFlags.delete(sessionId);
 
+      markTerminalAndNotifyReaper(sessionId);
       onSessionEnd?.(sessionId);
 
       acp.kill().catch((err: unknown) => {
@@ -1009,6 +1027,7 @@ export function createSessionManager(deps: {
         }
       }
 
+      markTerminalAndNotifyReaper(sessionId);
       onSessionEnd?.(sessionId);
 
       // Suppress inactivity timer — replace with grace period timer
@@ -1095,6 +1114,7 @@ export function createSessionManager(deps: {
       // Shutdown the per-session event queue
       await handle.eventQueue.shutdown(5);
 
+      markTerminalAndNotifyReaper(sessionId);
       onSessionEnd?.(sessionId);
 
       log.info('Session terminated', { sessionId, reason, actor });
@@ -1133,6 +1153,7 @@ export function createSessionManager(deps: {
               completed_at: Math.floor(Date.now() / 1000),
               termination_reason: 'terminated_by_restart',
             });
+            markTerminalAndNotifyReaper(sessionId);
           } catch {
             // Best effort
           }
@@ -1187,6 +1208,7 @@ export function createSessionManager(deps: {
               completed_at: Math.floor(Date.now() / 1000),
               termination_reason: 'terminated_by_restart',
             });
+            markTerminalAndNotifyReaper(sessionId);
           } catch {
             // Best effort
           }
@@ -1200,6 +1222,9 @@ export function createSessionManager(deps: {
     async shutdown(): Promise<void> {
       const activeSessions = registry.list();
       log.info('Shutting down session manager', { activeCount: activeSessions.length });
+
+      // Shut down the reaper first (cancel pending timers, stop sweep)
+      reaper?.shutdown();
 
       // Clear all timers
       for (const [, timer] of inactivityTimers) {
