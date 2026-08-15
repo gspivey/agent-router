@@ -90,6 +90,7 @@ describe('Tier 2: rate-limit wake deferral', () => {
     bindPublic: false,
     shutdownDrainSeconds: 60,
     credentialMode: 'env',
+    reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
   };
 
   beforeEach(async () => {

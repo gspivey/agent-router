@@ -140,6 +140,17 @@ const MCP_TOOLS: McpToolDefinition[] = [
       required: ['repo'],
     },
   },
+  {
+    name: 'register_worktree',
+    description: 'Register the working directory path for this session so the reaper can clean it up after the session ends.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path to the session working directory under ~/agent-runs/' },
+      },
+      required: ['path'],
+    },
+  },
 ];
 
 /**
@@ -587,6 +598,22 @@ export function createMcpServer(ctx: McpContext): McpServer {
             username: 'x-access-token',
             password: token,
           };
+          break;
+        }
+        case 'register_worktree': {
+          const wtPath = toolArgs['path'];
+          if (typeof wtPath !== 'string' || wtPath.length === 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "path" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+          result = await sendToDaemon(daemonSocket, {
+            op: 'register_worktree',
+            session_id: sessionId,
+            path: wtPath,
+          });
           break;
         }
         default: {

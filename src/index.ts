@@ -48,6 +48,8 @@ import { createRestartRequiredState } from './restart-required.js';
 import { createTokenStore } from './token-store.js';
 import type { TokenStore } from './token-store.js';
 import { validateTokenStoreStartup } from './token-store-startup.js';
+import { createReaper } from './reaper.js';
+import type { Reaper } from './reaper.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -496,6 +498,19 @@ async function main(): Promise<void> {
   const worktreeManager = createWorktreeManager({ rootDir, log });
   log.info('Worktree manager initialized', { rootDir });
 
+  // Create reaper (may be disabled via config)
+  let reaper: Reaper | undefined;
+
+  // Initialize reaper before session manager if enabled
+  if (config.reaper.enabled) {
+    reaper = createReaper({
+      config: config.reaper,
+      sessionFiles,
+      isActive: () => false, // placeholder — will be replaced after sessionMgr is ready
+      log,
+    });
+  }
+
   const sessionMgr = createSessionManager({
     db,
     sessionFiles,
@@ -535,8 +550,27 @@ async function main(): Promise<void> {
         void sendSessionEndNotification({ config: config.notifyOnSessionEnd!, meta, log });
       }
     },
+    ...(reaper !== undefined ? { reaper } : {}),
   });
   log.info('Session manager initialized');
+
+  // Now that session manager is ready, create the real reaper with proper isActive
+  if (config.reaper.enabled) {
+    // Shut down the placeholder reaper and create a new one with the real isActive
+    reaper?.shutdown();
+    reaper = createReaper({
+      config: config.reaper,
+      sessionFiles,
+      isActive: (id: string) => sessionMgr.getActiveSession(id) !== null,
+      log,
+    });
+    reaper.start();
+    log.info('Session reaper initialized', {
+      gracePeriodMinutes: config.reaper.gracePeriodMinutes,
+      retentionDays: config.reaper.retentionDays,
+      sweepIntervalMinutes: config.reaper.sweepIntervalMinutes,
+    });
+  }
 
   // Attempt to resume sessions that were active before last shutdown
   const resumeResult = await sessionMgr.resumeSessions();
@@ -627,6 +661,7 @@ async function main(): Promise<void> {
     cronTasks,
     cronEntries: config.cron,
     tokenStore: credentialTokenStore,
+    agentRunsDir: config.reaper.agentRunsDir,
   });
   await cliServer.start();
   log.info('CLI IPC server listening', { socketPath });

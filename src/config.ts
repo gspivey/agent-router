@@ -1,7 +1,10 @@
 import fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import cron from 'node-cron';
 import { FatalError } from './errors.js';
 import type { NotifyOnSessionEndConfig } from './notify.js';
+import type { ReaperConfig } from './reaper.js';
 
 export interface SessionTimeoutConfig {
   inactivityMinutes: number;
@@ -45,6 +48,8 @@ export interface AgentRouterConfig {
   childEnvAllowlist?: string[];
   /** Credential delivery mode: 'env' injects GITHUB_TOKEN into agent env, 'mcp' relies on MCP tools. Default: 'env'. */
   credentialMode: 'env' | 'mcp';
+  /** Session reaper configuration for automatic disk reclamation. */
+  reaper: ReaperConfig;
 }
 
 export interface RepoConfig {
@@ -421,6 +426,65 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     cronEntries.push({ name: cronName, schedule, repo, promptFile });
   }
 
+  // reaper (optional with defaults)
+  const rawReaper = config['reaper'];
+  let reaperEnabled = true;
+  let gracePeriodMinutes = 60;
+  let retentionDays = 30;
+  let agentRunsDir = path.join(os.homedir(), 'agent-runs');
+  let sweepIntervalMinutes = 15;
+  if (rawReaper !== undefined) {
+    if (!isRecord(rawReaper)) {
+      throw new FatalError('Invalid "reaper": must be an object');
+    }
+    if (rawReaper['enabled'] !== undefined) {
+      if (typeof rawReaper['enabled'] !== 'boolean') {
+        throw new FatalError(`Invalid "reaper.enabled": must be a boolean, got ${JSON.stringify(rawReaper['enabled'])}`);
+      }
+      reaperEnabled = rawReaper['enabled'];
+    }
+    if (rawReaper['gracePeriodMinutes'] !== undefined) {
+      const val = rawReaper['gracePeriodMinutes'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "reaper.gracePeriodMinutes": must be a positive integer');
+      }
+      gracePeriodMinutes = val;
+    }
+    if (rawReaper['retentionDays'] !== undefined) {
+      const val = rawReaper['retentionDays'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "reaper.retentionDays": must be a positive integer');
+      }
+      retentionDays = val;
+    }
+    if (rawReaper['agentRunsDir'] !== undefined) {
+      const val = rawReaper['agentRunsDir'];
+      if (typeof val !== 'string' || val.length === 0) {
+        throw new FatalError('Invalid "reaper.agentRunsDir": must be a non-empty string');
+      }
+      agentRunsDir = val;
+    }
+    if (rawReaper['sweepIntervalMinutes'] !== undefined) {
+      const val = rawReaper['sweepIntervalMinutes'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "reaper.sweepIntervalMinutes": must be a positive integer');
+      }
+      sweepIntervalMinutes = val;
+    }
+  }
+  // Expand leading ~ in agentRunsDir
+  if (agentRunsDir.startsWith('~')) {
+    agentRunsDir = path.join(os.homedir(), agentRunsDir.slice(1));
+  }
+
+  const reaperConfig: ReaperConfig = {
+    enabled: reaperEnabled,
+    gracePeriodMinutes,
+    retentionDays,
+    agentRunsDir,
+    sweepIntervalMinutes,
+  };
+
   const result: AgentRouterConfig = {
     port,
     webhookSecret,
@@ -433,6 +497,7 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     bindPublic,
     shutdownDrainSeconds,
     credentialMode,
+    reaper: reaperConfig,
   };
   if (defaultGithubToken !== undefined) {
     result.defaultGithubToken = defaultGithubToken;

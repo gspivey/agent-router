@@ -16,6 +16,7 @@ function baseConfig(overrides?: Partial<AgentRouterConfig>): AgentRouterConfig {
     bindPublic: false,
     shutdownDrainSeconds: 60,
     credentialMode: 'env',
+    reaper: { enabled: true, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
     ...overrides,
   };
 }

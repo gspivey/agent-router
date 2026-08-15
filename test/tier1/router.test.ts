@@ -447,6 +447,7 @@ describe('evaluateWakePolicy', () => {
     bindPublic: false,
     shutdownDrainSeconds: 60,
     credentialMode: 'env',
+    reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
   };
 
   it('returns wake=true for check_run with trustTier=n/a', () => {
@@ -711,6 +712,7 @@ describe('evaluateWakePolicy — self-wake prevention', () => {
     bindPublic: false,
     shutdownDrainSeconds: 60,
     credentialMode: 'env',
+    reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
   };
 
   it('blocks wake when comment is self-authored (in outbound table)', () => {

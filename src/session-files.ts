@@ -40,6 +40,12 @@ export interface SessionMeta {
   bound_project_read_repos?: string[];
   /** Credential delivery mode used for this session. */
   credential_mode?: 'env' | 'mcp';
+  /** Unix timestamp set on ANY terminal transition (completed/failed/abandoned). */
+  terminal_at?: number;
+  /** Filesystem path to the session's agent working directory (worktree). */
+  worktree_path?: string;
+  /** Unix timestamp set after the reaper deletes the worktree. */
+  worktree_reaped_at?: number;
 }
 
 export type PromptSource = 'cli' | 'webhook' | 'cron' | 'mcp' | 'web' | 'router';
@@ -216,11 +222,16 @@ export function createSessionFiles(rootDir: string, log?: Logger): SessionFiles 
 
       const current = JSON.parse(raw) as SessionMeta;
 
-      // Refuse to modify non-active sessions
+      // Refuse to modify non-active sessions (except for reaper-specific fields)
       if (current.status !== 'active') {
-        throw new Error(
-          `Cannot modify session ${sessionId}: status is '${current.status}', only 'active' sessions can be modified`
-        );
+        const allowedTerminalFields = new Set(['worktree_reaped_at', 'terminal_at', 'worktree_path']);
+        const patchKeys = Object.keys(patch);
+        const allAllowed = patchKeys.every((k) => allowedTerminalFields.has(k));
+        if (!allAllowed) {
+          throw new Error(
+            `Cannot modify session ${sessionId}: status is '${current.status}', only 'active' sessions can be modified`
+          );
+        }
       }
 
       // Validate status transition if status is being changed
