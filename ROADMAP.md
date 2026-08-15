@@ -35,10 +35,9 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-## Active Roadmap
+## Completed
 
----
-
+Items move here after they merge to `development`.
 
 ### 42. Session reaper: automatic disk reclamation
 
@@ -54,13 +53,9 @@ heuristic and startup backfill for legacy sessions. Safety: `isStrictChild` uses
 `fs.realpathSync` on both sides; active sessions are never touched.
 
 - Spec: `.kiro/specs/session-reaper/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #83
 
 ---
-
-## Completed
-
-Items move here after they merge to `development`.
 
 ### 41. Token_Store startup integration
 
