@@ -390,6 +390,27 @@ without duplicates. Builds on items 17/18 reconnect coverage.
 
 ---
 
+
+### 30. Session reaper: automatic disk reclamation
+
+Delete agent working directories (`~/agent-runs/<session>/`) and prune session metadata
+(`~/.agent-router/sessions/<uuid>/`) after sessions reach a terminal state. Solves an
+immediate disk crisis: 128 unreleased worktrees consuming 65 GB (88% disk) on the VM.
+
+Core design: in-process `src/reaper.ts` module wired into the session state machine.
+Event-driven deletion fires after a configurable grace period (default 1h) when a session
+transitions to `completed`, `failed`, or `abandoned`. A periodic sweep catches sessions
+missed during daemon downtime. Worktree paths are registered by agents via a new
+`register_worktree` MCP tool, with a timestamp-based discovery heuristic for legacy sessions
+and a one-time startup backfill. Safety: active sessions are never touched; `isStrictChild`
+uses `fs.realpathSync` on both sides to resist symlink traversal outside `agentRunsDir`.
+Session metadata retention defaults to 30 days.
+
+- Spec: `.kiro/specs/session-reaper/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`
+- [ ] Complete · PR: —
+
+---
+
 ## Completed
 
 Items move here after they merge to `development`.
