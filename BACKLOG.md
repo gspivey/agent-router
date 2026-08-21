@@ -569,6 +569,27 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P2.19 — Session state persistence and recovery across daemon restarts
+
+**Surfaced 2026-08-21 (Gerard).**
+
+**Problem.** Active sessions are held only in memory. A daemon restart (e.g., after `git pull` deploys new code) drops all in-flight session state. Sessions are recoverable if the session ID is known — the on-disk `stream.log` and `meta.json` exist — but the daemon has no mechanism to reconnect to a session already running in a Kiro subprocess. This means every daemon restart orphans any active agent session.
+
+**Context.** This is `BACKLOG.md § P2.1` referenced elsewhere. A full spec should be generated via spec-gen before implementation.
+
+**Mini spec (placeholder — replace with full Kiro spec).**
+
+- On startup, scan `~/.agent-router/sessions/` for sessions with `status: active` that have a live subprocess (check PID in meta.json).
+- Reconnect those sessions into the session manager's in-memory registry.
+- Expose a CLI command `agent-router recover --session-id <id>` that manually reconnects a known session ID.
+- Tier 2 test: daemon restart with one active session results in session being recovered and subsequent webhooks routing correctly.
+
+**Acceptance.** A daemon restart while a session is active does not orphan the session; subsequent CI webhooks still route to it.
+
+**Note.** Full spec-gen run required before implementation. This item is a placeholder to reserve the ROADMAP slot.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy spec implementation
