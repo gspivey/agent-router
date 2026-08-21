@@ -487,6 +487,88 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P2.14 — Fix CI `pull_request` trigger to target `development`
+
+**Surfaced 2026-08-16 (Claude Ultrathink analysis).**
+
+**Problem.** `ci.yml` has `pull_request: branches: [main]` but all agent PRs target `development`. The trigger never fires on real PRs, so agents receive zero CI comment feedback — breaking the no-poll contract in `prompts/agent-router.md`.
+
+**Mini spec.**
+
+- Change `pull_request: branches: [main]` → `pull_request: branches: [development]` in `.github/workflows/ci.yml`.
+- Also change `nightly.yml` (or equivalent) to run against `development` instead of `main`.
+- Verification: open a test PR against `development` and confirm the workflow fires and posts a comment.
+
+**Acceptance.** A PR opened against `development` triggers the CI workflow and the `Post PR Comment` step runs.
+
+---
+
+### P2.15 — Fix Reaper double-initialization
+
+**Surfaced 2026-08-16 (Claude Ultrathink analysis).**
+
+**Problem.** `src/index.ts` creates two reaper instances at startup. The first (with `isActive: () => false` placeholder) is passed to `createSessionManager`; the second (real) instance is created afterward but never injected. `sessionMgr.shutdown()` calls `shutdown()` on the placeholder — harmless today but a latent correctness bug.
+
+**Mini spec.**
+
+- Refactor startup to use a ref-object pattern: create a single reaper, pass it to `createSessionManager` directly after construction.
+- Remove the placeholder `isActive` stub.
+- Tier 2 test: inject a spy reaper, call `sessionMgr.shutdown()`, assert the real reaper's `shutdown()` was called exactly once (not the placeholder).
+
+**Acceptance.** `sessionMgr.shutdown()` calls the real reaper's `shutdown()`. Existing reaper Tier 2 tests still pass.
+
+---
+
+### P2.16 — Extract `SessionState` type from `session-mgr.ts`
+
+**Surfaced 2026-08-16 (Claude Ultrathink analysis).**
+
+**Problem.** `session-mgr.ts` (1,398 lines) fuses 8+ responsibilities into one closure. Per-session state is fragmented across 4 parallel Maps (`inactivityTimers`, `lifetimeTimers`, `graceTimers`, `completionFlags`) + the session registry. Any new per-session field requires a 5th Map and updates to every cleanup path — high risk of timer-cleared-in-one-path-not-another bugs.
+
+**Mini spec.**
+
+- Define a `SessionState` interface consolidating all per-session mutable fields.
+- Replace the 4 parallel Maps with a single `Map<string, SessionState>`.
+- This is a pure refactor — no behavioral change.
+- Acceptance gate: all existing Tier 1 + Tier 2 tests pass unchanged after the refactor.
+
+**Acceptance.** Single `Map<sessionId, SessionState>` replaces the 4 parallel Maps. All 1100+ tests pass.
+
+---
+
+### P2.17 — Add `writeWorktreeReapedAt` to `SessionFiles`
+
+**Surfaced 2026-08-16 (Claude Ultrathink analysis).**
+
+**Problem.** `reaper.ts` directly reads/writes `meta.json` (bypassing `session-files.ts`) because `sessionFiles.updateMeta` rejects terminal sessions. This duplicates atomic-write logic and means meta format changes must be updated in two places.
+
+**Mini spec.**
+
+- Add a `writeWorktreeReapedAt(sessionId, timestamp)` method to `SessionFiles` that accepts terminal sessions and atomically updates only the `worktreeReapedAt` field.
+- Remove the direct `fs` meta-write from `reaper.ts`; replace with the new `SessionFiles` method.
+- Tier 1 test: `reaper.ts` no longer imports `fs` for meta writes; `SessionFiles.writeWorktreeReapedAt` is called instead.
+
+**Acceptance.** `reaper.ts` has no direct `meta.json` writes. All reaper Tier 2 tests pass.
+
+---
+
+### P2.18 — Add deadline to `verify()` call in inactivity timer
+
+**Surfaced 2026-08-16 (Claude Ultrathink analysis).**
+
+**Problem.** `resetInactivityTimer` fires an `async IIFE` inside a `setTimeout`. If `verify()` (a GitHub API call) hangs without a timeout, the inactivity handler leaks the session indefinitely — no deadline enforced.
+
+**Mini spec.**
+
+- Wrap the `verify()` call in `Promise.race([verify(sessionId), timeout(30_000)])` where `timeout` rejects after 30s.
+- On timeout: log a warning and treat as verify-failed (session proceeds to inactivity expiry).
+- Tier 1 property test: a `verify` that never resolves does not prevent the inactivity handler from completing within 31s.
+- Tier 2 test: a hanging verify does not cause a session to be leaked indefinitely.
+
+**Acceptance.** Inactivity handler completes within deadline even when `verify()` never resolves.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy spec implementation
