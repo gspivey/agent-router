@@ -33,17 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 43. Fix CI `pull_request` trigger to target `development`
-
-Change `pull_request: branches: [main]` → `branches: [development]` in `.github/workflows/ci.yml`
-and fix nightly to run against `development`. Unblocks the entire agent CI feedback loop — without
-this fix, agents receive zero CI comment feedback on their PRs.
-
-- Spec: `BACKLOG.md § P2.14`
-- [ ] Complete
-
----
-
 ### 44. Fix Reaper double-initialization
 
 Refactor `src/index.ts` startup to pass the real reaper instance (not a placeholder stub) to
@@ -87,6 +76,17 @@ inactivity handler from leaking sessions when the GitHub API hangs.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 43. Fix CI `pull_request` trigger to target `development`
+
+Change `pull_request: branches: [main]` → `branches: [development]` in `.github/workflows/ci.yml`
+and fix nightly to run against `development`. Unblocks the entire agent CI feedback loop — without
+this fix, agents receive zero CI comment feedback on their PRs.
+
+- Spec: `BACKLOG.md § P2.14`
+- [x] Complete · PR: #85
+
+---
 
 ### 42. Session reaper: automatic disk reclamation
 
