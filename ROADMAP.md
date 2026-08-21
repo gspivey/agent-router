@@ -33,6 +33,55 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 43. Fix CI `pull_request` trigger to target `development`
+
+Change `pull_request: branches: [main]` → `branches: [development]` in `.github/workflows/ci.yml`
+and fix nightly to run against `development`. Unblocks the entire agent CI feedback loop — without
+this fix, agents receive zero CI comment feedback on their PRs.
+
+- Spec: `BACKLOG.md § P2.14`
+- [ ] Complete
+
+---
+
+### 44. Fix Reaper double-initialization
+
+Refactor `src/index.ts` startup to pass the real reaper instance (not a placeholder stub) to
+`createSessionManager`. Add Tier 2 test asserting real reaper shutdown is called.
+
+- Spec: `BACKLOG.md § P2.15`
+- [ ] Complete
+
+---
+
+### 45. Extract `SessionState` type from `session-mgr.ts`
+
+Replace 4 parallel Maps (`inactivityTimers`, `lifetimeTimers`, `graceTimers`, `completionFlags`)
+with a single `Map<sessionId, SessionState>`. Pure refactor — all existing tests must pass.
+
+- Spec: `BACKLOG.md § P2.16`
+- [ ] Complete
+
+---
+
+### 46. Add `writeWorktreeReapedAt` to `SessionFiles`
+
+Move reaper's direct `meta.json` writes into a new `SessionFiles.writeWorktreeReapedAt()` method
+so the atomic-write abstraction is not duplicated.
+
+- Spec: `BACKLOG.md § P2.17`
+- [ ] Complete
+
+---
+
+### 47. Add deadline to `verify()` call in inactivity timer
+
+Wrap `verify(sessionId)` in `Promise.race([verify(sessionId), timeout(30_000)])` to prevent the
+inactivity handler from leaking sessions when the GitHub API hangs.
+
+- Spec: `BACKLOG.md § P2.18`
+- [ ] Complete
+
 ---
 
 ## Completed
