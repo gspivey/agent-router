@@ -569,6 +569,23 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P2.19 — Session recovery on daemon restart
+
+**Surfaced 2026-08-21 (Gerard). Spec: `.kiro/specs/session-recovery/`**
+
+**Problem.** Active sessions are held only in memory. A daemon restart (e.g., `git pull` + `sudo systemctl restart agent-router` after a code deploy) orphans all in-flight Kiro agent sessions. The daemon has no mechanism to reconnect, so subsequent CI webhooks route to nothing and PRs stall until the cron circuit breaker fires a new session.
+
+**Spec.** Full spec at `.kiro/specs/session-recovery/` — requirements.md, design.md, tasks.md. Reviewed with Claude opus (2 rounds, SHIPPABLE verdict). Summary:
+
+- On startup, query `sessionFiles.listSessions()` for sessions with `status: active`
+- For each: spawn fresh `kiro-cli acp` subprocess, call `acp.loadSession(kiro_session_id)` to resume Kiro context
+- On success: re-register in session manager, start fresh timers, routing resumes automatically via existing SQLite rows
+- On failure: mark `abandoned` with `terminated_by_restart`, cron circuit breaker allows refire
+
+**Acceptance.** See `.kiro/specs/session-recovery/requirements.md`. Key: daemon restart while a session is active results in automatic resumption; subsequent CI webhooks route correctly; failed resumes are marked `abandoned` and refired by cron.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy spec implementation

@@ -73,6 +73,20 @@ inactivity handler from leaking sessions when the GitHub API hangs.
 
 ---
 
+### 48. Session recovery on daemon restart
+
+Implement automatic session recovery in `resumeSessions()` on `SessionManager`: scan for
+`status: active` sessions on startup, spawn fresh ACP subprocesses, call `acp.loadSession()`
+to resume Kiro context, re-register in the in-memory registry so webhook routing resumes.
+Sessions that cannot be resumed are marked `abandoned` with `terminated_by_restart` so the
+cron circuit breaker can refire them. Includes `loadSession` ACP method, `kiro_session_id`
+persistence, startup wiring, new termination reason union value, and Tier 1 + Tier 2 tests.
+
+- Spec: `.kiro/specs/session-recovery/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
+- [ ] Complete
+
+---
+
 ## Completed
 
 Items move here after they merge to `development`.
