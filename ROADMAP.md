@@ -33,16 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 46. Add `writeWorktreeReapedAt` to `SessionFiles`
-
-Move reaper's direct `meta.json` writes into a new `SessionFiles.writeWorktreeReapedAt()` method
-so the atomic-write abstraction is not duplicated.
-
-- Spec: `BACKLOG.md § P2.17`
-- [ ] Complete
-
----
-
 ### 47. Add deadline to `verify()` call in inactivity timer
 
 Wrap `verify(sessionId)` in `Promise.race([verify(sessionId), timeout(30_000)])` to prevent the
@@ -140,6 +130,16 @@ then implement tasks `6`, `7`, `8`. Depends on item 54.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 46. Add `writeWorktreeReapedAt` to `SessionFiles`
+
+Move reaper's direct `meta.json` writes into a new `SessionFiles.writeWorktreeReapedAt()` method
+so the atomic-write abstraction is not duplicated.
+
+- Spec: `BACKLOG.md § P2.17`
+- [x] Complete · PR: #94
+
+---
 
 ### 45. Extract `SessionState` type from `session-mgr.ts`
 
