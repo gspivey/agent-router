@@ -33,16 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 47. Add deadline to `verify()` call in inactivity timer
-
-Wrap `verify(sessionId)` in `Promise.race([verify(sessionId), timeout(30_000)])` to prevent the
-inactivity handler from leaking sessions when the GitHub API hangs.
-
-- Spec: `BACKLOG.md § P2.18`
-- [ ] Complete
-
----
-
 ### 48. Session recovery on daemon restart
 
 Implement automatic session recovery in `resumeSessions()` on `SessionManager`: scan for
@@ -130,6 +120,16 @@ then implement tasks `6`, `7`, `8`. Depends on item 54.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 47. Add deadline to `verify()` call in inactivity timer
+
+Wrap `verify(sessionId)` in `Promise.race([verify(sessionId), timeout(30_000)])` to prevent the
+inactivity handler from leaking sessions when the GitHub API hangs.
+
+- Spec: `BACKLOG.md § P2.18`
+- [x] Complete · PR: #95
+
+---
 
 ### 46. Add `writeWorktreeReapedAt` to `SessionFiles`
 

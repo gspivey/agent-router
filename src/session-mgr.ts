@@ -273,6 +273,9 @@ const DEFAULT_SESSION_TIMEOUT: SessionTimeoutConfig = {
   gracePeriodAfterMergeSeconds: 60,
 };
 
+/** Default deadline (ms) for the verify() call inside the inactivity watchdog. */
+export const DEFAULT_VERIFY_DEADLINE_MS = 30_000;
+
 // ---------------------------------------------------------------------------
 // Session Registry — in-memory Map<sessionId, SessionHandle>
 // ---------------------------------------------------------------------------
@@ -370,6 +373,8 @@ export function createSessionManager(deps: {
   credentialMode?: 'env' | 'mcp';
   /** Optional session reaper for automatic disk reclamation. */
   reaper?: Reaper;
+  /** Milliseconds to wait for verify() before treating as timed-out (default 30_000). */
+  verifyDeadlineMs?: number;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
@@ -379,6 +384,7 @@ export function createSessionManager(deps: {
   const tokenStore = deps.tokenStore;
   const credentialMode = deps.credentialMode ?? 'env';
   const reaper = deps.reaper;
+  const verifyDeadlineMs = deps.verifyDeadlineMs ?? DEFAULT_VERIFY_DEADLINE_MS;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
@@ -483,7 +489,19 @@ export function createSessionManager(deps: {
         let verifyResult: VerifyResult | null = null;
         if (verify !== undefined) {
           try {
-            verifyResult = await verify(sessionId);
+            const deadline = new Promise<'verify_timeout'>((resolve) =>
+              setTimeout(() => resolve('verify_timeout'), verifyDeadlineMs),
+            );
+            const raceResult = await Promise.race([
+              verify(sessionId).then((r) => ({ kind: 'result' as const, value: r })),
+              deadline,
+            ]);
+            if (raceResult === 'verify_timeout') {
+              log.warn('Inactivity-watchdog verify timed out', { sessionId, deadlineMs: verifyDeadlineMs });
+              // Treat as verify-failed — session proceeds to inactivity termination
+            } else {
+              verifyResult = raceResult.value;
+            }
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
             log.error('Inactivity-watchdog verify threw', { sessionId, error: msg });
