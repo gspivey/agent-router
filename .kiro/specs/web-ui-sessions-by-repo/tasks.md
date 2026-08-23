@@ -1,14 +1,14 @@
 # Tasks: Web UI Sessions Grouped by Repo
 
 ## Task 1: Implement `getNextCronFire()` utility
-- [ ] Create `src/cron-next.ts` with a `getNextCronFire(schedule: string): Date | null` function.
-- [ ] Parse standard 5-field cron expressions (minute, hour, day-of-month, month, day-of-week).
-- [ ] Handle wildcards (`*`), lists (`1,3,5`), ranges (`1-5`), and steps (`*/10`).
-- [ ] Return the next matching `Date` from `Date.now()`, or `null` if the expression is invalid.
-- [ ] Add unit tests in `tests/cron-next.test.ts` covering: every-minute, specific hour, day-of-week, step intervals, and invalid expressions.
+- [x] Create `src/cron-next.ts` with a `getNextCronFire(schedule: string): Date | null` function.
+- [x] Parse standard 5-field cron expressions (minute, hour, day-of-month, month, day-of-week).
+- [x] Handle wildcards (`*`), lists (`1,3,5`), ranges (`1-5`), and steps (`*/10`).
+- [x] Return the next matching `Date` from `Date.now()`, or `null` if the expression is invalid.
+- [x] Add unit tests in `tests/cron-next.test.ts` covering: every-minute, specific hour, day-of-week, step intervals, and invalid expressions.
 
 ## Task 2: Implement `groupSessionsByRepo()` helper
-- [ ] In `src/web-routes.ts`, add the `RepoGroup` interface:
+- [x] In `src/web-routes.ts`, add the `RepoGroup` interface:
   ```typescript
   interface RepoGroup {
     repo: string;
@@ -19,36 +19,36 @@
     open_pr_count: number;
   }
   ```
-- [ ] Implement `groupSessionsByRepo(sessions, repos, cronEntries, cronStates, perRepoLimit, waitingForFn): RepoGroup[]`.
-- [ ] Group sessions by matching `meta.repo` to `${repo.owner}/${repo.name}`.
-- [ ] Split each group into active (`status === 'active'`) and terminal (all others), sort terminal by `created_at` desc.
-- [ ] Slice terminal to `perRepoLimit`, set `terminal_total` to full count.
-- [ ] Match cron entries where `entry.repo === repoFullName`, look up pause state from `cronStates`, compute `next_fire` via `getNextCronFire()`.
-- [ ] Compute `open_pr_count`: count PRs across all sessions for this repo where the PR has no `merged_at` and the session is active or the PR is unmerged.
-- [ ] Add unit tests in `tests/group-sessions.test.ts`.
+- [x] Implement `groupSessionsByRepo(sessions, repos, cronEntries, cronStates, perRepoLimit, waitingForFn): RepoGroup[]`.
+- [x] Group sessions by matching `meta.repo` to `${repo.owner}/${repo.name}`.
+- [x] Split each group into active (`status === 'active'`) and terminal (all others), sort terminal by `created_at` desc.
+- [x] Slice terminal to `perRepoLimit`, set `terminal_total` to full count.
+- [x] Match cron entries where `entry.repo === repoFullName`, look up pause state from `cronStates`, compute `next_fire` via `getNextCronFire()`.
+- [x] Compute `open_pr_count`: count PRs across all sessions for this repo where the PR has no `merged_at` and the session is active or the PR is unmerged.
+- [x] Add unit tests in `tests/group-sessions.test.ts`.
 
 ## Task 3: Add `GET /repos/sessions` API endpoint
-- [ ] In `src/web-routes.ts`, add route handler for `GET /repos/sessions`.
-- [ ] Accept query param `per_repo_limit` (int 1-50, default 5). Validate and return 400 on invalid.
-- [ ] Call `groupSessionsByRepo()` with data from `sessionFiles.listSessions()`, config repos/cron, and `db.getAllCronStates()`.
-- [ ] Return JSON response `{ repos: RepoGroup[] }`.
-- [ ] In `src/web-server.ts`, update `createWebRoutes` deps to include `config` and `db`. Pass them through.
-- [ ] Mount `/repos/sessions` under the existing auth middleware.
-- [ ] Add integration test verifying response shape, auth enforcement, and param validation.
+- [x] In `src/web-routes.ts`, add route handler for `GET /repos/sessions`.
+- [x] Accept query param `per_repo_limit` (int 1-50, default 5). Validate and return 400 on invalid.
+- [x] Call `groupSessionsByRepo()` with data from `sessionFiles.listSessions()`, config repos/cron, and `db.getAllCronStates()`.
+- [x] Return JSON response `{ repos: RepoGroup[] }`.
+- [x] In `src/web-server.ts`, update `createWebRoutes` deps to include `config` and `db`. Pass them through.
+- [x] Mount `/repos/sessions` under the existing auth middleware.
+- [x] Add integration test verifying response shape, auth enforcement, and param validation.
 
 ## Task 4: Add `GET /repos/:repo/sessions` API endpoint
-- [ ] In `src/web-routes.ts`, add route handler for `GET /repos/:repo/sessions`.
-- [ ] URL-decode `:repo` param. Validate it matches a configured repo; return 404 if not found.
-- [ ] Accept `limit` (1-50, default 5) and `offset` (≥0, default 0) query params.
-- [ ] Filter `sessionFiles.listSessions()` to the target repo, exclude active, sort by `created_at` desc, apply offset/limit.
-- [ ] Return `{ repo, sessions: SessionSummary[], total, offset, limit }`.
-- [ ] Mount under auth middleware in `src/web-server.ts`.
-- [ ] Add integration test for pagination and 404 on unknown repo.
+- [x] In `src/web-routes.ts`, add route handler for `GET /repos/:repo/sessions`.
+- [x] URL-decode `:repo` param. Validate it matches a configured repo; return 404 if not found.
+- [x] Accept `limit` (1-50, default 5) and `offset` (≥0, default 0) query params.
+- [x] Filter `sessionFiles.listSessions()` to the target repo, exclude active, sort by `created_at` desc, apply offset/limit.
+- [x] Return `{ repo, sessions: SessionSummary[], total, offset, limit }`.
+- [x] Mount under auth middleware in `src/web-server.ts`.
+- [x] Add integration test for pagination and 404 on unknown repo.
 
 ## Task 5: Update web-server.ts route factory deps
-- [ ] Update the `createWebRoutes` function signature to accept `config: AgentRouterConfig` and `db: Database` in its deps object.
-- [ ] Update `createWebApp` in `src/web-server.ts` to pass `config` and `db` when calling `createWebRoutes()`.
-- [ ] Verify existing tests still pass with the expanded deps (update test mocks if needed).
+- [x] Update the `createWebRoutes` function signature to accept `config: AgentRouterConfig` and `db: Database` in its deps object.
+- [x] Update `createWebApp` in `src/web-server.ts` to pass `config` and `db` when calling `createWebRoutes()`.
+- [x] Verify existing tests still pass with the expanded deps (update test mocks if needed).
 
 ## Task 6: Add CSS for grouped layout
 - [ ] In `src/web-ui.ts`, add CSS classes to the `<style>` block:
