@@ -51,7 +51,7 @@
 - [x] Verify existing tests still pass with the expanded deps (update test mocks if needed).
 
 ## Task 6: Add CSS for grouped layout
-- [ ] In `src/web-ui.ts`, add CSS classes to the `<style>` block:
+- [x] In `src/web-ui.ts`, add CSS classes to the `<style>` block:
   - `.repo-section` — border, margin, border-radius for the group container.
   - `.repo-header` — flex row, cursor pointer, padding, hover highlight.
   - `.repo-header h2` — font size, weight, margin.
@@ -63,31 +63,31 @@
   - `@keyframes pulse` — opacity 1→0.4→1 over 1.5s.
   - `.show-more-btn` — styled as subtle link-button.
   - `.collapse-icon` — rotate transform on collapse state.
-- [ ] Add responsive overrides in existing `@media` blocks for `.repo-header` flex-wrap on mobile.
-- [ ] Ensure touch targets on `.repo-header` and `.show-more-btn` are ≥44px.
+- [x] Add responsive overrides in existing `@media` blocks for `.repo-header` flex-wrap on mobile.
+- [x] Ensure touch targets on `.repo-header` and `.show-more-btn` are ≥44px.
 
 ## Task 7: Rewrite list-view JS to render grouped sections
-- [ ] Replace `loadAllSessions()` with `loadGroupedSessions()` in the `<script>` block.
-- [ ] `loadGroupedSessions()` calls `resilientFetch('/repos/sessions')`.
-- [ ] On success, iterate `repos[]` and render each with `renderRepoSection(repoGroup)`.
-- [ ] `renderRepoSection()` outputs:
+- [x] Replace `loadAllSessions()` with `loadGroupedSessions()` in the `<script>` block.
+- [x] `loadGroupedSessions()` calls `resilientFetch('/repos/sessions')`.
+- [x] On success, iterate `repos[]` and render each with `renderRepoSection(repoGroup)`.
+- [x] `renderRepoSection()` outputs:
   - Section wrapper with `data-repo` attribute.
   - Header with collapse icon, repo name `<h2>`, PR count badge, cron line.
   - Body with active sessions (using `renderSessionItem()` + streaming dot) and terminal sessions.
   - "Show more" button if `terminal_total > terminal_sessions.length`.
-- [ ] Implement `isAutoCollapsed(repoGroup)`: returns true if no active sessions and most recent terminal session `created_at` is >24h ago.
-- [ ] Read/write collapse state to `localStorage` (`repo-collapsed:<owner/name>` = `'1'` or `'0'`).
-- [ ] On header click, toggle `.collapsed` class and update `localStorage` + `aria-expanded`.
-- [ ] Handle error/auth states identically to existing `loadAllSessions()` error handling.
-- [ ] Handle empty state: "No repos configured" when `repos.length === 0`.
+- [x] Implement `isAutoCollapsed(repoGroup)`: returns true if no active sessions and most recent terminal session `created_at` is >24h ago.
+- [x] Read/write collapse state to `localStorage` (`repo-collapsed:<owner/name>` = `'1'` or `'0'`).
+- [x] On header click, toggle `.collapsed` class and update `localStorage` + `aria-expanded`.
+- [x] Handle error/auth states identically to existing `loadAllSessions()` error handling.
+- [x] Handle empty state: "No repos configured" when `repos.length === 0`.
 
 ## Task 8: Implement "Show more" per-repo pagination
-- [ ] Attach click handler on `.show-more-btn` elements.
-- [ ] Track current offset per repo in a `Map<string, number>` (starts at initial `terminal_sessions.length`).
-- [ ] On click, call `resilientFetch('/repos/' + encodeURIComponent(repo) + '/sessions?offset=' + offset + '&limit=5')`.
-- [ ] Append returned sessions to the repo's `.repo-body` before the "Show more" button.
-- [ ] Update offset. If `offset >= total`, remove the "Show more" button.
-- [ ] Handle fetch errors gracefully (show inline error, allow retry).
+- [x] Attach click handler on `.show-more-btn` elements.
+- [x] Track current offset per repo in a `Map<string, number>` (starts at initial `terminal_sessions.length`).
+- [x] On click, call `resilientFetch('/repos/' + encodeURIComponent(repo) + '/sessions?offset=' + offset + '&limit=5')`.
+- [x] Append returned sessions to the repo's `.repo-body` before the "Show more" button.
+- [x] Update offset. If `offset >= total`, remove the "Show more" button.
+- [x] Handle fetch errors gracefully (show inline error, allow retry).
 
 ## Task 9: Add accessibility attributes
 - [ ] Repo section headers: `role="button"`, `aria-expanded="true|false"`, `aria-controls="repo-body-<id>"`.

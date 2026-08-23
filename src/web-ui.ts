@@ -81,7 +81,7 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 .confirm-dialog{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:320px;text-align:center}
 .confirm-dialog p{margin:0 0 16px;font-size:15px}
 .confirm-dialog button{margin:0 8px}
-@media(max-width:480px){main{padding:8px}body{font-size:16px}.session-header{flex-direction:column;align-items:flex-start}.controls{flex-direction:column}.controls textarea{min-width:100%}}
+@media(max-width:480px){main{padding:8px}body{font-size:16px}.session-header{flex-direction:column;align-items:flex-start}.controls{flex-direction:column}.controls textarea{min-width:100%}.repo-header{gap:4px}.repo-header h2{font-size:14px}}
 @media(max-width:768px){#log-container{overflow-x:auto;font-size:14px}}
 .error-state{text-align:center;padding:40px 16px;color:#f85149}
 .error-state p{margin:8px 0}
@@ -107,7 +107,23 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 .health-unknown{background:#484f58}
 .badge-paused{background:#9e6a03;color:#fff}
 .badge-active{background:#238636;color:#fff}
-@media(max-width:768px){.config-grid{grid-template-columns:1fr}}
+.repo-section{border:1px solid #30363d;border-radius:8px;margin-bottom:12px;background:#0d1117;overflow:hidden}
+.repo-header{display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer;background:#161b22;transition:background 0.15s;min-height:44px;flex-wrap:wrap}
+.repo-header:hover{background:#21262d}
+.repo-header h2{margin:0;font-size:15px;font-weight:600;flex:1;min-width:0}
+.repo-header-info{font-size:13px;color:#8b949e;white-space:nowrap}
+.repo-cron{font-size:12px;color:#8b949e;padding:4px 16px 8px 36px}
+.repo-body{padding:8px 12px 12px}
+.repo-section.collapsed .repo-body{display:none}
+.repo-section.collapsed .repo-cron{display:none}
+.streaming-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#3fb950;animation:pulse 1.5s infinite;vertical-align:middle;margin-right:4px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.show-more-btn{display:block;width:100%;padding:10px 16px;border:1px solid #30363d;border-radius:6px;background:#21262d;color:#8b949e;font-size:13px;cursor:pointer;text-align:center;margin-top:8px;min-height:44px;transition:background 0.15s,color 0.15s}
+.show-more-btn:hover{background:#30363d;color:#eee}
+.show-more-btn:disabled{opacity:0.4;cursor:not-allowed}
+.collapse-icon{display:inline-block;width:16px;font-size:12px;transition:transform 0.15s;color:#8b949e}
+.repo-section.collapsed .collapse-icon{transform:rotate(-90deg)}
+@media(max-width:768px){.config-grid{grid-template-columns:1fr}.repo-header{padding:12px}}
 </style>
 </head>
 <body>
@@ -250,9 +266,7 @@ async function resilientFetch(path, options) {
 }
 
 // --- State ---
-let currentPage = 0;
-const PAGE_SIZE = 20;
-let totalSessions = 0;
+const repoOffsets = new Map();
 
 // --- Identity display ---
 async function displayIdentity() {
@@ -309,8 +323,7 @@ async function loadAllSessions() {
   const listView = document.getElementById('list-view');
   listView.innerHTML = '<div class="empty-state">Loading sessions...</div>';
 
-  const offset = currentPage * PAGE_SIZE;
-  const result = await resilientFetch('/sessions?limit=' + PAGE_SIZE + '&offset=' + offset);
+  const result = await resilientFetch('/repos/sessions');
 
   if (!result.ok) {
     if (result.outcome === 'auth') {
@@ -331,40 +344,188 @@ async function loadAllSessions() {
   }
 
   const data = await result.response.json();
-  totalSessions = data.total;
-  renderList(data.sessions);
+  renderGroupedList(data.repos);
 }
 
-function renderList(sessions) {
+function isAutoCollapsed(repoGroup) {
+  if (repoGroup.active_sessions.length > 0) return false;
+  if (repoGroup.terminal_sessions.length === 0) return true;
+  const newest = repoGroup.terminal_sessions[0];
+  if (!newest || !newest.created_at) return true;
+  const ageMs = Date.now() - newest.created_at * 1000;
+  return ageMs > 24 * 60 * 60 * 1000;
+}
+
+function getCollapseState(repo, autoCollapsed) {
+  const key = 'repo-collapsed:' + repo;
+  const stored = localStorage.getItem(key);
+  if (stored === '1') return true;
+  if (stored === '0') return false;
+  return autoCollapsed;
+}
+
+function setCollapseState(repo, collapsed) {
+  const key = 'repo-collapsed:' + repo;
+  localStorage.setItem(key, collapsed ? '1' : '0');
+}
+
+function renderGroupedList(repos) {
   const listView = document.getElementById('list-view');
 
-  if (sessions.length === 0 && totalSessions === 0) {
-    listView.innerHTML = '<div class="empty-state">No sessions found</div>';
+  if (!repos || repos.length === 0) {
+    listView.innerHTML = '<div class="empty-state">No repos configured</div>';
     return;
   }
 
   let html = '';
-  for (const session of sessions) {
-    html += renderSessionItem(session);
-  }
+  for (const repoGroup of repos) {
+    const autoCollapsed = isAutoCollapsed(repoGroup);
+    const collapsed = getCollapseState(repoGroup.repo, autoCollapsed);
+    const sectionId = 'repo-body-' + repoGroup.repo.replace(/\\//g, '-');
+    const collapseClass = collapsed ? ' collapsed' : '';
 
-  // Pagination controls
-  const totalPages = Math.ceil(totalSessions / PAGE_SIZE);
-  if (totalPages > 1) {
-    html += '<div class="pagination">';
-    html += '<button id="prev-btn"' + (currentPage === 0 ? ' disabled' : '') + '>&laquo; Prev</button>';
-    html += '<span>Page ' + (currentPage + 1) + ' of ' + totalPages + '</span>';
-    html += '<button id="next-btn"' + (currentPage >= totalPages - 1 ? ' disabled' : '') + '>Next &raquo;</button>';
+    html += '<div class="repo-section' + collapseClass + '" data-repo="' + repoGroup.repo + '">';
+
+    // Header
+    html += '<div class="repo-header" role="button" aria-expanded="' + (!collapsed) + '" aria-controls="' + sectionId + '">';
+    html += '<span class="collapse-icon">&#x25BC;</span>';
+    html += '<h2>' + escapeHtml(repoGroup.repo) + '</h2>';
+    html += '<span class="repo-header-info">';
+    if (repoGroup.open_pr_count > 0) {
+      const prUrl = 'https://github.com/' + repoGroup.repo + '/pulls';
+      html += '<a href="' + prUrl + '" target="_blank" rel="noopener" style="color:#58a6ff;margin-right:8px">' + repoGroup.open_pr_count + ' PR' + (repoGroup.open_pr_count > 1 ? 's' : '') + ' open</a>';
+    }
+    html += '</span>';
     html += '</div>';
+
+    // Cron line
+    if (repoGroup.cron) {
+      html += '<div class="repo-cron">';
+      html += escapeHtml(repoGroup.cron.name) + ' &middot; <code>' + escapeHtml(repoGroup.cron.schedule) + '</code>';
+      if (repoGroup.cron.paused) {
+        html += ' &middot; <span class="badge badge-yellow">paused</span>';
+      } else if (repoGroup.cron.next_fire) {
+        const nextDate = new Date(repoGroup.cron.next_fire);
+        const diff = nextDate.getTime() - Date.now();
+        if (diff > 0) {
+          const hours = Math.floor(diff / 3600000);
+          const mins = Math.floor((diff % 3600000) / 60000);
+          html += ' &middot; next in ' + (hours > 0 ? hours + 'h ' : '') + mins + 'm';
+        }
+      }
+      html += '</div>';
+    }
+
+    // Body
+    html += '<div class="repo-body" id="' + sectionId + '">';
+
+    // Active sessions
+    for (const session of repoGroup.active_sessions) {
+      html += renderSessionItemWithDot(session);
+    }
+
+    // Terminal sessions
+    for (const session of repoGroup.terminal_sessions) {
+      html += renderSessionItem(session);
+    }
+
+    // "Show more" button
+    const currentCount = repoGroup.terminal_sessions.length;
+    repoOffsets.set(repoGroup.repo, currentCount);
+    if (repoGroup.terminal_total > currentCount) {
+      html += '<button class="show-more-btn" data-repo="' + repoGroup.repo + '" aria-label="Load more sessions for ' + escapeHtml(repoGroup.repo) + '">Show more (' + (repoGroup.terminal_total - currentCount) + ' remaining)</button>';
+    }
+
+    html += '</div>'; // repo-body
+    html += '</div>'; // repo-section
   }
 
   listView.innerHTML = html;
 
-  // Attach pagination handlers
-  const prevBtn = document.getElementById('prev-btn');
-  const nextBtn = document.getElementById('next-btn');
-  if (prevBtn) prevBtn.addEventListener('click', function() { currentPage--; loadAllSessions(); });
-  if (nextBtn) nextBtn.addEventListener('click', function() { currentPage++; loadAllSessions(); });
+  // Attach collapse/expand handlers
+  const headers = listView.querySelectorAll('.repo-header');
+  for (const header of headers) {
+    header.addEventListener('click', function(e) {
+      // Don't toggle when clicking a link inside the header
+      if (e.target.tagName === 'A') return;
+      const section = header.closest('.repo-section');
+      const repo = section.getAttribute('data-repo');
+      const isCollapsed = section.classList.toggle('collapsed');
+      header.setAttribute('aria-expanded', String(!isCollapsed));
+      setCollapseState(repo, isCollapsed);
+    });
+  }
+
+  // Attach "Show more" handlers
+  const showMoreBtns = listView.querySelectorAll('.show-more-btn');
+  for (const btn of showMoreBtns) {
+    btn.addEventListener('click', function() { handleShowMore(btn); });
+  }
+}
+
+function renderSessionItemWithDot(session) {
+  const badge = statusToBadge(session.status);
+  const shortId = session.session_id.slice(0, 8);
+  const repoDisplay = session.repo || 'no repo';
+  const prLinks = renderPRLinks(session.prs);
+  const waitingLine = session.waiting_for
+    ? '<div class="session-waiting">' + session.waiting_for + '</div>'
+    : '';
+
+  return '<a href="#/sessions/' + session.session_id + '" style="text-decoration:none;color:inherit">' +
+    '<div class="session-item">' +
+      '<div class="session-header">' +
+        '<span class="streaming-dot" aria-label="Active session streaming" role="img"></span>' +
+        '<span class="badge badge-' + badge + '">' + session.status + '</span>' +
+        '<span class="session-repo">' + repoDisplay + '</span>' +
+        '<span class="session-id">' + shortId + '</span>' +
+        prLinks +
+      '</div>' +
+      '<div class="session-meta">' +
+        'Created: ' + formatTime(session.created_at) +
+        (session.completed_at ? ' &middot; Ended: ' + formatTime(session.completed_at) : '') +
+        (session.termination_reason ? ' &middot; ' + session.termination_reason : '') +
+      '</div>' +
+      waitingLine +
+    '</div></a>';
+}
+
+async function handleShowMore(btn) {
+  const repo = btn.getAttribute('data-repo');
+  const offset = repoOffsets.get(repo) || 0;
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+
+  const result = await resilientFetch('/repos/' + encodeURIComponent(repo) + '/sessions?offset=' + offset + '&limit=5');
+
+  if (!result.ok) {
+    btn.disabled = false;
+    btn.textContent = 'Failed to load — click to retry';
+    return;
+  }
+
+  const data = await result.response.json();
+  const section = btn.closest('.repo-section');
+  const body = section.querySelector('.repo-body');
+
+  // Insert sessions before the button
+  let html = '';
+  for (const session of data.sessions) {
+    html += renderSessionItem(session);
+  }
+  btn.insertAdjacentHTML('beforebegin', html);
+
+  // Update offset
+  const newOffset = offset + data.sessions.length;
+  repoOffsets.set(repo, newOffset);
+
+  // Remove button if no more
+  if (newOffset >= data.total) {
+    btn.remove();
+  } else {
+    btn.disabled = false;
+    btn.textContent = 'Show more (' + (data.total - newOffset) + ' remaining)';
+  }
 }
 
 // --- Detail view ---
@@ -838,7 +999,6 @@ function navigate() {
     configView.style.display = 'none';
     var sessionsLink2 = document.querySelector('#main-nav [data-view="sessions"]');
     if (sessionsLink2) sessionsLink2.classList.add('active');
-    currentPage = 0;
     loadAllSessions();
   }
 }
