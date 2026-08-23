@@ -33,20 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 48. Session recovery on daemon restart
-
-Implement automatic session recovery in `resumeSessions()` on `SessionManager`: scan for
-`status: active` sessions on startup, spawn fresh ACP subprocesses, call `acp.loadSession()`
-to resume Kiro context, re-register in the in-memory registry so webhook routing resumes.
-Sessions that cannot be resumed are marked `abandoned` with `terminated_by_restart` so the
-cron circuit breaker can refire them. Includes `loadSession` ACP method, `kiro_session_id`
-persistence, startup wiring, new termination reason union value, and Tier 1 + Tier 2 tests.
-
-- Spec: `.kiro/specs/session-recovery/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
-- [ ] Complete
-
----
-
 ### 49. Web UI config view — backend (helpers + API route)
 
 Read `.kiro/specs/web-ui-config-view/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -120,6 +106,20 @@ then implement tasks `6`, `7`, `8`. Depends on item 54.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 48. Session recovery on daemon restart
+
+Implement automatic session recovery in `resumeSessions()` on `SessionManager`: scan for
+`status: active` sessions on startup, spawn fresh ACP subprocesses, call `acp.loadSession()`
+to resume Kiro context, re-register in the in-memory registry so webhook routing resumes.
+Sessions that cannot be resumed are marked `abandoned` with `terminated_by_restart` so the
+cron circuit breaker can refire them. Includes `loadSession` ACP method, `kiro_session_id`
+persistence, startup wiring, new termination reason union value, and Tier 1 + Tier 2 tests.
+
+- Spec: `.kiro/specs/session-recovery/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
+- [x] Complete · PR: #96
+
+---
 
 ### 47. Add deadline to `verify()` call in inactivity timer
 
