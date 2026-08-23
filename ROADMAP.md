@@ -33,16 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 50. Web UI config view — frontend (nav, rendering, CSS)
-
-Read `.kiro/specs/web-ui-config-view/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `4`, `5`, `6`, `7`. Depends on item 49.
-
-- Spec: `.kiro/specs/web-ui-config-view/` · tasks `4`, `5`, `6`, `7`
-- [ ] Complete
-
----
-
 ### 51. Web UI sessions by repo — backend (utilities + API endpoints)
 
 Read `.kiro/specs/web-ui-sessions-by-repo/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -96,6 +86,16 @@ then implement tasks `6`, `7`, `8`. Depends on item 54.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 50. Web UI config view — frontend (nav, rendering, CSS)
+
+Read `.kiro/specs/web-ui-config-view/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `4`, `5`, `6`, `7`. Depends on item 49.
+
+- Spec: `.kiro/specs/web-ui-config-view/` · tasks `4`, `5`, `6`, `7`
+- [x] Complete · PR: #99
+
+---
 
 ### 49. Web UI config view — backend (helpers + API route)
 
