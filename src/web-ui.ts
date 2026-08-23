@@ -105,7 +105,7 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 .health-green{background:#3fb950}
 .health-red{background:#f85149}
 .health-unknown{background:#484f58}
-.badge-paused{background:#9e6a03;color:#fff}
+.badge-paused{background:#484f58;color:#fff}
 .badge-active{background:#238636;color:#fff}
 .repo-section{border:1px solid #30363d;border-radius:8px;margin-bottom:12px;background:#0d1117;overflow:hidden}
 .repo-header{display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer;background:#161b22;transition:background 0.15s;min-height:44px;flex-wrap:wrap}
@@ -123,6 +123,23 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 .show-more-btn:disabled{opacity:0.4;cursor:not-allowed}
 .collapse-icon{display:inline-block;width:16px;font-size:12px;transition:transform 0.15s;color:#8b949e}
 .repo-section.collapsed .collapse-icon{transform:rotate(-90deg)}
+.projects-panel{margin-bottom:16px}
+.project-section{border:1px solid #30363d;border-radius:8px;margin-bottom:8px;background:#0d1117;overflow:hidden}
+.project-header{padding:12px 16px;display:flex;align-items:center;gap:8px;cursor:pointer;background:#161b22;transition:background 0.15s;min-height:44px;flex-wrap:wrap}
+.project-header:hover{background:#21262d}
+.project-header h3{margin:0;font-size:14px;font-weight:600;flex:1;min-width:0}
+.project-repos{padding:0 12px 12px}
+.project-repo-item{padding:6px 8px;font-size:13px;display:flex;align-items:center;gap:8px;border-radius:4px;cursor:pointer;transition:background 0.15s}
+.project-repo-item:hover{background:#21262d}
+.token-warning{font-size:11px;color:#d29922}
+.project-section.collapsed .project-repos{display:none}
+.project-section .collapse-icon{display:inline-block;width:16px;font-size:12px;transition:transform 0.15s;color:#8b949e}
+.project-section.collapsed .collapse-icon{transform:rotate(-90deg)}
+.repo-filter-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:12px;background:#161b22;border:1px solid #30363d;border-radius:6px;font-size:13px}
+.repo-filter-bar .filter-label{color:#8b949e}
+.repo-filter-bar .filter-value{color:#eee;font-weight:500}
+.repo-filter-bar .filter-clear{background:none;border:1px solid #30363d;border-radius:4px;color:#8b949e;font-size:12px;cursor:pointer;padding:4px 8px;min-width:44px;min-height:28px}
+.repo-filter-bar .filter-clear:hover{color:#eee;border-color:#58a6ff}
 @media(max-width:768px){.config-grid{grid-template-columns:1fr}.repo-header{padding:12px}}
 </style>
 </head>
@@ -136,6 +153,8 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 <span id="identity"></span>
 </header>
 <main>
+<div id="projects-panel" class="projects-panel" style="display:none"></div>
+<div id="repo-filter" style="display:none"></div>
 <div id="list-view"></div>
 <div id="detail-view"></div>
 <div id="config-view" style="display:none"></div>
@@ -267,6 +286,7 @@ async function resilientFetch(path, options) {
 
 // --- State ---
 const repoOffsets = new Map();
+let currentRepoFilter = null; // string or null
 
 // --- Identity display ---
 async function displayIdentity() {
@@ -323,6 +343,31 @@ async function loadGroupedSessions() {
   const listView = document.getElementById('list-view');
   listView.innerHTML = '<div class="empty-state">Loading sessions...</div>';
 
+  // When a repo filter is active, use the flat sessions endpoint
+  if (currentRepoFilter) {
+    const filterResult = await resilientFetch('/sessions?repo=' + encodeURIComponent(currentRepoFilter) + '&limit=50');
+    if (!filterResult.ok) {
+      if (filterResult.outcome === 'auth') {
+        listView.innerHTML = '<div class="error-state auth-error">' +
+          '<p>Authentication failed</p>' +
+          '<p class="error-message">Your session token is invalid or expired. Re-authenticate to continue.</p>' +
+          '</div>';
+      } else {
+        listView.innerHTML = '<div class="error-state">' +
+          '<p>Failed to load sessions</p>' +
+          '<p class="error-message">' + (filterResult.outcome === 'timeout' ? 'Request timed out' : 'Network error') + '</p>' +
+          '<button id="retry-list-btn">Retry</button>' +
+          '</div>';
+        var filterRetryBtn = document.getElementById('retry-list-btn');
+        if (filterRetryBtn) filterRetryBtn.addEventListener('click', function() { loadGroupedSessions(); });
+      }
+      return;
+    }
+    var filterData = await filterResult.response.json();
+    renderFilteredSessions(filterData.sessions);
+    return;
+  }
+
   const result = await resilientFetch('/repos/sessions');
 
   if (!result.ok) {
@@ -345,6 +390,23 @@ async function loadGroupedSessions() {
 
   const data = await result.response.json();
   renderGroupedList(data.repos);
+}
+
+function renderFilteredSessions(sessions) {
+  const listView = document.getElementById('list-view');
+  if (!sessions || sessions.length === 0) {
+    listView.innerHTML = '<div class="empty-state">No sessions for this repo</div>';
+    return;
+  }
+  let html = '';
+  for (const session of sessions) {
+    if (session.status === 'active') {
+      html += renderSessionItemWithDot(session);
+    } else {
+      html += renderSessionItem(session);
+    }
+  }
+  listView.innerHTML = html;
 }
 
 function isAutoCollapsed(repoGroup) {
@@ -888,7 +950,7 @@ function renderConfigView(data) {
     html += '<table class="config-table"><thead><tr><th>Name</th><th>Repo</th><th>Schedule</th><th>Next Fire</th><th>State</th></tr></thead><tbody>';
     for (var i = 0; i < data.crons.length; i++) {
       var cron = data.crons[i];
-      var stateClass = cron.paused ? 'badge-paused' : 'badge-active';
+      var stateClass = cron.paused ? 'badge-yellow' : 'badge-active';
       var stateLabel = cron.paused ? 'paused' : 'active';
       html += '<tr>';
       html += '<td>' + escapeHtml(cron.name) + '</td>';
@@ -944,6 +1006,184 @@ function renderConfigView(data) {
   configView.innerHTML = html;
 }
 
+// --- Projects panel ---
+function healthToBadgeClass(status) {
+  switch (status) {
+    case 'green': return 'badge-green';
+    case 'partial': return 'badge-yellow';
+    case 'paused': return 'badge-paused';
+    default: return 'badge-gray';
+  }
+}
+
+function healthToLabel(status) {
+  switch (status) {
+    case 'green': return 'Health: all repos healthy';
+    case 'partial': return 'Health: some repos have failed sessions';
+    case 'paused': return 'Health: no recent activity';
+    default: return 'Health: unknown';
+  }
+}
+
+async function loadProjects() {
+  const panel = document.getElementById('projects-panel');
+  try {
+    const result = await resilientFetch('/projects');
+    if (!result.ok) {
+      panel.style.display = 'none';
+      return;
+    }
+    const data = await result.response.json();
+    if (data.projects.length === 0 && data.ungrouped.length === 0) {
+      panel.style.display = 'none';
+      return;
+    }
+    renderProjectsPanel(data);
+    panel.style.display = 'block';
+  } catch (e) {
+    panel.style.display = 'none';
+  }
+}
+
+function renderProjectsPanel(data) {
+  const panel = document.getElementById('projects-panel');
+  let html = '';
+
+  for (const project of data.projects) {
+    const sectionId = 'project-' + project.name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+    const headingId = sectionId + '-heading';
+    const collapsed = getProjectCollapseState(project.name);
+    const collapseClass = collapsed ? ' collapsed' : '';
+    const badgeClass = healthToBadgeClass(project.health.status);
+    const badgeLabel = healthToLabel(project.health.status);
+
+    html += '<section class="project-section' + collapseClass + '" role="region" aria-labelledby="' + headingId + '" data-project="' + escapeHtml(project.name) + '">';
+    html += '<div class="project-header" role="button" aria-expanded="' + (!collapsed) + '" tabindex="0">';
+    html += '<span class="collapse-icon">&#x25BC;</span>';
+    html += '<h3 id="' + headingId + '">' + escapeHtml(project.name) + '</h3>';
+    html += '<span class="badge ' + badgeClass + '" aria-label="' + badgeLabel + '">' + project.health.status + '</span>';
+    html += '<span style="font-size:12px;color:#8b949e">' + project.repos.length + ' repo' + (project.repos.length !== 1 ? 's' : '') + '</span>';
+    if (!project.tokenCoverage.complete) {
+      html += '<span class="token-warning" aria-label="Token coverage incomplete: ' + project.tokenCoverage.missingRepos.join(', ') + '">&#x26A0; missing token</span>';
+    }
+    html += '</div>';
+    html += '<div class="project-repos">';
+    for (const repo of project.repos) {
+      html += '<div class="project-repo-item" data-repo-filter="' + escapeHtml(repo.fullName) + '" role="button" tabindex="0" aria-label="Filter sessions by ' + escapeHtml(repo.fullName) + '">';
+      html += '<span>' + escapeHtml(repo.fullName) + '</span>';
+      if (repo.activeSessions > 0) {
+        html += '<span style="font-size:11px;padding:1px 6px;border-radius:12px;background:#238636;color:#fff">' + repo.activeSessions + ' active</span>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '</section>';
+  }
+
+  // Ungrouped section
+  if (data.ungrouped.length > 0) {
+    const ungroupedId = 'project-ungrouped';
+    const ungroupedHeadingId = ungroupedId + '-heading';
+    const collapsed = getProjectCollapseState('__ungrouped__');
+    const collapseClass = collapsed ? ' collapsed' : '';
+
+    html += '<section class="project-section' + collapseClass + '" role="region" aria-labelledby="' + ungroupedHeadingId + '" data-project="__ungrouped__">';
+    html += '<div class="project-header" role="button" aria-expanded="' + (!collapsed) + '" tabindex="0">';
+    html += '<span class="collapse-icon">&#x25BC;</span>';
+    html += '<h3 id="' + ungroupedHeadingId + '">Ungrouped</h3>';
+    html += '<span style="font-size:12px;color:#8b949e">' + data.ungrouped.length + ' repo' + (data.ungrouped.length !== 1 ? 's' : '') + '</span>';
+    html += '</div>';
+    html += '<div class="project-repos">';
+    for (const repo of data.ungrouped) {
+      html += '<div class="project-repo-item" data-repo-filter="' + escapeHtml(repo.fullName) + '" role="button" tabindex="0" aria-label="Filter sessions by ' + escapeHtml(repo.fullName) + '">';
+      html += '<span>' + escapeHtml(repo.fullName) + '</span>';
+      if (repo.activeSessions > 0) {
+        html += '<span style="font-size:11px;padding:1px 6px;border-radius:12px;background:#238636;color:#fff">' + repo.activeSessions + ' active</span>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '</section>';
+  }
+
+  panel.innerHTML = html;
+
+  // Attach collapse/expand handlers
+  var headers = panel.querySelectorAll('.project-header');
+  for (var i = 0; i < headers.length; i++) {
+    (function(header) {
+      function toggle() {
+        var section = header.closest('.project-section');
+        var projectName = section.getAttribute('data-project');
+        var isCollapsed = section.classList.toggle('collapsed');
+        header.setAttribute('aria-expanded', String(!isCollapsed));
+        setProjectCollapseState(projectName, isCollapsed);
+      }
+      header.addEventListener('click', toggle);
+      header.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    })(headers[i]);
+  }
+
+  // Attach repo filter handlers
+  var repoItems = panel.querySelectorAll('.project-repo-item');
+  for (var j = 0; j < repoItems.length; j++) {
+    (function(item) {
+      function activate() {
+        var repo = item.getAttribute('data-repo-filter');
+        setRepoFilter(repo);
+      }
+      item.addEventListener('click', function(e) {
+        e.stopPropagation();
+        activate();
+      });
+      item.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); activate(); }
+      });
+    })(repoItems[j]);
+  }
+}
+
+function getProjectCollapseState(projectName) {
+  var key = 'project-collapsed:' + projectName;
+  return localStorage.getItem(key) === '1';
+}
+
+function setProjectCollapseState(projectName, collapsed) {
+  var key = 'project-collapsed:' + projectName;
+  localStorage.setItem(key, collapsed ? '1' : '0');
+}
+
+function setRepoFilter(repo) {
+  currentRepoFilter = repo;
+  renderRepoFilter();
+  loadGroupedSessions();
+}
+
+function clearRepoFilter() {
+  currentRepoFilter = null;
+  renderRepoFilter();
+  loadGroupedSessions();
+}
+
+function renderRepoFilter() {
+  var filterEl = document.getElementById('repo-filter');
+  if (!currentRepoFilter) {
+    filterEl.style.display = 'none';
+    filterEl.innerHTML = '';
+    return;
+  }
+  filterEl.style.display = 'block';
+  filterEl.innerHTML = '<div class="repo-filter-bar">' +
+    '<span class="filter-label">Filtered by:</span>' +
+    '<span class="filter-value">' + escapeHtml(currentRepoFilter) + '</span>' +
+    '<button class="filter-clear" id="clear-repo-filter" aria-label="Clear repo filter">Clear</button>' +
+    '</div>';
+  var clearBtn = document.getElementById('clear-repo-filter');
+  if (clearBtn) clearBtn.addEventListener('click', clearRepoFilter);
+}
+
 // --- Reconnect on visibility change ---
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible' && activeSSE && !activeSSE.ended) {
@@ -983,6 +1223,8 @@ function navigate() {
     listView.style.display = 'none';
     detailView.style.display = 'none';
     configView.style.display = 'block';
+    document.getElementById('projects-panel').style.display = 'none';
+    document.getElementById('repo-filter').style.display = 'none';
     var configLink = document.querySelector('#main-nav [data-view="config"]');
     if (configLink) configLink.classList.add('active');
     loadConfig();
@@ -990,6 +1232,8 @@ function navigate() {
     listView.style.display = 'none';
     detailView.style.display = 'block';
     configView.style.display = 'none';
+    document.getElementById('projects-panel').style.display = 'none';
+    document.getElementById('repo-filter').style.display = 'none';
     var sessionsLink = document.querySelector('#main-nav [data-view="sessions"]');
     if (sessionsLink) sessionsLink.classList.add('active');
     loadDetailView(route.sessionId);
@@ -997,8 +1241,10 @@ function navigate() {
     listView.style.display = 'block';
     detailView.style.display = 'none';
     configView.style.display = 'none';
+    renderRepoFilter();
     var sessionsLink2 = document.querySelector('#main-nav [data-view="sessions"]');
     if (sessionsLink2) sessionsLink2.classList.add('active');
+    loadProjects();
     loadGroupedSessions();
   }
 }

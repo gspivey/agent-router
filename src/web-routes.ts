@@ -54,6 +54,10 @@ export function validateOffset(value: string): number | null {
   return n;
 }
 
+export function validateRepo(value: string): boolean {
+  return value.includes('/');
+}
+
 export function validatePrompt(body: unknown): { valid: true; prompt: string } | { valid: false; reason: string } {
   if (body === null || typeof body !== 'object') {
     return { valid: false, reason: 'Request body must be a JSON object' };
@@ -380,6 +384,7 @@ export function createWebRoutes(deps: {
     const sinceParam = c.req.query('since');
     const limitParam = c.req.query('limit');
     const offsetParam = c.req.query('offset');
+    const repoParam = c.req.query('repo');
 
     let status: SessionMeta['status'] | undefined;
     if (statusParam !== undefined) {
@@ -416,7 +421,17 @@ export function createWebRoutes(deps: {
       offset = parsed;
     }
 
-    const sessions = sessionFiles.listSessions();
+    // Validate repo param format if provided
+    if (repoParam !== undefined && !validateRepo(repoParam)) {
+      return c.json(errorEnvelope('invalid_param', 'Invalid repo value', { param: 'repo', constraint: 'must contain "/" (format: owner/name)' }), 400);
+    }
+
+    let sessions = sessionFiles.listSessions();
+
+    // Filter by repo when specified
+    if (repoParam !== undefined) {
+      sessions = sessions.filter(s => s.repo === repoParam);
+    }
 
     const waitingForFn = (meta: SessionMeta): string | undefined => {
       if (meta.status !== 'active') return undefined;
