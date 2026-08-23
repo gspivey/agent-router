@@ -192,13 +192,22 @@ export const test = base.extend<ServerFixture & BrowserFixture>({
     await mgr.shutdown();
   },
 
-  baseUrl: async ({ rootDir, sessionManager, sessionFiles, sseBroker, tokenStore }, use) => {
+  baseUrl: async ({ rootDir, sessionManager, sessionFiles, sseBroker, tokenStore, db }, use) => {
     const log = createLogger({ level: 'error', output: () => {} });
     const controlPort = await getFreePort();
     const config = {
       port: 9999,
       controlPort,
       bindPublic: false,
+      repos: [{ owner: 'test-org', name: 'test-repo' }],
+      cron: [],
+      webhookSecret: 'test-secret',
+      kiroPath: '/usr/bin/kiro',
+      rateLimit: { perPRSeconds: 60 },
+      sessionTimeout: { inactivityMinutes: 5, maxLifetimeMinutes: 120, gracePeriodAfterMergeSeconds: 60 },
+      shutdownDrainSeconds: 60,
+      credentialMode: 'env' as const,
+      reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: rootDir, sweepIntervalMinutes: 60 },
     } as AgentRouterConfig;
 
     const app = createWebApp({
@@ -210,6 +219,7 @@ export const test = base.extend<ServerFixture & BrowserFixture>({
       rootDir,
       config,
       shuttingDown: () => false,
+      db,
     });
 
     const server = startWebServer(app, config, log);

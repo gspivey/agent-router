@@ -4,7 +4,7 @@
  */
 import { test, expect } from './fixtures.js';
 
-test('list view issues exactly one /sessions request and zero per-row fetches', async ({ page, baseUrl, seedSession }) => {
+test('list view issues exactly one /repos/sessions request and zero per-row fetches', async ({ page, baseUrl, seedSession }) => {
   // Seed some sessions
   await seedSession({ live: false, status: 'active' });
   await seedSession({ live: false, status: 'completed' });
@@ -13,7 +13,7 @@ test('list view issues exactly one /sessions request and zero per-row fetches', 
   const requestUrls: string[] = [];
   page.on('request', (req) => {
     const url = new URL(req.url());
-    if (url.pathname.startsWith('/sessions')) {
+    if (url.pathname.startsWith('/sessions') || url.pathname.startsWith('/repos')) {
       requestUrls.push(url.pathname + url.search);
     }
   });
@@ -23,8 +23,8 @@ test('list view issues exactly one /sessions request and zero per-row fetches', 
   // Wait a bit to ensure no follow-up requests are issued
   await page.waitForTimeout(500);
 
-  // Exactly one /sessions request (the list)
-  const listRequests = requestUrls.filter(u => /^\/sessions(\?|$)/.test(u));
+  // Exactly one /repos/sessions request (the grouped list)
+  const listRequests = requestUrls.filter(u => u === '/repos/sessions');
   expect(listRequests.length).toBe(1);
 
   // Zero /sessions/<id> requests (no per-row follow-ups)
@@ -42,13 +42,12 @@ test('list view renders waiting_for from server response', async ({ page, baseUr
 });
 
 test('pagination controls appear when sessions exceed page size', async ({ page, baseUrl, seedSession }) => {
-  // Seed more sessions than the page size (20) — the actual page size for the
-  // paginated endpoint is 20, so 25 non-active + any active sessions should trigger
-  for (let i = 0; i < 22; i++) {
+  // Seed more terminal sessions than the per-repo default (5) to trigger "Show more"
+  for (let i = 0; i < 8; i++) {
     await seedSession({ live: false, status: 'completed' });
   }
   await page.goto(baseUrl);
-  await page.waitForSelector('.session-item', { timeout: 5000 });
-  const pagination = page.locator('.pagination');
-  await expect(pagination).toBeVisible({ timeout: 3000 });
+  await page.waitForSelector('.repo-section', { timeout: 5000 });
+  const showMoreBtn = page.locator('.show-more-btn');
+  await expect(showMoreBtn).toBeVisible({ timeout: 3000 });
 });

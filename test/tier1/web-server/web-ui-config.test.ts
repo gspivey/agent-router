@@ -167,7 +167,7 @@ describe('renderWebUI config view features', () => {
 
     it('config-grid collapses to single column on mobile', () => {
       // Check media query for .config-grid responsive behavior
-      expect(html).toContain('@media(max-width:768px){.config-grid{grid-template-columns:1fr}}');
+      expect(html).toContain('@media(max-width:768px){.config-grid{grid-template-columns:1fr}.repo-header{padding:12px}}');
     });
 
     it('config-card matches existing dark theme (background + border)', () => {
