@@ -549,4 +549,76 @@ describe('validateConfig', () => {
   it('throws FatalError when credentialMode is an empty string', () => {
     expect(() => validateConfig(validConfig({ credentialMode: '' }))).toThrow(FatalError);
   });
+
+  // --- adapter config validation ---
+
+  it('accepts a repo with no adapter field (backward compat)', () => {
+    const cfg = validConfig({ repos: [{ owner: 'org', name: 'repo' }] });
+    const result = validateConfig(cfg);
+    expect(result.repos[0]!.adapter).toBeUndefined();
+  });
+
+  it('accepts adapter.type "kiro"', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', adapter: { type: 'kiro' } }],
+    });
+    const result = validateConfig(cfg);
+    expect(result.repos[0]!.adapter).toEqual({ type: 'kiro' });
+  });
+
+  it('accepts adapter.type "claude-code"', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', adapter: { type: 'claude-code' } }],
+    });
+    const result = validateConfig(cfg);
+    expect(result.repos[0]!.adapter).toEqual({ type: 'claude-code' });
+  });
+
+  it('accepts adapter.type "claude-code" with model', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', adapter: { type: 'claude-code', model: 'claude-opus-5' } }],
+    });
+    const result = validateConfig(cfg);
+    expect(result.repos[0]!.adapter).toEqual({ type: 'claude-code', model: 'claude-opus-5' });
+  });
+
+  it('throws FatalError when adapter.type is unknown', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', adapter: { type: 'opencode' } }],
+    });
+    expect(() => validateConfig(cfg)).toThrow(FatalError);
+    expect(() => validateConfig(cfg)).toThrow(/adapter\.type/);
+  });
+
+  it('throws FatalError when adapter.type is missing', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', adapter: {} }],
+    });
+    expect(() => validateConfig(cfg)).toThrow(FatalError);
+    expect(() => validateConfig(cfg)).toThrow(/adapter\.type/);
+  });
+
+  it('throws FatalError when adapter is not an object', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', adapter: 'claude-code' }],
+    });
+    expect(() => validateConfig(cfg)).toThrow(FatalError);
+    expect(() => validateConfig(cfg)).toThrow(/adapter/);
+  });
+
+  it('throws FatalError when adapter.model is empty string', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', adapter: { type: 'claude-code', model: '' } }],
+    });
+    expect(() => validateConfig(cfg)).toThrow(FatalError);
+    expect(() => validateConfig(cfg)).toThrow(/adapter\.model/);
+  });
+
+  it('ignores adapter.model for kiro type', () => {
+    const cfg = validConfig({
+      repos: [{ owner: 'org', name: 'repo', adapter: { type: 'kiro', model: 'some-model' } }],
+    });
+    const result = validateConfig(cfg);
+    expect(result.repos[0]!.adapter).toEqual({ type: 'kiro', model: 'some-model' });
+  });
 });
