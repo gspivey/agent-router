@@ -1,52 +1,52 @@
 # Tasks: Web UI Configuration View
 
 ## Task 1: Add `getTokenHealthSummary()` to token-store.ts
-- [ ] Inspect `src/token-store.ts` — determine whether `TokenEntry` currently stores an `expiry` field
-- [ ] Export a new function `getTokenHealthSummary(): TokenHealthEntry[]` in `src/token-store.ts`
-- [ ] Define the `TokenHealthEntry` interface: `{ project, tokenName, isSet, expiry, health }`
-- [ ] Implement health derivation: missing/expired → `red`, present + future expiry → `green`, present + unknown expiry → `green`
-- [ ] If `TokenEntry` has no expiry field, always return `expiry: null` — do NOT add expiry tracking in this task
-- [ ] Handle edge cases: empty token map, malformed expiry dates
+- [x] Inspect `src/token-store.ts` — determine whether `TokenEntry` currently stores an `expiry` field
+- [x] Export a new function `getTokenHealthSummary(): TokenHealthEntry[]` in `src/token-store.ts`
+- [x] Define the `TokenHealthEntry` interface: `{ project, tokenName, isSet, expiry, health }`
+- [x] Implement health derivation: missing/expired → `red`, present + future expiry → `green`, present + unknown expiry → `green`
+- [x] If `TokenEntry` has no expiry field, always return `expiry: null` — do NOT add expiry tracking in this task
+- [x] Handle edge cases: empty token map, malformed expiry dates
 
 **Requirements**: FR-5.1, FR-5.2, FR-5.3, NFR-5
 
 ## Task 1b: Unit tests for `getTokenHealthSummary()`
-- [ ] Test: token missing from map → `red`, `isSet: false`
-- [ ] Test: token present, no expiry → `green`, `expiry: null`
-- [ ] Test: token present, future expiry → `green`
-- [ ] Test: token present, past expiry → `red`
-- [ ] Test: empty token map → empty array
+- [x] Test: token missing from map → `red`, `isSet: false`
+- [x] Test: token present, no expiry → `green`, `expiry: null`
+- [x] Test: token present, future expiry → `green`
+- [x] Test: token present, past expiry → `red`
+- [x] Test: empty token map → empty array
 
 **Requirements**: FR-5.1, FR-5.2, FR-5.3
 
 ## Task 2: Create `src/cron-state.ts` with `getCronScheduleState()`
-- [ ] Create new file `src/cron-state.ts`
-- [ ] Export a new function `getCronScheduleState(): CronScheduleEntry[]`
-- [ ] Define the `CronScheduleEntry` interface: `{ name, repo, schedule, nextFireTime, paused }`
-- [ ] Read cron config from the passed-in `AgentRouterConfig.cron[]`
-- [ ] Compute `nextFireTime` from the cron expression — identify which cron library is already used in the project (check package.json) and use that; do not add a new dependency
-- [ ] Read pause state from the cron manager's runtime pause map (identify the export in `src/cron.ts` or equivalent)
-- [ ] Return `nextFireTime: null` if computation fails for an entry
+- [x] Create new file `src/cron-state.ts`
+- [x] Export a new function `getCronScheduleState(): CronScheduleEntry[]`
+- [x] Define the `CronScheduleEntry` interface: `{ name, repo, schedule, nextFireTime, paused }`
+- [x] Read cron config from the passed-in `AgentRouterConfig.cron[]`
+- [x] Compute `nextFireTime` from the cron expression — identify which cron library is already used in the project (check package.json) and use that; do not add a new dependency
+- [x] Read pause state from the cron manager's runtime pause map (identify the export in `src/cron.ts` or equivalent)
+- [x] Return `nextFireTime: null` if computation fails for an entry
 
 **Requirements**: FR-4.1, FR-4.2, FR-4.3
 
 ## Task 2b: Unit tests for `getCronScheduleState()`
-- [ ] Test: cron expression with known next fire → correct ISO string returned
-- [ ] Test: invalid cron expression → `nextFireTime: null`, no throw
-- [ ] Test: paused cron → `paused: true` in output
+- [x] Test: cron expression with known next fire → correct ISO string returned
+- [x] Test: invalid cron expression → `nextFireTime: null`, no throw
+- [x] Test: paused cron → `paused: true` in output
 
 **Requirements**: FR-4.1, FR-4.2, FR-4.3
 
 ## Task 3: Add `GET /api/config` route in web-routes.ts
 **Depends on**: Task 1, Task 2
 
-- [ ] Add a new `app.get('/api/config', ...)` handler in `src/web-routes.ts`
-- [ ] Import and call `getConfig()`, `getTokenHealthSummary()`, `getCronScheduleState()`
-- [ ] Inspect `config.repos` structure to confirm field names before mapping — do not guess attribute names
-- [ ] Assemble response payload matching the design schema (sessionTimeouts, rateLimits, crons, tokens, repos)
-- [ ] Derive `webhookSecretName` from repo config (name only, never the value)
-- [ ] Return 500 with `{ error: "Failed to load configuration" }` on exceptions
-- [ ] Verify the route is behind existing auth middleware (no additional wiring needed since web-routes are already auth-gated)
+- [x] Add a new `app.get('/api/config', ...)` handler in `src/web-routes.ts`
+- [x] Import and call `getConfig()`, `getTokenHealthSummary()`, `getCronScheduleState()`
+- [x] Inspect `config.repos` structure to confirm field names before mapping — do not guess attribute names
+- [x] Assemble response payload matching the design schema (sessionTimeouts, rateLimits, crons, tokens, repos)
+- [x] Derive `webhookSecretName` from repo config (name only, never the value)
+- [x] Return 500 with `{ error: "Failed to load configuration" }` on exceptions
+- [x] Verify the route is behind existing auth middleware (no additional wiring needed since web-routes are already auth-gated)
 
 **Requirements**: FR-2, FR-3, FR-4, FR-5, FR-6, NFR-1, NFR-5
 
