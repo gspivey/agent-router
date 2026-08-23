@@ -4,7 +4,7 @@ import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import cron from 'node-cron';
 import { loadConfig, classifyConfigChange } from './config.js';
-import type { AgentRouterConfig } from './config.js';
+import type { AgentRouterConfig, RepoConfig } from './config.js';
 import { watchConfig } from './config-watch.js';
 import type { ConfigWatcher } from './config-watch.js';
 import { createLogger } from './log.js';
@@ -24,6 +24,8 @@ import { createGitHubClient, createTokenResolver, resolveSessionTokenEnv } from 
 import { createDaemonTokenStore } from './daemon-token.js';
 import { createVerifier } from './verify-session.js';
 import { createKiroAdapter } from './adapters/kiro.js';
+import { createClaudeCodeAdapter } from './adapters/claude-code.js';
+import type { AgentAdapter } from './agent-adapter.js';
 import { evaluateWakePolicy } from './router.js';
 import {
   composeCheckRunPrompt,
@@ -88,6 +90,31 @@ function composePromptFromEvent(event: QueuedEvent): string | null {
     return composeCommandTriggerPrompt(payload as IssueCommentPayload);
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Adapter map: per-repo adapter selection
+// ---------------------------------------------------------------------------
+
+function buildAdapterMap(
+  repos: RepoConfig[],
+  defaultAdapter: AgentAdapter,
+  log: Logger,
+): Map<string, AgentAdapter> {
+  const adapters = new Map<string, AgentAdapter>();
+  for (const repo of repos) {
+    const slug = `${repo.owner}/${repo.name}`;
+    if (!repo.adapter || repo.adapter.type === 'kiro') {
+      adapters.set(slug, defaultAdapter);
+    } else if (repo.adapter.type === 'claude-code') {
+      const deps: { log: Logger; model?: string } = { log };
+      if (repo.adapter.model !== undefined) {
+        deps.model = repo.adapter.model;
+      }
+      adapters.set(slug, createClaudeCodeAdapter(deps));
+    }
+  }
+  return adapters;
 }
 
 // ---------------------------------------------------------------------------
@@ -495,6 +522,14 @@ async function main(): Promise<void> {
   const adapter = createKiroAdapter({ kiroPath: config.kiroPath, log });
   log.info('Agent adapter initialized', { adapter: adapter.name });
 
+  // Build per-repo adapter map (repos with adapter.type "claude-code" get their own instance)
+  const adapterMapHolder = { current: buildAdapterMap(config.repos, adapter, log) };
+  for (const [slug, a] of adapterMapHolder.current) {
+    if (a.name !== 'kiro') {
+      log.info('Per-repo adapter override', { repo: slug, adapter: a.name });
+    }
+  }
+
   const worktreeManager = createWorktreeManager({ rootDir, log });
   log.info('Worktree manager initialized', { rootDir });
 
@@ -537,7 +572,8 @@ async function main(): Promise<void> {
         ? [...DEFAULT_CHILD_ENV_ALLOWLIST, ...configHolder.current.childEnvAllowlist]
         : undefined;
       const env = buildChildEnv(process.env as Record<string, string | undefined>, overrides, allowlist);
-      return adapter.spawn({ sessionId, env });
+      const adapterForRepo = repo ? (adapterMapHolder.current.get(repo) ?? adapter) : adapter;
+      return adapterForRepo.spawn({ sessionId, env });
     },
     log,
     sessionTimeout: config.sessionTimeout,
@@ -729,6 +765,9 @@ async function main(): Promise<void> {
       log,
       handleCronFire: (entry) => { void handleCronFire(entry, sessionMgr, sessionFiles, log); },
     });
+
+    // Rebuild adapter map (new sessions pick up adapter changes; active sessions unaffected)
+    adapterMapHolder.current = buildAdapterMap(next.repos, adapter, log);
 
     // Update config holder
     configHolder.current = next;
