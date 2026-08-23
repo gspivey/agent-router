@@ -106,24 +106,24 @@
 
 **Depends on**: Task 4 (API endpoint must exist)
 
-- [ ] Add CSS for `.projects-panel`, `.project-section`, `.project-header`, `.project-repos`, `.project-repo-item`, `.token-warning`
-- [ ] Add `.badge-paused` CSS class (gray background, distinguishable from `.badge-green`, `.badge-yellow`, `.badge-red`) for the paused aggregate health state
-- [ ] Add `<div id="projects-panel" class="projects-panel"></div>` above the session list in HTML
-- [ ] Add JS function `loadProjects()` that fetches `GET /projects` and renders the panel
-- [ ] On fetch failure: catch the error and hide the panel entirely (graceful degradation — do not show an error state, just omit the panel)
-- [ ] Render each project as a collapsible section with:
+- [x] Add CSS for `.projects-panel`, `.project-section`, `.project-header`, `.project-repos`, `.project-repo-item`, `.token-warning`
+- [x] Add `.badge-paused` CSS class (gray background, distinguishable from `.badge-green`, `.badge-yellow`, `.badge-red`) for the paused aggregate health state
+- [x] Add `<div id="projects-panel" class="projects-panel"></div>` above the session list in HTML
+- [x] Add JS function `loadProjects()` that fetches `GET /projects` and renders the panel
+- [x] On fetch failure: catch the error and hide the panel entirely (graceful degradation — do not show an error state, just omit the panel)
+- [x] Render each project as a collapsible section with:
   - Project name as heading
   - Health badge using `.badge-green`, `.badge-yellow`, or `.badge-paused` (not `.badge-red` for paused)
   - Repo count
   - Token warning if `tokenCoverage.complete === false`
   - List of repos with active session count
-- [ ] Render "Ungrouped" section if ungrouped repos exist
-- [ ] Add collapse/expand toggle with `aria-expanded` attribute
-- [ ] Add `aria-label` to health badges
-- [ ] Add `role="region"` and `aria-labelledby` to project sections
-- [ ] Call `loadProjects()` in the list view navigation handler
-- [ ] If `/projects` returns empty projects and empty ungrouped, hide the panel entirely
-- [ ] Clicking a repo name filters sessions (sets `currentRepoFilter` and re-fetches session list)
+- [x] Render "Ungrouped" section if ungrouped repos exist
+- [x] Add collapse/expand toggle with `aria-expanded` attribute
+- [x] Add `aria-label` to health badges
+- [x] Add `role="region"` and `aria-labelledby` to project sections
+- [x] Call `loadProjects()` in the list view navigation handler
+- [x] If `/projects` returns empty projects and empty ungrouped, hide the panel entirely
+- [x] Clicking a repo name filters sessions (sets `currentRepoFilter` and re-fetches session list)
 
 **Acceptance**: Projects panel renders above sessions when projects configured; hidden when not configured or on API error; collapsible; accessible; clicking repo filters session list; paused projects show gray badge.
 
@@ -135,16 +135,16 @@
 
 **Depends on**: Task 6 (UI that triggers the filter)
 
-- [ ] Add optional `repo` query parameter to `GET /sessions`
-- [ ] Filter sessions by `meta.repo === repoParam` when provided
-- [ ] Validate repo param format (must contain `/`)
+- [x] Add optional `repo` query parameter to `GET /sessions`
+- [x] Filter sessions by `meta.repo === repoParam` when provided
+- [x] Validate repo param format (must contain `/`)
 
 **File**: `src/web-ui.ts`
 
-- [ ] When a repo is clicked in the projects panel, set a `currentRepoFilter` variable
-- [ ] Include `&repo=<fullName>` in the `/sessions` fetch URL when filter is active
-- [ ] Show active filter indicator with a "clear" button
-- [ ] Clearing the filter reloads unfiltered sessions
+- [x] When a repo is clicked in the projects panel, set a `currentRepoFilter` variable
+- [x] Include `&repo=<fullName>` in the `/sessions` fetch URL when filter is active
+- [x] Show active filter indicator with a "clear" button
+- [x] Clearing the filter reloads unfiltered sessions
 
 **Acceptance**: Clicking a repo in projects panel shows only that repo's sessions; clear button restores full list; direct URL with `?repo=` works.
 
@@ -152,11 +152,11 @@
 
 ## Task 8: End-to-end validation and backward compatibility
 
-- [ ] Test with a config.json that has NO `projects` key — verify startup succeeds and UI shows sessions as before
-- [ ] Test with a config.json that has `projects` defined — verify projects panel appears with correct data
-- [ ] Verify existing session list pagination still works with projects panel present
-- [ ] Verify SSE streaming to detail view still works unchanged
-- [ ] Verify auth flows (daemon token, trusted proxy) still apply to `/projects` endpoint
-- [ ] Run full test suite, ensure no regressions
+- [x] Test with a config.json that has NO `projects` key — verify startup succeeds and UI shows sessions as before
+- [x] Test with a config.json that has `projects` defined — verify projects panel appears with correct data
+- [x] Verify existing session list pagination still works with projects panel present
+- [x] Verify SSE streaming to detail view still works unchanged
+- [x] Verify auth flows (daemon token, trusted proxy) still apply to `/projects` endpoint
+- [x] Run full test suite, ensure no regressions
 
 **Acceptance**: All existing tests pass; new feature works end-to-end; no behavioral changes for users without projects configured.
