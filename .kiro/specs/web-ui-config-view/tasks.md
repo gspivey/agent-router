@@ -51,42 +51,42 @@
 **Requirements**: FR-2, FR-3, FR-4, FR-5, FR-6, NFR-1, NFR-5
 
 ## Task 4: Add Config tab navigation to web-ui.ts
-- [ ] Add `<a href="#config" class="nav-link">Config</a>` to the nav bar in `src/web-ui.ts`
-- [ ] Add a `<div id="config-view" class="view">` container (hidden by default)
-- [ ] Extend the `hashchange` event listener with a `#config` case that shows the config view and triggers data loading
-- [ ] Update the `showView()` helper to handle the `config` view alongside `sessions`
+- [x] Add `<a href="#config" class="nav-link">Config</a>` to the nav bar in `src/web-ui.ts`
+- [x] Add a `<div id="config-view" class="view">` container (hidden by default)
+- [x] Extend the `hashchange` event listener with a `#config` case that shows the config view and triggers data loading
+- [x] Update the `showView()` helper to handle the `config` view alongside `sessions`
 
 **Requirements**: FR-1.1, FR-1.2, FR-1.3
 
 ## Task 5: Implement Config tab rendering logic in web-ui.ts
 **Depends on**: Task 3 (API endpoint), Task 4 (nav/container in place)
-- [ ] Add `loadConfig()` function that fetches `GET /api/config` with the embedded auth token
-- [ ] Add `renderConfigView(data)` function that builds the config page DOM:
+- [x] Add `loadConfig()` function that fetches `GET /api/config` with the embedded auth token
+- [x] Add `renderConfigView(data)` function that builds the config page DOM:
   - Session Timeouts card (inactivityMinutes, maxLifetimeMinutes, gracePeriodAfterMergeSeconds)
   - Rate Limits card (perPRSeconds)
   - Cron Schedules table (name, repo, schedule, next fire time, paused badge)
   - Token Health table (project, token name, health dot, expiry)
   - Repositories table (name, webhook secret name)
-- [ ] Add `formatNextFire(isoString)` using `Intl.DateTimeFormat` for local timezone human-readable output
-- [ ] Add health dot rendering: green circle for healthy, red for unhealthy, gray for unknown
-- [ ] Add error state rendering if API call fails
+- [x] Add `formatNextFire(isoString)` using `Intl.DateTimeFormat` for local timezone human-readable output
+- [x] Add health dot rendering: green circle for healthy, red for unhealthy, gray for unknown
+- [x] Add error state rendering if API call fails
 
 **Requirements**: FR-2, FR-3, FR-4, FR-5, FR-6, NFR-4
 
 ## Task 6: Add Config tab CSS styles to web-ui.ts
-- [ ] Add `.config-grid` class for the side-by-side layout of Session Timeouts and Rate Limits cards
-- [ ] Add `.health-green`, `.health-red`, `.health-unknown` classes for token status dots
-- [ ] Add `.badge-paused` / `.badge-active` variants for cron pause state if not already covered by existing badge styles
-- [ ] Verify all new styles match existing design language (colors, spacing, border-radius, font sizes)
+- [x] Add `.config-grid` class for the side-by-side layout of Session Timeouts and Rate Limits cards
+- [x] Add `.health-green`, `.health-red`, `.health-unknown` classes for token status dots
+- [x] Add `.badge-paused` / `.badge-active` variants for cron pause state if not already covered by existing badge styles
+- [x] Verify all new styles match existing design language (colors, spacing, border-radius, font sizes)
 
 **Requirements**: NFR-2
 
 ## Task 7: Integration testing and verification
-- [ ] Start the daemon locally and confirm `GET /api/config` returns the expected JSON shape
-- [ ] Verify auth is enforced (401 without token)
-- [ ] Verify no secret values appear in the response (webhook secrets, token values)
-- [ ] Open the web UI, navigate to `#config`, confirm all sections render
-- [ ] Verify cron next-fire times display in local timezone
-- [ ] Verify token health dots show correct colors for green/red/unknown states
-- [ ] Test with missing tokens and expired tokens to confirm red indicators
-- [ ] Confirm no page reload occurs when switching between Sessions and Config tabs
+- [x] Start the daemon locally and confirm `GET /api/config` returns the expected JSON shape
+- [x] Verify auth is enforced (401 without token)
+- [x] Verify no secret values appear in the response (webhook secrets, token values)
+- [x] Open the web UI, navigate to `#config`, confirm all sections render
+- [x] Verify cron next-fire times display in local timezone
+- [x] Verify token health dots show correct colors for green/red/unknown states
+- [x] Test with missing tokens and expired tokens to confirm red indicators
+- [x] Confirm no page reload occurs when switching between Sessions and Config tabs
