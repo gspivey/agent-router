@@ -167,6 +167,7 @@ describe('GET /repos/sessions grouped endpoint (item #51, tasks 3-4)', () => {
     expect(alpha).toHaveProperty('terminal_total');
     expect(alpha).toHaveProperty('cron');
     expect(alpha).toHaveProperty('open_pr_count');
+    expect(alpha).toHaveProperty('closed_pr_count');
 
     const activeSessions = alpha['active_sessions'] as Array<Record<string, unknown>>;
     expect(activeSessions.length).toBe(1);

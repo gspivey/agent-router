@@ -248,6 +248,7 @@ export interface RepoGroup {
   readonly terminal_total: number;
   readonly cron: RepoGroupCron | null;
   readonly open_pr_count: number;
+  readonly closed_pr_count: number;
 }
 
 /**
@@ -328,16 +329,24 @@ export function groupSessionsByRepo(
       };
     }
 
-    // Compute open PR count: count PRs across all sessions for this repo
-    // where the PR has no merged_at
+    // Compute open and closed PR counts across all sessions for this repo.
+    // A PR is "open" only when the session is still active and the PR has no merged_at.
+    // Everything else (completed/abandoned session, or merged_at set) is "closed/merged".
+    // This correctly handles legacy sessions that pre-date the merged_at field — they are
+    // terminal sessions, so their PRs count as closed regardless of merged_at.
     let openPrCount = 0;
+    let closedPrCount = 0;
     const seenPrs = new Set<string>();
     for (const s of repoSessions) {
+      const isActive = s.status === 'active';
       for (const pr of s.prs) {
         const key = `${pr.repo}#${pr.pr_number}`;
-        if (!seenPrs.has(key) && pr.merged_at === undefined) {
-          seenPrs.add(key);
+        if (seenPrs.has(key)) continue;
+        seenPrs.add(key);
+        if (isActive && pr.merged_at === undefined) {
           openPrCount++;
+        } else {
+          closedPrCount++;
         }
       }
     }
@@ -349,6 +358,7 @@ export function groupSessionsByRepo(
       terminal_total: terminal.length,
       cron,
       open_pr_count: openPrCount,
+      closed_pr_count: closedPrCount,
     };
   });
 }

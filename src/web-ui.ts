@@ -455,7 +455,11 @@ function renderGroupedList(repos) {
     html += '<span class="repo-header-info">';
     if (repoGroup.open_pr_count > 0) {
       const prUrl = 'https://github.com/' + repoGroup.repo + '/pulls';
-      html += '<a href="' + prUrl + '" target="_blank" rel="noopener" style="color:#58a6ff;margin-right:8px">' + repoGroup.open_pr_count + ' PR' + (repoGroup.open_pr_count > 1 ? 's' : '') + ' open</a>';
+      html += '<a href="' + prUrl + '" target="_blank" rel="noopener" style="color:#e3b341;margin-right:8px">' + repoGroup.open_pr_count + ' PR' + (repoGroup.open_pr_count > 1 ? 's' : '') + ' open</a>';
+    }
+    if (repoGroup.closed_pr_count > 0) {
+      const closedUrl = 'https://github.com/' + repoGroup.repo + '/pulls?q=is%3Apr+is%3Aclosed';
+      html += '<a href="' + closedUrl + '" target="_blank" rel="noopener" style="color:#8b949e;margin-right:8px">' + repoGroup.closed_pr_count + ' PR' + (repoGroup.closed_pr_count > 1 ? 's' : '') + ' closed</a>';
     }
     html += '</span>';
     html += '</div>';
