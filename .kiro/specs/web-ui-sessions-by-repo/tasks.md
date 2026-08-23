@@ -90,21 +90,21 @@
 - [x] Handle fetch errors gracefully (show inline error, allow retry).
 
 ## Task 9: Add accessibility attributes
-- [ ] Repo section headers: `role="button"`, `aria-expanded="true|false"`, `aria-controls="repo-body-<id>"`.
-- [ ] Repo body: `id="repo-body-<id>"` matching `aria-controls`.
-- [ ] Streaming dot: `<span class="streaming-dot" aria-label="Active session streaming" role="img"></span>`.
-- [ ] "Show more" buttons: `aria-label="Load more sessions for <repo>"`.
-- [ ] Section headers use `<h2>` for semantic structure.
+- [x] Repo section headers: `role="button"`, `aria-expanded="true|false"`, `aria-controls="repo-body-<id>"`.
+- [x] Repo body: `id="repo-body-<id>"` matching `aria-controls`.
+- [x] Streaming dot: `<span class="streaming-dot" aria-label="Active session streaming" role="img"></span>`.
+- [x] "Show more" buttons: `aria-label="Load more sessions for <repo>"`.
+- [x] Section headers use `<h2>` for semantic structure.
 
 ## Task 10: Update hash router for grouped view
-- [ ] In `navigate()`, the `list` branch calls `loadGroupedSessions()` instead of `loadAllSessions()`.
-- [ ] Remove `currentPage` and `PAGE_SIZE` global state (no longer used for global pagination).
-- [ ] Keep `loadAllSessions()` function body commented or removed — the `GET /sessions` endpoint remains but the UI no longer calls it.
-- [ ] Verify detail view navigation (`#/sessions/:id`) still works and back button returns to grouped view.
+- [x] In `navigate()`, the `list` branch calls `loadGroupedSessions()` instead of `loadAllSessions()`.
+- [x] Remove `currentPage` and `PAGE_SIZE` global state (no longer used for global pagination).
+- [x] Keep `loadAllSessions()` function body commented or removed — the `GET /sessions` endpoint remains but the UI no longer calls it.
+- [x] Verify detail view navigation (`#/sessions/:id`) still works and back button returns to grouped view.
 
 ## Task 11: End-to-end verification
-- [ ] Run the full test suite and fix any regressions.
-- [ ] Manually verify: page loads with grouped sections, collapse/expand works, "Show more" loads additional sessions, detail view works, back navigation returns to grouped list.
-- [ ] Verify mobile viewport rendering (narrow screen).
-- [ ] Compare page load time: single `GET /repos/sessions` vs old multi-page `GET /sessions`. Confirm ≤ existing load time.
-- [ ] Verify localStorage persistence: collapse a section, reload, confirm it stays collapsed.
+- [x] Run the full test suite and fix any regressions.
+- [x] Manually verify: page loads with grouped sections, collapse/expand works, "Show more" loads additional sessions, detail view works, back navigation returns to grouped list.
+- [x] Verify mobile viewport rendering (narrow screen).
+- [x] Compare page load time: single `GET /repos/sessions` vs old multi-page `GET /sessions`. Confirm ≤ existing load time.
+- [x] Verify localStorage persistence: collapse a section, reload, confirm it stays collapsed.
