@@ -56,6 +56,12 @@ export interface AgentRouterConfig {
   projects?: ProjectConfig[];
 }
 
+export interface RepoAdapterConfig {
+  type: 'kiro' | 'claude-code';
+  /** Model override for Claude Code (e.g. "claude-opus-5"). Ignored for kiro. */
+  model?: string;
+}
+
 export interface RepoConfig {
   owner: string;
   name: string;
@@ -64,6 +70,8 @@ export interface RepoConfig {
   token?: string;
   /** Optional per-repo webhook secret for HMAC verification. Overrides the global `webhookSecret`. */
   webhookSecret?: string;
+  /** Optional adapter override. Defaults to kiro when absent. */
+  adapter?: RepoAdapterConfig;
 }
 
 export interface CronConfig {
@@ -219,6 +227,27 @@ export function validateConfig(config: unknown): AgentRouterConfig {
         throw new FatalError(`Invalid "repos[${i}].webhookSecret": must be a non-empty string`);
       }
       entry.webhookSecret = repo['webhookSecret'];
+    }
+    if (repo['adapter'] !== undefined) {
+      const rawAdapter = repo['adapter'];
+      if (!isRecord(rawAdapter)) {
+        throw new FatalError(`Invalid "repos[${i}].adapter": must be an object`);
+      }
+      const adapterType = rawAdapter['type'];
+      if (adapterType !== 'kiro' && adapterType !== 'claude-code') {
+        throw new FatalError(
+          `Invalid "repos[${i}].adapter.type": must be "kiro" or "claude-code", got ${JSON.stringify(adapterType)}`
+        );
+      }
+      if (rawAdapter['model'] !== undefined) {
+        if (typeof rawAdapter['model'] !== 'string' || rawAdapter['model'].length === 0) {
+          throw new FatalError(`Invalid "repos[${i}].adapter.model": must be a non-empty string`);
+        }
+      }
+      entry.adapter = {
+        type: adapterType,
+        ...(rawAdapter['model'] !== undefined ? { model: rawAdapter['model'] as string } : {}),
+      };
     }
     repos.push(entry);
   }
