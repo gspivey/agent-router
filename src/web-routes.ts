@@ -6,11 +6,12 @@ import type { SessionFiles, SessionMeta } from './session-files.js';
 import type { SSEBroker } from './sse-broker.js';
 import type { Logger } from './log.js';
 import type { AuthResult } from './web-auth.js';
-import type { AgentRouterConfig } from './config.js';
+import type { AgentRouterConfig, RepoConfig, CronConfig } from './config.js';
 import type { TokenStore } from './token-store.js';
 import { getTokenHealthSummary } from './token-store.js';
-import type { Database } from './db.js';
+import type { Database, CronState } from './db.js';
 import { getCronScheduleState } from './cron-state.js';
+import { getNextCronFire } from './cron-next.js';
 import { deriveWaitingFor } from './ui/logic.js';
 
 type WebEnv = { Variables: { auth: AuthResult } };
@@ -225,6 +226,136 @@ export function tailStreamLog(
   return { entries, skipped_lines: skipped };
 }
 
+// --- Repo grouping helpers (exported for testing) ---
+
+export interface RepoGroupCron {
+  readonly name: string;
+  readonly schedule: string;
+  readonly paused: boolean;
+  readonly next_fire: string | null;
+}
+
+export interface RepoGroup {
+  readonly repo: string;
+  readonly active_sessions: SessionSummary[];
+  readonly terminal_sessions: SessionSummary[];
+  readonly terminal_total: number;
+  readonly cron: RepoGroupCron | null;
+  readonly open_pr_count: number;
+}
+
+/**
+ * Group sessions by repo using config.repos as the canonical repo list.
+ *
+ * Pure function — all data passed in for testability.
+ *
+ * @param sessions - All sessions from sessionFiles.listSessions()
+ * @param repos - Configured repos (defines the full set of sections)
+ * @param cronEntries - Cron configuration entries
+ * @param cronStates - Persisted cron pause states
+ * @param perRepoLimit - Max terminal sessions per repo section
+ * @param waitingForFn - Function to derive waiting_for for active sessions
+ * @param now - Reference time for next_fire computation (defaults to current time)
+ */
+export function groupSessionsByRepo(
+  sessions: SessionMeta[],
+  repos: readonly RepoConfig[],
+  cronEntries: readonly CronConfig[],
+  cronStates: readonly CronState[],
+  perRepoLimit: number,
+  waitingForFn: (meta: SessionMeta) => string | undefined,
+  now: Date = new Date(),
+): RepoGroup[] {
+  // Build a map of repo full name → sessions
+  const sessionsByRepo = new Map<string, SessionMeta[]>();
+  for (const session of sessions) {
+    const repoName = session.repo;
+    if (repoName === undefined) continue;
+    const existing = sessionsByRepo.get(repoName);
+    if (existing !== undefined) {
+      existing.push(session);
+    } else {
+      sessionsByRepo.set(repoName, [session]);
+    }
+  }
+
+  // Build cron state lookup
+  const cronStateMap = new Map(cronStates.map(s => [s.name, s]));
+
+  return repos.map(repo => {
+    const repoFullName = `${repo.owner}/${repo.name}`;
+    const repoSessions = sessionsByRepo.get(repoFullName) ?? [];
+
+    // Split into active and terminal
+    const active: SessionMeta[] = [];
+    const terminal: SessionMeta[] = [];
+    for (const s of repoSessions) {
+      if (s.status === 'active') {
+        active.push(s);
+      } else {
+        terminal.push(s);
+      }
+    }
+
+    // Sort terminal by created_at descending
+    terminal.sort((a, b) => b.created_at - a.created_at);
+
+    // Slice terminal to perRepoLimit
+    const terminalPage = terminal.slice(0, perRepoLimit);
+
+    // Find matching cron entry for this repo
+    const cronEntry = cronEntries.find(e => e.repo === repoFullName);
+    let cron: RepoGroupCron | null = null;
+    if (cronEntry !== undefined) {
+      const state = cronStateMap.get(cronEntry.name);
+      const paused = state !== undefined && state.paused;
+      let nextFire: string | null = null;
+      if (!paused) {
+        const next = getNextCronFire(cronEntry.schedule, now);
+        nextFire = next !== null ? next.toISOString() : null;
+      }
+      cron = {
+        name: cronEntry.name,
+        schedule: cronEntry.schedule,
+        paused,
+        next_fire: nextFire,
+      };
+    }
+
+    // Compute open PR count: count PRs across all sessions for this repo
+    // where the PR has no merged_at
+    let openPrCount = 0;
+    const seenPrs = new Set<string>();
+    for (const s of repoSessions) {
+      for (const pr of s.prs) {
+        const key = `${pr.repo}#${pr.pr_number}`;
+        if (!seenPrs.has(key) && pr.merged_at === undefined) {
+          seenPrs.add(key);
+          openPrCount++;
+        }
+      }
+    }
+
+    return {
+      repo: repoFullName,
+      active_sessions: active.map(m => metaToSummary(m, waitingForFn(m))),
+      terminal_sessions: terminalPage.map(m => metaToSummary(m, waitingForFn(m))),
+      terminal_total: terminal.length,
+      cron,
+      open_pr_count: openPrCount,
+    };
+  });
+}
+
+/**
+ * Validate per_repo_limit query parameter. Returns validated number or null for invalid.
+ */
+export function validatePerRepoLimit(value: string): number | null {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 50) return null;
+  return n;
+}
+
 // --- Route factory ---
 
 export function createWebRoutes(deps: {
@@ -294,6 +425,104 @@ export function createWebRoutes(deps: {
 
     const result = paginateSessions(sessions, status, since, limit, offset, waitingForFn);
     return c.json(result);
+  });
+
+  // GET /repos/sessions — grouped sessions by repo
+  app.get('/repos/sessions', (c) => {
+    if (!config || !db) {
+      return c.json(errorEnvelope('not_configured', 'Repos endpoint requires config and database'), 503);
+    }
+
+    const perRepoLimitParam = c.req.query('per_repo_limit');
+    let perRepoLimit = 5;
+    if (perRepoLimitParam !== undefined) {
+      const parsed = validatePerRepoLimit(perRepoLimitParam);
+      if (parsed === null) {
+        return c.json(errorEnvelope('invalid_param', 'Invalid per_repo_limit value', { param: 'per_repo_limit', constraint: 'must be an integer between 1 and 50' }), 400);
+      }
+      perRepoLimit = parsed;
+    }
+
+    const sessions = sessionFiles.listSessions();
+    const cronStates = db.getAllCronStates();
+
+    const waitingForFn = (meta: SessionMeta): string | undefined => {
+      if (meta.status !== 'active') return undefined;
+      const streamPath = path.join(rootDir, 'sessions', meta.session_id, 'stream.log');
+      const lastType = getLastStreamEntryType(streamPath);
+      return deriveWaitingFor(lastType);
+    };
+
+    const repos = groupSessionsByRepo(
+      sessions,
+      config.repos,
+      config.cron,
+      cronStates,
+      perRepoLimit,
+      waitingForFn,
+    );
+
+    return c.json({ repos });
+  });
+
+  // GET /repos/:repo/sessions — per-repo terminal session pagination
+  app.get('/repos/:repo/sessions', (c) => {
+    if (!config) {
+      return c.json(errorEnvelope('not_configured', 'Repos endpoint requires config'), 503);
+    }
+
+    const repoParam = decodeURIComponent(c.req.param('repo'));
+
+    // Validate that repo matches a configured repo
+    const matchedRepo = config.repos.find(r => `${r.owner}/${r.name}` === repoParam);
+    if (matchedRepo === undefined) {
+      return c.json(errorEnvelope('repo_not_found', `Repo "${repoParam}" is not configured`), 404);
+    }
+
+    const limitParam = c.req.query('limit');
+    let limit = 5;
+    if (limitParam !== undefined) {
+      const parsed = validatePerRepoLimit(limitParam);
+      if (parsed === null) {
+        return c.json(errorEnvelope('invalid_param', 'Invalid limit value', { param: 'limit', constraint: 'must be an integer between 1 and 50' }), 400);
+      }
+      limit = parsed;
+    }
+
+    const offsetParam = c.req.query('offset');
+    let offset = 0;
+    if (offsetParam !== undefined) {
+      const parsed = validateOffset(offsetParam);
+      if (parsed === null) {
+        return c.json(errorEnvelope('invalid_param', 'Invalid offset value', { param: 'offset', constraint: 'must be a non-negative integer' }), 400);
+      }
+      offset = parsed;
+    }
+
+    const sessions = sessionFiles.listSessions();
+
+    // Filter to target repo, exclude active, sort by created_at desc
+    const repoFullName = `${matchedRepo.owner}/${matchedRepo.name}`;
+    const repoSessions = sessions.filter(s => s.repo === repoFullName && s.status !== 'active');
+    repoSessions.sort((a, b) => b.created_at - a.created_at);
+
+    const total = repoSessions.length;
+    const page = repoSessions.slice(offset, offset + limit);
+
+    const waitingForFn = (meta: SessionMeta): string | undefined => {
+      if (meta.status !== 'active') return undefined;
+      const streamPath = path.join(rootDir, 'sessions', meta.session_id, 'stream.log');
+      const lastType = getLastStreamEntryType(streamPath);
+      return deriveWaitingFor(lastType);
+    };
+
+    return c.json({
+      repo: repoFullName,
+      sessions: page.map(m => metaToSummary(m, waitingForFn(m))),
+      total,
+      offset,
+      limit,
+    });
   });
 
   // GET /sessions/:id
