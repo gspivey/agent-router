@@ -77,6 +77,15 @@ persistence, startup wiring, new termination reason union value, and Tier 1 + Ti
 
 ---
 
+### 49. Web UI: read-only configuration view
+
+Add a Config tab to the web UI showing session timeouts, rate limits, cron schedules with next-fire times, token health indicators, and repo list. Backend adds GET /api/config and two new helper functions (getTokenHealthSummary, getCronScheduleState). Frontend adds nav tab, hash routing, and card-based layout reusing existing CSS. No new npm dependencies.
+
+- Spec: `.kiro/specs/web-ui-config-view/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
+- [ ] Complete
+
+---
+
 ## Completed
 
 Items move here after they merge to `development`.
