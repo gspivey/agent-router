@@ -77,6 +77,15 @@ persistence, startup wiring, new termination reason union value, and Tier 1 + Ti
 
 ---
 
+### 51. Web UI: project concept (multi-repo grouping)
+
+Add named project groups to config.json (optional, backward compatible). Each project aggregates health across its repos (green/partial/paused), validates token scope coverage, and appears as a collapsible top-level section above the session list. New src/projects.ts pure module, GET /projects endpoint, GET /sessions?repo= filter. Repos not in a project appear in Ungrouped section.
+
+- Spec: `.kiro/specs/web-ui-project-concept/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
+- [ ] Complete
+
+---
+
 ## Completed
 
 Items move here after they merge to `development`.
