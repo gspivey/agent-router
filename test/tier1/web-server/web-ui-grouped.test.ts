@@ -76,7 +76,7 @@ describe('Task 6: CSS for grouped layout', () => {
 });
 
 describe('Task 7: List-view JS renders grouped sections', () => {
-  it('defines loadAllSessions function that calls /repos/sessions', () => {
+  it('defines loadGroupedSessions function that calls /repos/sessions', () => {
     expect(html).toContain("resilientFetch('/repos/sessions')");
   });
 

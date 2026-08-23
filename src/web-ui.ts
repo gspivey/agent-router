@@ -319,7 +319,7 @@ function renderSessionItem(session) {
     '</div></a>';
 }
 
-async function loadAllSessions() {
+async function loadGroupedSessions() {
   const listView = document.getElementById('list-view');
   listView.innerHTML = '<div class="empty-state">Loading sessions...</div>';
 
@@ -338,7 +338,7 @@ async function loadAllSessions() {
         '<button id="retry-list-btn">Retry</button>' +
         '</div>';
       const retryBtn = document.getElementById('retry-list-btn');
-      if (retryBtn) retryBtn.addEventListener('click', function() { loadAllSessions(); });
+      if (retryBtn) retryBtn.addEventListener('click', function() { loadGroupedSessions(); });
     }
     return;
   }
@@ -999,7 +999,7 @@ function navigate() {
     configView.style.display = 'none';
     var sessionsLink2 = document.querySelector('#main-nav [data-view="sessions"]');
     if (sessionsLink2) sessionsLink2.classList.add('active');
-    loadAllSessions();
+    loadGroupedSessions();
   }
 }
 
