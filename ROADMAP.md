@@ -77,6 +77,15 @@ persistence, startup wiring, new termination reason union value, and Tier 1 + Ti
 
 ---
 
+### 50. Web UI: sessions grouped by repo
+
+Restructure the session list from a flat chronological list to repo-grouped sections. Each section shows the active session pinned at top, recent terminal sessions below, cron pause state, and open PR count. New GET /repos/sessions endpoint and groupSessionsByRepo() pure function. Collapsible sections with localStorage-persisted state.
+
+- Spec: `.kiro/specs/web-ui-sessions-by-repo/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
+- [ ] Complete
+
+---
+
 ## Completed
 
 Items move here after they merge to `development`.
