@@ -33,8 +33,12 @@ export function renderWebUI(options: WebUIOptions): string {
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.5;background:#111;color:#eee}
 a{color:#58a6ff;text-decoration:none}
 a:hover{text-decoration:underline}
-header{padding:12px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between}
+header{padding:12px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 header h1{margin:0;font-size:18px;font-weight:600}
+#main-nav{display:flex;gap:4px}
+.nav-link{padding:6px 12px;border-radius:6px;font-size:14px;font-weight:500;color:#8b949e;transition:background 0.15s,color 0.15s}
+.nav-link:hover{color:#eee;text-decoration:none;background:#21262d}
+.nav-link.active{color:#eee;background:#21262d}
 #identity{font-size:13px;color:#8b949e}
 main{padding:16px;max-width:900px;margin:0 auto}
 #list-view,#detail-view{display:none}
@@ -86,16 +90,39 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 .error-state button:hover{background:#2ea043}
 .auth-error{color:#d29922}
 .auth-error p{color:#d29922}
+.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.config-card{padding:16px;background:#0d1117;border:1px solid #30363d;border-radius:8px}
+.config-card h3{margin:0 0 12px;font-size:14px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px}
+.config-card .config-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #21262d}
+.config-card .config-row:last-child{border-bottom:none}
+.config-card .config-label{font-size:13px;color:#8b949e}
+.config-card .config-value{font-size:14px;font-weight:500;font-family:monospace}
+.config-table{width:100%;border-collapse:collapse;font-size:13px}
+.config-table th{text-align:left;padding:8px 12px;border-bottom:1px solid #30363d;color:#8b949e;font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
+.config-table td{padding:8px 12px;border-bottom:1px solid #21262d}
+.config-table tr:last-child td{border-bottom:none}
+.health-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.health-green{background:#3fb950}
+.health-red{background:#f85149}
+.health-unknown{background:#484f58}
+.badge-paused{background:#9e6a03;color:#fff}
+.badge-active{background:#238636;color:#fff}
+@media(max-width:768px){.config-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header>
 <h1><a href="#/">Agent Router</a></h1>
+<nav id="main-nav">
+<a href="#/" class="nav-link active" data-view="sessions">Sessions</a>
+<a href="#config" class="nav-link" data-view="config">Config</a>
+</nav>
 <span id="identity"></span>
 </header>
 <main>
 <div id="list-view"></div>
 <div id="detail-view"></div>
+<div id="config-view" style="display:none"></div>
 </main>
 ${tokenScript}
 <script type="module">
@@ -142,6 +169,7 @@ function deriveWaitingFor(lastEntryType) {
 
 function parseHashRoute(hash) {
   const trimmed = hash.startsWith('#') ? hash.slice(1) : hash;
+  if (trimmed === 'config') return { view: 'config' };
   const match = /^\\/sessions\\/([^/]+)$/.exec(trimmed);
   if (match && match[1]) return { view: 'detail', sessionId: match[1] };
   return { view: 'list' };
@@ -620,6 +648,141 @@ function showKillConfirm(sessionId) {
   });
 }
 
+// --- Config view ---
+async function loadConfig() {
+  const configView = document.getElementById('config-view');
+  configView.innerHTML = '<div class="empty-state">Loading configuration...</div>';
+
+  const result = await resilientFetch('/config');
+
+  if (!result.ok) {
+    if (result.outcome === 'auth') {
+      configView.innerHTML = '<div class="error-state auth-error">' +
+        '<p>Authentication failed</p>' +
+        '<p class="error-message">Your session token is invalid or expired. Re-authenticate to continue.</p>' +
+        '</div>';
+    } else {
+      configView.innerHTML = '<div class="error-state">' +
+        '<p>Failed to load configuration</p>' +
+        '<p class="error-message">' + (result.outcome === 'timeout' ? 'Request timed out' : 'Network error') + '</p>' +
+        '<button id="retry-config-btn">Retry</button>' +
+        '</div>';
+      var retryBtn = document.getElementById('retry-config-btn');
+      if (retryBtn) retryBtn.addEventListener('click', function() { loadConfig(); });
+    }
+    return;
+  }
+
+  var data = await result.response.json();
+  renderConfigView(data);
+}
+
+function formatNextFire(isoString) {
+  if (!isoString) return 'N/A';
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: 'short', year: 'numeric', month: 'short',
+      day: 'numeric', hour: 'numeric', minute: '2-digit'
+    }).format(new Date(isoString));
+  } catch (e) {
+    return 'N/A';
+  }
+}
+
+function healthDot(health) {
+  var cls = 'health-unknown';
+  if (health === 'green') cls = 'health-green';
+  else if (health === 'red') cls = 'health-red';
+  return '<span class="health-dot ' + cls + '"></span>';
+}
+
+function renderConfigView(data) {
+  var configView = document.getElementById('config-view');
+  var html = '';
+
+  // Top grid: Session Timeouts + Rate Limits
+  html += '<div class="config-grid">';
+
+  // Session Timeouts card
+  html += '<div class="config-card"><h3>Session Timeouts</h3>';
+  if (data.sessionTimeouts) {
+    html += '<div class="config-row"><span class="config-label">Inactivity</span><span class="config-value">' + data.sessionTimeouts.inactivityMinutes + ' min</span></div>';
+    html += '<div class="config-row"><span class="config-label">Max lifetime</span><span class="config-value">' + data.sessionTimeouts.maxLifetimeMinutes + ' min</span></div>';
+    html += '<div class="config-row"><span class="config-label">Grace after merge</span><span class="config-value">' + data.sessionTimeouts.gracePeriodAfterMergeSeconds + 's</span></div>';
+  }
+  html += '</div>';
+
+  // Rate Limits card
+  html += '<div class="config-card"><h3>Rate Limits</h3>';
+  if (data.rateLimits) {
+    html += '<div class="config-row"><span class="config-label">Per-PR interval</span><span class="config-value">' + data.rateLimits.perPRSeconds + 's</span></div>';
+  }
+  html += '</div>';
+
+  html += '</div>'; // end config-grid
+
+  // Cron Schedules
+  html += '<div class="config-card" style="margin-bottom:12px"><h3>Cron Schedules</h3>';
+  if (data.crons && data.crons.length > 0) {
+    html += '<table class="config-table"><thead><tr><th>Name</th><th>Repo</th><th>Schedule</th><th>Next Fire</th><th>State</th></tr></thead><tbody>';
+    for (var i = 0; i < data.crons.length; i++) {
+      var cron = data.crons[i];
+      var stateClass = cron.paused ? 'badge-paused' : 'badge-active';
+      var stateLabel = cron.paused ? 'paused' : 'active';
+      html += '<tr>';
+      html += '<td>' + escapeHtml(cron.name) + '</td>';
+      html += '<td>' + escapeHtml(cron.repo) + '</td>';
+      html += '<td><code>' + escapeHtml(cron.schedule) + '</code></td>';
+      html += '<td>' + formatNextFire(cron.nextFireTime) + '</td>';
+      html += '<td><span class="badge ' + stateClass + '">' + stateLabel + '</span></td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+  } else {
+    html += '<div class="empty-state" style="padding:16px">No cron schedules configured</div>';
+  }
+  html += '</div>';
+
+  // Token Health
+  html += '<div class="config-card" style="margin-bottom:12px"><h3>Token Health</h3>';
+  if (data.tokens && data.tokens.length > 0) {
+    html += '<table class="config-table"><thead><tr><th>Project</th><th>Token Name</th><th>Health</th><th>Expiry</th></tr></thead><tbody>';
+    for (var j = 0; j < data.tokens.length; j++) {
+      var token = data.tokens[j];
+      var expiryDisplay = token.expiry ? new Date(token.expiry).toLocaleDateString() : 'Unknown';
+      html += '<tr>';
+      html += '<td>' + escapeHtml(token.project) + '</td>';
+      html += '<td>' + escapeHtml(token.tokenName) + '</td>';
+      html += '<td>' + healthDot(token.health) + token.health + '</td>';
+      html += '<td>' + expiryDisplay + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+  } else {
+    html += '<div class="empty-state" style="padding:16px">No tokens configured</div>';
+  }
+  html += '</div>';
+
+  // Repositories
+  html += '<div class="config-card"><h3>Repositories</h3>';
+  if (data.repos && data.repos.length > 0) {
+    html += '<table class="config-table"><thead><tr><th>Name</th><th>Webhook Secret</th></tr></thead><tbody>';
+    for (var k = 0; k < data.repos.length; k++) {
+      var repo = data.repos[k];
+      html += '<tr>';
+      html += '<td>' + escapeHtml(repo.name) + '</td>';
+      html += '<td><code>' + escapeHtml(repo.webhookSecretName) + '</code></td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+  } else {
+    html += '<div class="empty-state" style="padding:16px">No repositories configured</div>';
+  }
+  html += '</div>';
+
+  configView.innerHTML = html;
+}
+
 // --- Reconnect on visibility change ---
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible' && activeSSE && !activeSSE.ended) {
@@ -646,14 +809,35 @@ function navigate() {
   const route = parseHashRoute(window.location.hash);
   const listView = document.getElementById('list-view');
   const detailView = document.getElementById('detail-view');
+  const configView = document.getElementById('config-view');
   closeSSE();
-  if (route.view === 'detail') {
+
+  // Update nav active state
+  var navLinks = document.querySelectorAll('#main-nav .nav-link');
+  for (var i = 0; i < navLinks.length; i++) {
+    navLinks[i].classList.remove('active');
+  }
+
+  if (route.view === 'config') {
+    listView.style.display = 'none';
+    detailView.style.display = 'none';
+    configView.style.display = 'block';
+    var configLink = document.querySelector('#main-nav [data-view="config"]');
+    if (configLink) configLink.classList.add('active');
+    loadConfig();
+  } else if (route.view === 'detail') {
     listView.style.display = 'none';
     detailView.style.display = 'block';
+    configView.style.display = 'none';
+    var sessionsLink = document.querySelector('#main-nav [data-view="sessions"]');
+    if (sessionsLink) sessionsLink.classList.add('active');
     loadDetailView(route.sessionId);
   } else {
     listView.style.display = 'block';
     detailView.style.display = 'none';
+    configView.style.display = 'none';
+    var sessionsLink2 = document.querySelector('#main-nav [data-view="sessions"]');
+    if (sessionsLink2) sessionsLink2.classList.add('active');
     currentPage = 0;
     loadAllSessions();
   }
