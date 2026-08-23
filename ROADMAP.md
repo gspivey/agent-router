@@ -33,19 +33,21 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
+Items move here after they merge to `development`.
+
 ### 57. Claude Code adapter — wiring, hot-reload, and tests
 
 Read `.kiro/specs/claude-code-adapter/requirements.md`, `design.md`, and `tasks.md` in full,
 then implement tasks `3`, `4`, `5`, `6`, `7`. Depends on item 56.
 
 - Spec: `.kiro/specs/claude-code-adapter/` · tasks `3`, `4`, `5`, `6`, `7`
-- [ ] Complete
+- [x] Complete · PR: #106
 
 ---
-
-## Completed
-
-Items move here after they merge to `development`.
 
 ### 56. Claude Code adapter — config schema and adapter file
 
