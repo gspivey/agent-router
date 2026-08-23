@@ -237,6 +237,22 @@ export interface MergePRResult {
   message: string;
 }
 
+/**
+ * Per-session mutable state: timers and flags that track in-flight lifecycle.
+ * Consolidates what was previously 4 parallel Maps/Set into a single record
+ * per session, reducing the risk of one cleanup path missing a map.
+ */
+export interface SessionState {
+  /** Inactivity timer — reset on every agent notification. */
+  inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Absolute max-lifetime timer — hard cap regardless of activity. */
+  lifetimeTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Grace-period timer — set when auto-completion fires. */
+  graceTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Set when the complete_session MCP call is received. */
+  completionFlag: boolean;
+}
+
 export interface SessionManager {
   createSession(originalPrompt: string, repo?: string, readRepos?: string[]): Promise<SessionHandle>;
   hasActiveSessionForRepo(repo: string): boolean;
@@ -370,17 +386,25 @@ export function createSessionManager(deps: {
   const gracePeriodMs = timeout.gracePeriodAfterMergeSeconds * 1000;
   const registry = createSessionRegistry();
 
-  // Track per-session inactivity timers
-  const inactivityTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Per-session mutable state consolidated into a single Map.
+  // Replaces the prior 4 parallel Maps/Set (inactivityTimers, lifetimeTimers,
+  // graceTimers, completionFlags).
+  const sessionStates = new Map<string, SessionState>();
 
-  // Track per-session max-lifetime timers
-  const lifetimeTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-  // Track per-session grace period timers (set when auto-completion fires)
-  const graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-  // Track per-session completion flags (set when complete_session MCP call is received)
-  const completionFlags = new Set<string>();
+  /** Get or create a SessionState entry for the given session. */
+  function getOrCreateState(sessionId: string): SessionState {
+    let state = sessionStates.get(sessionId);
+    if (state === undefined) {
+      state = {
+        inactivityTimer: undefined,
+        lifetimeTimer: undefined,
+        graceTimer: undefined,
+        completionFlag: false,
+      };
+      sessionStates.set(sessionId, state);
+    }
+    return state;
+  }
 
   /** Clear pending wakes for all PRs registered to a session. */
   function clearPendingWakesForSession(sessionId: string): void {
@@ -420,32 +444,33 @@ export function createSessionManager(deps: {
 
   /** Clear all timers for a session. */
   function clearSessionTimers(sessionId: string): void {
-    const inactTimer = inactivityTimers.get(sessionId);
-    if (inactTimer !== undefined) {
-      clearTimeout(inactTimer);
-      inactivityTimers.delete(sessionId);
+    const state = sessionStates.get(sessionId);
+    if (state === undefined) return;
+
+    if (state.inactivityTimer !== undefined) {
+      clearTimeout(state.inactivityTimer);
+      state.inactivityTimer = undefined;
     }
-    const lifeTimer = lifetimeTimers.get(sessionId);
-    if (lifeTimer !== undefined) {
-      clearTimeout(lifeTimer);
-      lifetimeTimers.delete(sessionId);
+    if (state.lifetimeTimer !== undefined) {
+      clearTimeout(state.lifetimeTimer);
+      state.lifetimeTimer = undefined;
     }
-    const graceTimer = graceTimers.get(sessionId);
-    if (graceTimer !== undefined) {
-      clearTimeout(graceTimer);
-      graceTimers.delete(sessionId);
+    if (state.graceTimer !== undefined) {
+      clearTimeout(state.graceTimer);
+      state.graceTimer = undefined;
     }
   }
 
   /** Reset the inactivity timer for a session (called on every notification). */
   function resetInactivityTimer(sessionId: string, acp: ACPClient): void {
-    const existing = inactivityTimers.get(sessionId);
-    if (existing !== undefined) {
-      clearTimeout(existing);
+    const state = getOrCreateState(sessionId);
+
+    if (state.inactivityTimer !== undefined) {
+      clearTimeout(state.inactivityTimer);
     }
 
     const timer = setTimeout(() => {
-      inactivityTimers.delete(sessionId);
+      state.inactivityTimer = undefined;
       if (!registry.has(sessionId)) return;
 
       // Run verification first. If the agent finished its work and just
@@ -522,7 +547,7 @@ export function createSessionManager(deps: {
         clearSessionTimers(sessionId);
         clearPendingWakesForSession(sessionId);
         removeSessionWorktree(sessionId);
-        completionFlags.delete(sessionId);
+        sessionStates.delete(sessionId);
 
         markTerminalAndNotifyReaper(sessionId);
         onSessionEnd?.(sessionId);
@@ -534,7 +559,7 @@ export function createSessionManager(deps: {
       })();
     }, inactivityMs);
 
-    inactivityTimers.set(sessionId, timer);
+    state.inactivityTimer = timer;
   }
 
   /**
@@ -561,7 +586,7 @@ export function createSessionManager(deps: {
           if (notification.method === 'session/notification') {
             const params = notification.params as Record<string, unknown> | undefined;
             if (params?.['type'] === 'mcp_call' && params?.['tool'] === 'complete_session') {
-              completionFlags.add(sessionId);
+              getOrCreateState(sessionId).completionFlag = true;
             }
 
             // Track outbound comments from tool call results.
@@ -627,7 +652,7 @@ export function createSessionManager(deps: {
             return;
           }
 
-          if (completionFlags.has(sessionId)) {
+          if (sessionStates.get(sessionId)?.completionFlag === true) {
             // Agent completed normally — emit session_ended BEFORE terminal meta
             sessionFiles.appendStream(sessionId, {
               ts: new Date().toISOString(),
@@ -661,7 +686,7 @@ export function createSessionManager(deps: {
           log.error('Failed to update meta on subprocess exit', { sessionId, error: msg });
         }
 
-        completionFlags.delete(sessionId);
+        sessionStates.delete(sessionId);
         clearPendingWakesForSession(sessionId);
         removeSessionWorktree(sessionId);
         registry.remove(sessionId);
@@ -676,8 +701,9 @@ export function createSessionManager(deps: {
    * On expiry, SIGTERM → 5s → SIGKILL regardless of activity.
    */
   function enforceMaxLifetime(sessionId: string, acp: ACPClient): void {
+    const state = getOrCreateState(sessionId);
     const timer = setTimeout(() => {
-      lifetimeTimers.delete(sessionId);
+      state.lifetimeTimer = undefined;
       if (!registry.has(sessionId)) return;
 
       log.warn('Session exceeded max lifetime, terminating', {
@@ -712,7 +738,7 @@ export function createSessionManager(deps: {
       clearSessionTimers(sessionId);
       clearPendingWakesForSession(sessionId);
       removeSessionWorktree(sessionId);
-      completionFlags.delete(sessionId);
+      sessionStates.delete(sessionId);
 
       markTerminalAndNotifyReaper(sessionId);
       onSessionEnd?.(sessionId);
@@ -723,7 +749,7 @@ export function createSessionManager(deps: {
       });
     }, maxLifetimeMs);
 
-    lifetimeTimers.set(sessionId, timer);
+    state.lifetimeTimer = timer;
   }
 
   const manager: SessionManager = {
@@ -995,7 +1021,7 @@ export function createSessionManager(deps: {
       }
 
       // Mark completion so monitorSubprocessExit knows this was intentional
-      completionFlags.add(sessionId);
+      getOrCreateState(sessionId).completionFlag = true;
 
       // Clear pending wakes for this session's PRs
       clearPendingWakesForSession(sessionId);
@@ -1031,10 +1057,10 @@ export function createSessionManager(deps: {
       onSessionEnd?.(sessionId);
 
       // Suppress inactivity timer — replace with grace period timer
-      const inactTimer = inactivityTimers.get(sessionId);
-      if (inactTimer !== undefined) {
-        clearTimeout(inactTimer);
-        inactivityTimers.delete(sessionId);
+      const state = getOrCreateState(sessionId);
+      if (state.inactivityTimer !== undefined) {
+        clearTimeout(state.inactivityTimer);
+        state.inactivityTimer = undefined;
       }
 
       log.info('Session auto-completed, starting grace period', {
@@ -1045,7 +1071,7 @@ export function createSessionManager(deps: {
 
       // Start grace period timer — after it expires, kill the subprocess cleanly
       const graceTimer = setTimeout(() => {
-        graceTimers.delete(sessionId);
+        state.graceTimer = undefined;
         if (!registry.has(sessionId)) return;
 
         log.info('Grace period expired, terminating session', { sessionId });
@@ -1054,7 +1080,7 @@ export function createSessionManager(deps: {
         registry.remove(sessionId);
         clearSessionTimers(sessionId);
         removeSessionWorktree(sessionId);
-        completionFlags.delete(sessionId);
+        sessionStates.delete(sessionId);
 
         handle.acp.kill().catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -1062,7 +1088,7 @@ export function createSessionManager(deps: {
         });
       }, gracePeriodMs);
 
-      graceTimers.set(sessionId, graceTimer);
+      state.graceTimer = graceTimer;
     },
 
     async terminateSession(sessionId: string, reason: 'terminated_cli' | 'terminated_web' | 'killed_by_operator' = 'terminated_cli', actor: string = 'local'): Promise<void> {
@@ -1082,7 +1108,7 @@ export function createSessionManager(deps: {
 
       // Remove from registry first to prevent monitorSubprocessExit from double-updating
       registry.remove(sessionId);
-      completionFlags.delete(sessionId);
+      sessionStates.delete(sessionId);
 
       // Kill the subprocess: SIGTERM → 5s → SIGKILL
       await handle.acp.kill();
@@ -1227,18 +1253,12 @@ export function createSessionManager(deps: {
       reaper?.shutdown();
 
       // Clear all timers
-      for (const [, timer] of inactivityTimers) {
-        clearTimeout(timer);
+      for (const [, state] of sessionStates) {
+        if (state.inactivityTimer !== undefined) clearTimeout(state.inactivityTimer);
+        if (state.lifetimeTimer !== undefined) clearTimeout(state.lifetimeTimer);
+        if (state.graceTimer !== undefined) clearTimeout(state.graceTimer);
       }
-      inactivityTimers.clear();
-      for (const [, timer] of lifetimeTimers) {
-        clearTimeout(timer);
-      }
-      lifetimeTimers.clear();
-      for (const [, timer] of graceTimers) {
-        clearTimeout(timer);
-      }
-      graceTimers.clear();
+      sessionStates.clear();
 
       if (activeSessions.length === 0) {
         log.info('Session manager shutdown complete');
@@ -1266,7 +1286,7 @@ export function createSessionManager(deps: {
       for (const handle of idle) {
         const { sessionId } = handle;
         registry.remove(sessionId);
-        completionFlags.delete(sessionId);
+        sessionStates.delete(sessionId);
         removeSessionWorktree(sessionId);
 
         // Emit session_ended BEFORE writing terminal meta
@@ -1342,7 +1362,7 @@ export function createSessionManager(deps: {
       for (const handle of busy) {
         const { sessionId } = handle;
         registry.remove(sessionId);
-        completionFlags.delete(sessionId);
+        sessionStates.delete(sessionId);
         removeSessionWorktree(sessionId);
 
         // Check if the session already reached terminal state during drain
