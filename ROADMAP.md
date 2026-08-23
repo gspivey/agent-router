@@ -33,16 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 45. Extract `SessionState` type from `session-mgr.ts`
-
-Replace 4 parallel Maps (`inactivityTimers`, `lifetimeTimers`, `graceTimers`, `completionFlags`)
-with a single `Map<sessionId, SessionState>`. Pure refactor — all existing tests must pass.
-
-- Spec: `BACKLOG.md § P2.16`
-- [ ] Complete
-
----
-
 ### 46. Add `writeWorktreeReapedAt` to `SessionFiles`
 
 Move reaper's direct `meta.json` writes into a new `SessionFiles.writeWorktreeReapedAt()` method
@@ -150,6 +140,16 @@ then implement tasks `6`, `7`, `8`. Depends on item 54.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 45. Extract `SessionState` type from `session-mgr.ts`
+
+Replace 4 parallel Maps (`inactivityTimers`, `lifetimeTimers`, `graceTimers`, `completionFlags`)
+with a single `Map<sessionId, SessionState>`. Pure refactor — all existing tests must pass.
+
+- Spec: `BACKLOG.md § P2.16`
+- [x] Complete · PR: #93
+
+---
 
 ### 44. Fix Reaper double-initialization
 
