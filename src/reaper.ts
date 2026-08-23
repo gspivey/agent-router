@@ -270,43 +270,13 @@ export function createReaper(deps: {
     try {
       fs.rmSync(worktreePath, { recursive: true, force: true });
       const nowSec = Math.floor(now() / 1000);
-      try {
-        sessionFiles.updateMeta(sessionId, { worktree_reaped_at: nowSec } as Partial<SessionMeta>);
-      } catch {
-        // Session may already be terminal — write directly to meta.json
-        writeWorktreeReapedAt(sessionId, nowSec);
-      }
+      sessionFiles.writeWorktreeReapedAt(sessionId, nowSec);
       log.info('Worktree reaped', { sessionId, path: worktreePath });
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       log.error('Worktree deletion failed', { sessionId, path: worktreePath, error: msg });
       return false;
-    }
-  }
-
-  /**
-   * Write worktree_reaped_at directly to meta.json for terminal sessions.
-   * This bypasses the "only active sessions" guard in sessionFiles.updateMeta.
-   */
-  function writeWorktreeReapedAt(sessionId: string, timestamp: number): void {
-    try {
-      const paths = sessionFiles.getSessionPaths(sessionId);
-      const raw = fs.readFileSync(paths.meta, 'utf-8');
-      const meta = JSON.parse(raw) as Record<string, unknown>;
-      meta['worktree_reaped_at'] = timestamp;
-      // Atomic write
-      const tmpPath = paths.meta + `.tmp-${process.pid}-${Date.now()}`;
-      const fd = fs.openSync(tmpPath, 'w');
-      try {
-        fs.writeSync(fd, JSON.stringify(meta, null, 2) + '\n');
-        fs.fsyncSync(fd);
-      } finally {
-        fs.closeSync(fd);
-      }
-      fs.renameSync(tmpPath, paths.meta);
-    } catch {
-      // Best effort — if meta is unreadable, skip
     }
   }
 

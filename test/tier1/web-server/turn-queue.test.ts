@@ -46,6 +46,7 @@ function createFakeSessionFiles(): SessionFiles & { streams: unknown[]; prompts:
     listSessions: () => [],
     sessionExists: () => true,
     getSessionPaths: () => ({ dir: '', meta: '', stream: '', prompts: '' }),
+    writeWorktreeReapedAt: () => {},
   };
 }
 

@@ -72,6 +72,8 @@ export interface SessionFiles {
   listSessions(): SessionMeta[];
   sessionExists(sessionId: string): boolean;
   getSessionPaths(sessionId: string): SessionPaths;
+  /** Atomically set worktree_reaped_at on a session regardless of status. */
+  writeWorktreeReapedAt(sessionId: string, timestamp: number): void;
 }
 
 const VALID_STATUSES = new Set(['active', 'completed', 'abandoned', 'failed']);
@@ -298,6 +300,23 @@ export function createSessionFiles(rootDir: string, log?: Logger): SessionFiles 
 
     getSessionPaths(sessionId: string): SessionPaths {
       return sessionPaths(rootDir, sessionId);
+    },
+
+    writeWorktreeReapedAt(sessionId: string, timestamp: number): void {
+      const paths = sessionPaths(rootDir, sessionId);
+
+      let raw: string;
+      try {
+        raw = fs.readFileSync(paths.meta, 'utf-8');
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to read meta.json for session ${sessionId}: ${msg}`);
+      }
+
+      const meta = JSON.parse(raw) as Record<string, unknown>;
+      meta['worktree_reaped_at'] = timestamp;
+
+      atomicWriteFileSync(paths.meta, JSON.stringify(meta, null, 2) + '\n');
     },
   };
 }

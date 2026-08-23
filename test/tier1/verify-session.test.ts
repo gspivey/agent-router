@@ -53,6 +53,11 @@ function createFakeSessionFiles(): { files: SessionFiles; state: FakeSessionFile
       stream: `/tmp/sessions/${sessionId}/stream.log`,
       prompts: `/tmp/sessions/${sessionId}/prompts.log`,
     }),
+    writeWorktreeReapedAt(sessionId, timestamp) {
+      const existing = state.metas.get(sessionId);
+      if (!existing) throw new Error(`fake: no meta for ${sessionId}`);
+      state.metas.set(sessionId, { ...existing, worktree_reaped_at: timestamp } as SessionMeta);
+    },
   };
 
   return { files, state };
