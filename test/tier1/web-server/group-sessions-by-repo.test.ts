@@ -115,7 +115,7 @@ describe('groupSessionsByRepo', () => {
     expect(result[1]!.cron).not.toBeNull(); // repo-b has one
   });
 
-  it('computes open PR count (PRs without merged_at)', () => {
+  it('computes open PR count (active session + no merged_at) and closed PR count (terminal session or merged_at set)', () => {
     const sessions = [
       makeMeta({
         repo: 'org/repo-a',
@@ -134,8 +134,11 @@ describe('groupSessionsByRepo', () => {
       }),
     ];
     const result = groupSessionsByRepo(sessions, repos, [], [], 5, noWaiting, fixedNow);
-    // PR #1 and #3 are open (no merged_at), PR #2 is merged
-    expect(result[0]!.open_pr_count).toBe(2);
+    // PR #1: active session, no merged_at → open
+    // PR #2: active session but merged_at set → closed
+    // PR #3: completed session → closed (regardless of merged_at)
+    expect(result[0]!.open_pr_count).toBe(1);
+    expect(result[0]!.closed_pr_count).toBe(2);
   });
 
   it('deduplicates PRs across sessions', () => {
@@ -152,7 +155,9 @@ describe('groupSessionsByRepo', () => {
       }),
     ];
     const result = groupSessionsByRepo(sessions, repos, [], [], 5, noWaiting, fixedNow);
+    // PR #1 seen first on active session → open; second occurrence (completed) is deduped
     expect(result[0]!.open_pr_count).toBe(1);
+    expect(result[0]!.closed_pr_count).toBe(0);
   });
 
   it('includes waiting_for from waitingForFn for active sessions', () => {
