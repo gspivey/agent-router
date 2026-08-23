@@ -354,6 +354,61 @@ export function serializeTokenMap(map: TokenMap): string {
 }
 
 // ---------------------------------------------------------------------------
+// Token health summary (for web UI config view)
+// ---------------------------------------------------------------------------
+
+/** A single entry in the token health summary. */
+export interface TokenHealthEntry {
+  readonly project: string;
+  readonly tokenName: string;
+  readonly isSet: boolean;
+  readonly expiry: string | null;
+  readonly health: 'green' | 'red' | 'unknown';
+}
+
+/**
+ * Derive health for a single project entry.
+ *
+ * - Token missing/empty → red
+ * - Token present, expiry known and past → red
+ * - Token present, expiry known and future → green
+ * - Token present, expiry unknown → green (assume valid)
+ */
+export function deriveTokenHealth(
+  entry: ProjectEntry | undefined,
+  now: Date,
+): 'green' | 'red' | 'unknown' {
+  if (entry === undefined) return 'red';
+  // Token is always present (validated at parse time), so isSet is always true for real entries.
+  if (entry.expiresAt !== undefined) {
+    return entry.expiresAt.getTime() > now.getTime() ? 'green' : 'red';
+  }
+  // Present, expiry unknown → green
+  return 'green';
+}
+
+/**
+ * Produce a summary of token health for all projects in the store.
+ * Pure function over a TokenMap + clock.
+ */
+export function getTokenHealthSummary(tokenMap: TokenMap, now: Date): TokenHealthEntry[] {
+  const results: TokenHealthEntry[] = [];
+
+  for (const [name, entry] of tokenMap.projects) {
+    const health = deriveTokenHealth(entry, now);
+    results.push({
+      project: name,
+      tokenName: name,
+      isSet: true,
+      expiry: entry.expiresAt !== undefined ? entry.expiresAt.toISOString() : null,
+      health,
+    });
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // Factory function
 // ---------------------------------------------------------------------------
 

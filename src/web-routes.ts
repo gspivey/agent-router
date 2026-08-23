@@ -6,6 +6,11 @@ import type { SessionFiles, SessionMeta } from './session-files.js';
 import type { SSEBroker } from './sse-broker.js';
 import type { Logger } from './log.js';
 import type { AuthResult } from './web-auth.js';
+import type { AgentRouterConfig } from './config.js';
+import type { TokenStore } from './token-store.js';
+import { getTokenHealthSummary } from './token-store.js';
+import type { Database } from './db.js';
+import { getCronScheduleState } from './cron-state.js';
 import { deriveWaitingFor } from './ui/logic.js';
 
 type WebEnv = { Variables: { auth: AuthResult } };
@@ -229,8 +234,11 @@ export function createWebRoutes(deps: {
   rootDir: string;
   log: Logger;
   shuttingDown: () => boolean;
+  config?: AgentRouterConfig;
+  tokenStore?: TokenStore;
+  db?: Database;
 }): Hono<WebEnv> {
-  const { sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown } = deps;
+  const { sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, config, tokenStore, db } = deps;
   const app = new Hono<WebEnv>();
 
   // GET /sessions
@@ -497,6 +505,48 @@ export function createWebRoutes(deps: {
     }
 
     return c.json({ ok: true }, 200);
+  });
+
+  // GET /config
+  app.get('/config', (c) => {
+    if (!config || !tokenStore || !db) {
+      return c.json({ error: 'Configuration endpoint not available' }, 503);
+    }
+    try {
+      const now = new Date();
+
+      // Token health from the token store
+      const tokenHealth = getTokenHealthSummary(tokenStore.getTokenMap(), now);
+
+      // Cron schedule state
+      const cronStates = db.getAllCronStates();
+      const crons = getCronScheduleState(config.cron, cronStates, now);
+
+      // Repos — expose name only, never secret values
+      const repos = config.repos.map(r => ({
+        name: `${r.owner}/${r.name}`,
+        webhookSecretName: r.webhookSecret !== undefined
+          ? `[configured]`
+          : `WEBHOOK_SECRET_${r.owner}_${r.name}`,
+      }));
+
+      return c.json({
+        sessionTimeouts: {
+          inactivityMinutes: config.sessionTimeout.inactivityMinutes,
+          maxLifetimeMinutes: config.sessionTimeout.maxLifetimeMinutes,
+          gracePeriodAfterMergeSeconds: config.sessionTimeout.gracePeriodAfterMergeSeconds,
+        },
+        rateLimits: {
+          perPRSeconds: config.rateLimit.perPRSeconds,
+        },
+        crons,
+        tokens: tokenHealth,
+        repos,
+      });
+    } catch (err) {
+      log.error('Failed to assemble config response', { error: err instanceof Error ? err.message : String(err) });
+      return c.json({ error: 'Failed to load configuration' }, 500);
+    }
   });
 
   return app;

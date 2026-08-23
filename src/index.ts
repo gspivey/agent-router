@@ -678,6 +678,8 @@ async function main(): Promise<void> {
     rootDir,
     config: effectiveConfig,
     shuttingDown: () => shuttingDownRef.value,
+    credentialTokenStore,
+    db,
   });
 
   const webServer = startWebServer(webApp, effectiveConfig, log);

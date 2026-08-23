@@ -34,10 +34,14 @@ export interface WebAppDeps {
   rootDir: string;
   config: AgentRouterConfig;
   shuttingDown: () => boolean;
+  /** Credential token store for token health display. Optional for backwards compat. */
+  credentialTokenStore?: import('./token-store.js').TokenStore;
+  /** Database for cron state queries. Optional for backwards compat. */
+  db?: import('./db.js').Database;
 }
 
 export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
-  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown } = deps;
+  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db } = deps;
 
   const app = new Hono<WebEnv>();
 
@@ -106,13 +110,20 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   const authMiddleware = createAuthMiddleware(authConfig);
   app.use('/sessions', authMiddleware);
   app.use('/sessions/*', authMiddleware);
+  app.use('/config', authMiddleware);
 
   // --- Write guard for POST endpoints ---
   const writeGuard = createWriteGuard(config.allowedEmails);
   app.post('/sessions/*', writeGuard);
 
   // --- Mount route handlers ---
-  const routes = createWebRoutes({ sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown });
+  const routeDeps: Parameters<typeof createWebRoutes>[0] = {
+    sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown,
+  };
+  if (config !== undefined) routeDeps.config = config;
+  if (credentialTokenStore !== undefined) routeDeps.tokenStore = credentialTokenStore;
+  if (db !== undefined) routeDeps.db = db;
+  const routes = createWebRoutes(routeDeps);
   app.route('/', routes);
 
   return app;
