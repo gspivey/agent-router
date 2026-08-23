@@ -33,16 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 55. Web UI project concept — frontend (UI panel, repo filter, E2E)
-
-Read `.kiro/specs/web-ui-project-concept/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `6`, `7`, `8`. Depends on item 54.
-
-- Spec: `.kiro/specs/web-ui-project-concept/` · tasks `6`, `7`, `8`
-- [ ] Complete
-
----
-
 ### 56. Claude Code adapter — config schema and adapter file
 
 Read `.kiro/specs/claude-code-adapter/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -66,6 +56,16 @@ then implement tasks `3`, `4`, `5`, `6`, `7`. Depends on item 56.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 55. Web UI project concept — frontend (UI panel, repo filter, E2E)
+
+Read `.kiro/specs/web-ui-project-concept/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `6`, `7`, `8`. Depends on item 54.
+
+- Spec: `.kiro/specs/web-ui-project-concept/` · tasks `6`, `7`, `8`
+- [x] Complete · PR: #104
+
+---
 
 ### 54. Web UI project concept — backend (config types, pure logic, tests, API)
 
