@@ -33,16 +33,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-### 44. Fix Reaper double-initialization
-
-Refactor `src/index.ts` startup to pass the real reaper instance (not a placeholder stub) to
-`createSessionManager`. Add Tier 2 test asserting real reaper shutdown is called.
-
-- Spec: `BACKLOG.md § P2.15`
-- [ ] Complete
-
----
-
 ### 45. Extract `SessionState` type from `session-mgr.ts`
 
 Replace 4 parallel Maps (`inactivityTimers`, `lifetimeTimers`, `graceTimers`, `completionFlags`)
@@ -90,6 +80,16 @@ persistence, startup wiring, new termination reason union value, and Tier 1 + Ti
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 44. Fix Reaper double-initialization
+
+Refactor `src/index.ts` startup to pass the real reaper instance (not a placeholder stub) to
+`createSessionManager`. Add Tier 2 test asserting real reaper shutdown is called.
+
+- Spec: `BACKLOG.md § P2.15`
+- [x] Complete · PR: #88
+
+---
 
 ### 43. Fix CI `pull_request` trigger to target `development`
 

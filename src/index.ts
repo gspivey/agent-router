@@ -498,20 +498,21 @@ async function main(): Promise<void> {
   const worktreeManager = createWorktreeManager({ rootDir, log });
   log.info('Worktree manager initialized', { rootDir });
 
-  // Create reaper (may be disabled via config)
+  // Create reaper (single instance — uses late-binding closure for isActive
+  // so it can reference sessionMgr which is created below)
   let reaper: Reaper | undefined;
+  let sessionMgr: SessionManager;
 
-  // Initialize reaper before session manager if enabled
   if (config.reaper.enabled) {
     reaper = createReaper({
       config: config.reaper,
       sessionFiles,
-      isActive: () => false, // placeholder — will be replaced after sessionMgr is ready
+      isActive: (id: string) => sessionMgr.getActiveSession(id) !== null,
       log,
     });
   }
 
-  const sessionMgr = createSessionManager({
+  sessionMgr = createSessionManager({
     db,
     sessionFiles,
     tokenStore: credentialTokenStore,
@@ -554,16 +555,8 @@ async function main(): Promise<void> {
   });
   log.info('Session manager initialized');
 
-  // Now that session manager is ready, create the real reaper with proper isActive
-  if (config.reaper.enabled) {
-    // Shut down the placeholder reaper and create a new one with the real isActive
-    reaper?.shutdown();
-    reaper = createReaper({
-      config: config.reaper,
-      sessionFiles,
-      isActive: (id: string) => sessionMgr.getActiveSession(id) !== null,
-      log,
-    });
+  // Start the reaper now that session manager is ready
+  if (reaper !== undefined) {
     reaper.start();
     log.info('Session reaper initialized', {
       gracePeriodMinutes: config.reaper.gracePeriodMinutes,
