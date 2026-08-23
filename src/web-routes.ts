@@ -13,6 +13,8 @@ import type { Database, CronState } from './db.js';
 import { getCronScheduleState } from './cron-state.js';
 import { getNextCronFire } from './cron-next.js';
 import { deriveWaitingFor } from './ui/logic.js';
+import { computeProjectHealth, computeTokenCoverage, partitionRepos } from './projects.js';
+import type { ProjectConfig, RepoSessionCounts } from './projects.js';
 
 type WebEnv = { Variables: { auth: AuthResult } };
 
@@ -523,6 +525,87 @@ export function createWebRoutes(deps: {
       offset,
       limit,
     });
+  });
+
+  // GET /projects
+  app.get('/projects', (c) => {
+    if (!config) {
+      return c.json(errorEnvelope('not_configured', 'Projects endpoint requires config'), 503);
+    }
+
+    const sessions = sessionFiles.listSessions();
+    const configRepos = config.repos;
+    const allRepoNames = configRepos.map(r => `${r.owner}/${r.name}`);
+    const projectDefs: ProjectConfig[] = config.projects ?? [];
+
+    // Compute per-repo session counts
+    const repoSessionCounts = new Map<string, RepoSessionCounts>();
+    for (const session of sessions) {
+      const repoName = session.repo;
+      if (repoName === undefined) continue;
+      const existing = repoSessionCounts.get(repoName);
+      const isActive = session.status === 'active';
+      const isFailed = session.status === 'failed' || session.status === 'abandoned';
+      const createdAt = new Date(session.created_at);
+
+      if (existing !== undefined) {
+        if (isActive) existing.active++;
+        if (isFailed) existing.failed++;
+        if (existing.lastSessionAt === null || createdAt > existing.lastSessionAt) {
+          existing.lastSessionAt = createdAt;
+        }
+      } else {
+        repoSessionCounts.set(repoName, {
+          active: isActive ? 1 : 0,
+          failed: isFailed ? 1 : 0,
+          lastSessionAt: createdAt,
+        });
+      }
+    }
+
+    // Build repo configs for token coverage
+    const repoConfigs = configRepos.map(r => ({
+      fullName: `${r.owner}/${r.name}`,
+      hasToken: r.token !== undefined,
+    }));
+    const hasDefaultToken = config.defaultGithubToken !== undefined;
+
+    // Partition repos
+    const { ungrouped } = partitionRepos(allRepoNames, projectDefs);
+
+    // Build project responses
+    const projects = projectDefs.map(proj => {
+      const health = computeProjectHealth(repoSessionCounts, proj.repos);
+      const tokenCoverage = computeTokenCoverage(proj.repos, repoConfigs, hasDefaultToken);
+      const repos = proj.repos.map(repoFullName => {
+        const counts = repoSessionCounts.get(repoFullName);
+        const hasToken = repoConfigs.find(r => r.fullName === repoFullName)?.hasToken ?? false;
+        return {
+          fullName: repoFullName,
+          activeSessions: counts?.active ?? 0,
+          hasToken: hasToken || hasDefaultToken,
+        };
+      });
+      return {
+        name: proj.name,
+        health,
+        tokenCoverage,
+        repos,
+      };
+    });
+
+    // Build ungrouped repo status
+    const ungroupedRepos = ungrouped.map(repoFullName => {
+      const counts = repoSessionCounts.get(repoFullName);
+      const hasToken = repoConfigs.find(r => r.fullName === repoFullName)?.hasToken ?? false;
+      return {
+        fullName: repoFullName,
+        activeSessions: counts?.active ?? 0,
+        hasToken: hasToken || hasDefaultToken,
+      };
+    });
+
+    return c.json({ projects, ungrouped: ungroupedRepos });
   });
 
   // GET /sessions/:id

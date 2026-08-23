@@ -4,16 +4,16 @@
 
 **File**: `src/config.ts`
 
-- [ ] Add `ProjectConfig` interface: `{ name: string; repos: string[] }`
-- [ ] Add optional `projects?: ProjectConfig[]` field to `AgentRouterConfig`
-- [ ] Add validation in `validateConfig()`:
+- [x] Add `ProjectConfig` interface: `{ name: string; repos: string[] }`
+- [x] Add optional `projects?: ProjectConfig[]` field to `AgentRouterConfig`
+- [x] Add validation in `validateConfig()`:
   - If `projects` is present, verify it's an array
   - Each project must have non-empty `name` (string) and non-empty `repos` (string array)
   - Project names must be unique (case-insensitive)
   - Each repo in `projects[].repos` must match a configured repo as `"owner/name"`
   - A repo cannot appear in more than one project
   - Throw `FatalError` with descriptive message on any violation
-- [ ] Ensure missing `projects` key passes validation without error (backward compat)
+- [x] Ensure missing `projects` key passes validation without error (backward compat)
 
 **Acceptance**: Config with valid projects loads; config with duplicate names, unknown repos, or cross-project duplicates throws FatalError with clear message; config without `projects` key works unchanged.
 
@@ -23,15 +23,15 @@
 
 **File**: `src/projects.ts` (new)
 
-- [ ] Export `computeProjectHealth(repoSessionCounts, projectRepos)` → `{ status, activeSessions, failedSessions }`
+- [x] Export `computeProjectHealth(repoSessionCounts, projectRepos)` → `{ status, activeSessions, failedSessions }`
   - Session counts map shape: `Map<string, { active: number; failed: number; lastSessionAt: Date | null }>`
   - `green`: no failed/abandoned sessions across project repos
   - `partial`: at least one repo has failed/abandoned, others healthy
   - `paused`: zero active sessions AND no session has `lastSessionAt` within the last 24 hours (or all repos have `lastSessionAt: null`)
-- [ ] Export `computeTokenCoverage(projectRepos, repoConfigs, hasDefaultToken)` → `{ complete, missingRepos }`
+- [x] Export `computeTokenCoverage(projectRepos, repoConfigs, hasDefaultToken)` → `{ complete, missingRepos }`
   - A repo is covered if it has a per-repo token OR defaultGithubToken is set
-- [ ] Export `partitionRepos(allRepos, projects)` → `{ assigned: Set<string>, ungrouped: string[] }`
-- [ ] Export `validateProjects(projects, knownRepos)` → validation result with error messages
+- [x] Export `partitionRepos(allRepos, projects)` → `{ assigned: Set<string>, ungrouped: string[] }`
+- [x] Export `validateProjects(projects, knownRepos)` → validation result with error messages
 
 **Acceptance**: All functions are pure (no I/O), exported, and handle edge cases (empty arrays, undefined projects, repos with no session history).
 
@@ -41,19 +41,19 @@
 
 **File**: `test/projects.test.ts` (new)
 
-- [ ] Test `computeProjectHealth`:
+- [x] Test `computeProjectHealth`:
   - All repos zero failed → green
   - One repo with failed session → partial
   - Zero active, no recent sessions → paused
   - Empty repo list → green (vacuous truth)
-- [ ] Test `computeTokenCoverage`:
+- [x] Test `computeTokenCoverage`:
   - All repos have token → complete
   - Missing token but defaultGithubToken set → complete
   - Missing token and no default → incomplete with repo listed
-- [ ] Test `partitionRepos`:
+- [x] Test `partitionRepos`:
   - Repos split correctly between assigned and ungrouped
   - No projects → all ungrouped
-- [ ] Test `validateProjects`:
+- [x] Test `validateProjects`:
   - Valid config passes
   - Duplicate project name fails
   - Unknown repo fails
@@ -67,19 +67,19 @@
 
 **File**: `src/web-routes.ts`
 
-- [ ] Add `GET /projects` route handler
-- [ ] Accept config (projects + repos + defaultGithubToken) as dependency
-- [ ] Use `sessionFiles.listSessions()` to compute per-repo active/failed session counts
-- [ ] Call `partitionRepos`, `computeProjectHealth`, `computeTokenCoverage` from projects module
-- [ ] Return response matching the `ProjectsAPIResponse` shape from design doc
-- [ ] If no projects configured, return `{ projects: [], ungrouped: [...allRepos] }`
+- [x] Add `GET /projects` route handler
+- [x] Accept config (projects + repos + defaultGithubToken) as dependency
+- [x] Use `sessionFiles.listSessions()` to compute per-repo active/failed session counts
+- [x] Call `partitionRepos`, `computeProjectHealth`, `computeTokenCoverage` from projects module
+- [x] Return response matching the `ProjectsAPIResponse` shape from design doc
+- [x] If no projects configured, return `{ projects: [], ungrouped: [...allRepos] }`
 
 **Dependencies**: Task 1 (config types), Task 2 (projects module)
 
 **File**: `src/web-server.ts`
 
-- [ ] Mount `/projects` under the auth middleware (same as `/sessions`)
-- [ ] Pass `config` to `createWebRoutes` deps (add to interface if needed)
+- [x] Mount `/projects` under the auth middleware (same as `/sessions`)
+- [x] Pass `config` to `createWebRoutes` deps (add to interface if needed)
 
 **Acceptance**: `GET /projects` returns correct JSON with auth; returns 401 without auth; returns empty projects array when none configured.
 
@@ -91,10 +91,10 @@
 
 **Depends on**: Task 4
 
-- [ ] Test with projects configured: verify response shape, health, token coverage
-- [ ] Test with no projects: verify empty projects array, all repos in ungrouped
-- [ ] Test auth requirement: 401 without token
-- [ ] Test with mixed session states: verify health computation accuracy
+- [x] Test with projects configured: verify response shape, health, token coverage
+- [x] Test with no projects: verify empty projects array, all repos in ungrouped
+- [x] Test auth requirement: 401 without token
+- [x] Test with mixed session states: verify health computation accuracy
 
 **Acceptance**: All tests pass against the route handler with mocked dependencies.
 

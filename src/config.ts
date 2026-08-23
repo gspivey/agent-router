@@ -5,6 +5,8 @@ import cron from 'node-cron';
 import { FatalError } from './errors.js';
 import type { NotifyOnSessionEndConfig } from './notify.js';
 import type { ReaperConfig } from './reaper.js';
+import type { ProjectConfig } from './projects.js';
+import { validateProjects } from './projects.js';
 
 export interface SessionTimeoutConfig {
   inactivityMinutes: number;
@@ -50,6 +52,8 @@ export interface AgentRouterConfig {
   credentialMode: 'env' | 'mcp';
   /** Session reaper configuration for automatic disk reclamation. */
   reaper: ReaperConfig;
+  /** Optional project groupings for multi-repo visibility. */
+  projects?: ProjectConfig[];
 }
 
 export interface RepoConfig {
@@ -485,6 +489,46 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     sweepIntervalMinutes,
   };
 
+  // projects (optional)
+  let projects: ProjectConfig[] | undefined;
+  if (config['projects'] !== undefined) {
+    const rawProjects = config['projects'];
+    if (!Array.isArray(rawProjects)) {
+      throw new FatalError('Invalid "projects": must be an array');
+    }
+    projects = [];
+    for (let i = 0; i < rawProjects.length; i++) {
+      const proj = rawProjects[i] as unknown;
+      if (!isRecord(proj)) {
+        throw new FatalError(`Invalid "projects[${i}]": must be an object`);
+      }
+      const projName = proj['name'];
+      if (typeof projName !== 'string' || projName.length === 0) {
+        throw new FatalError(`Invalid "projects[${i}].name": must be a non-empty string`);
+      }
+      const projRepos = proj['repos'];
+      if (!Array.isArray(projRepos) || projRepos.length === 0) {
+        throw new FatalError(`Invalid "projects[${i}].repos": must be a non-empty array`);
+      }
+      const repoStrings: string[] = [];
+      for (let j = 0; j < projRepos.length; j++) {
+        const r = projRepos[j] as unknown;
+        if (typeof r !== 'string' || r.length === 0) {
+          throw new FatalError(`Invalid "projects[${i}].repos[${j}]": must be a non-empty string`);
+        }
+        repoStrings.push(r);
+      }
+      projects.push({ name: projName, repos: repoStrings });
+    }
+
+    // Validate cross-project constraints using the pure validation function
+    const knownRepoNames = repos.map(r => `${r.owner}/${r.name}`);
+    const validation = validateProjects(projects, knownRepoNames);
+    if (!validation.valid) {
+      throw new FatalError(`Invalid "projects": ${validation.errors.join('; ')}`);
+    }
+  }
+
   const result: AgentRouterConfig = {
     port,
     webhookSecret,
@@ -516,6 +560,9 @@ export function validateConfig(config: unknown): AgentRouterConfig {
   }
   if (childEnvAllowlist !== undefined) {
     result.childEnvAllowlist = childEnvAllowlist;
+  }
+  if (projects !== undefined) {
+    result.projects = projects;
   }
   return result;
 }

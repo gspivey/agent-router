@@ -111,6 +111,7 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   app.use('/sessions', authMiddleware);
   app.use('/sessions/*', authMiddleware);
   app.use('/repos/*', authMiddleware);
+  app.use('/projects', authMiddleware);
   app.use('/config', authMiddleware);
 
   // --- Write guard for POST endpoints ---
