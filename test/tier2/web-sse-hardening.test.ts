@@ -1,11 +1,12 @@
 /**
  * Tier 2 test: SSE hardening for Cloudflare / mobile.
  * Properties tested:
- * - SSE response carries anti-buffering headers
- * - SSE response emits initial flush comment + retry hint
- * - Events carry id: fields
+ * - SSE response carries anti-buffering headers (Cache-Control, X-Accel-Buffering)
+ * - SSE response emits initial flush comment (:ok) + retry hint
+ * - Content-Type is text/event-stream
+ * - Events carry id: fields with integer values
  *
- * Validates: Spec tasks 4.1 (server SSE header/flush/heartbeat)
+ * Validates: Spec .kiro/specs/web-client/ tasks 4.1a, 4.1b
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -140,6 +141,22 @@ function authHeaders(): Record<string, string> {
 }
 
 describe('SSE hardening headers and initial flush', () => {
+  it('carries all anti-buffering headers required by task 4.1b', async () => {
+    const handle = await mgr.createSession('task');
+    await waitForStreamEntry(rootDir, handle.sessionId, 'prompt_injected');
+
+    const res = await fetch(`http://127.0.0.1:${controlPort}/sessions/${handle.sessionId}/stream`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(200);
+    // All five anti-buffering requirements from spec task 4.1b:
+    expect(res.headers.get('content-type')).toBe('text/event-stream');
+    expect(res.headers.get('cache-control')).toBe('no-cache, no-transform');
+    expect(res.headers.get('x-accel-buffering')).toBe('no');
+    expect(res.headers.get('connection')).toBe('keep-alive');
+    await mgr.terminateSession(handle.sessionId, 'terminated_cli');
+  }, 15_000);
+
   it('response has Cache-Control: no-cache, no-transform', async () => {
     const handle = await mgr.createSession('task');
     await waitForStreamEntry(rootDir, handle.sessionId, 'prompt_injected');
