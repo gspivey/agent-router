@@ -1,3 +1,10 @@
+> **DEPRECATED** — This spec has a security design flaw that must be fixed before implementation:
+> (1) SECURITY: github_http_forward authorizes on `repo` arg but builds the HTTP request from `path` arg —
+>     an agent can pass { repo: "mine/allowed", path: "/repos/other/victim/contents/x" } to write unauthorized repos.
+> (2) get_token has no session binding — any MCP session can request any project's PAT.
+> (3) get_token (CLI) and tokens_status are on the CLI socket but design mandates SO_PEERCRED — mutually exclusive.
+> Replaced by auth-credential-proxy-v2 spec (pending spec-gen). Do not queue these tasks.
+
 # Design Document: Auth Credential Proxy
 
 ## Overview

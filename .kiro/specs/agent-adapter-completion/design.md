@@ -120,9 +120,10 @@ app.post('/hooks/event', async (c) => {
 export type VerifyResult =
   | { verified: true; termination_reason: 'merged' | 'closed_without_merge' }
   | { verified: false; reason: 'github_error'; error: string }
-  | { verified: false; reason: 'prs_still_open' }
+  | { verified: false; reason: 'prs_still_open'; open_prs: Array<{ repo: string; pr_number: number }> }
   | { verified: false; reason: 'already_verified' }
-  | { verified: false; reason: 'no_prs' };
+  | { verified: false; reason: 'no_prs' }
+  | { verified: false; reason: 'unknown_session' };
 
 export function createVerifier(deps: {...}): (sid: string) => Promise<VerifyResult> {
   const inFlight = new Map<string, Promise<VerifyResult>>();
@@ -133,7 +134,7 @@ export function createVerifier(deps: {...}): (sid: string) => Promise<VerifyResu
 
     const p = (async (): Promise<VerifyResult> => {
       if (!sessionFiles.sessionExists(sessionId)) {
-        return { verified: false, reason: 'no_prs' };
+        return { verified: false, reason: 'unknown_session' };
       }
       const meta = sessionFiles.readMeta(sessionId);
       if (meta.termination_reason) {
@@ -163,7 +164,10 @@ export function createVerifier(deps: {...}): (sid: string) => Promise<VerifyResu
       }
 
       if (states.some(s => s.state === 'open')) {
-        return { verified: false, reason: 'prs_still_open' };
+        const open_prs = meta.prs
+          .filter((pr, i) => states[i].state === 'open')
+          .map(pr => ({ repo: pr.repo, pr_number: pr.pr_number }));
+        return { verified: false, reason: 'prs_still_open', open_prs };
       }
 
       const reason = states.every(s => s.merged) ? 'merged' : 'closed_without_merge';
@@ -286,7 +290,17 @@ switch (result.verified) {
       resetInactivityTimer(sessionId, acp);
       return; // crucial: do not fall through to timeout-failed
     }
-    // prs_still_open | no_prs | already_verified → existing timeout-failed path
+    if (result.reason === 'already_verified') {
+      // Session is already in a terminal state — updateMeta would throw (session-files.ts
+      // refuses writes to non-active sessions). Skip the write, proceed to kill.
+      break;
+    }
+    if (result.reason === 'unknown_session') {
+      // Session directory was reaped — updateMeta would throw (readFileSync on missing meta.json).
+      // Skip the write, proceed to kill.
+      break;
+    }
+    // prs_still_open | no_prs → existing timeout-failed path
     sessionFiles.updateMeta(sessionId, { status: 'failed', termination_reason: 'timeout_inactivity', completed_at: nowSecs() });
     break;
 }

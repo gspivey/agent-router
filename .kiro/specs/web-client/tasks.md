@@ -1,11 +1,14 @@
 # Implementation Plan: Web Client Reliability
 
+> **PARTIALLY IMPLEMENTED** — Most tasks in this spec shipped in PRs #66–69 and #92–107.
+> Only task 4.1b (verify/patch SSE anti-buffering headers) is genuinely open.
+> Task 2.1 (server aggregation) is **DEFERRED** — do not implement from this spec; see `BACKLOG.md § P2.20`.
+> The requirements describe the intended final state; the tasks describe what was shipped vs what remains.
+> An agent picking up this spec should implement ONLY task 4.1b.
+
 ## Overview
 
-Diagnose first, then fix in dependency order: server-side list aggregation (removes the N+1),
-client fetch resilience, then SSE hardening. Each group is a single PR with browser-harness
-coverage. Builds on `.kiro/specs/browser-test-harness/` (must be merged first — it provides the
-Playwright fixtures these tests use).
+Most work in this spec shipped in PRs #66–69 and #92–107. Task 2.1 (server aggregation) is deferred to `BACKLOG.md § P2.20`. Browser-harness coverage references `browser-test-harness-v2` (the original `browser-test-harness` spec is deprecated).
 
 ## Baseline: What Was Already Implemented (PRs #92–107)
 
@@ -25,12 +28,13 @@ should NOT be re-implemented. The agent must read this note before touching any 
 - **`computeBackoff` / `scheduleReconnect`** (task 4.2): exponential backoff helpers implemented
   in the client.
 
-**Primary remaining work:** Task 2.1 — server-side waiting-for aggregation and N+1 elimination.
-All other remaining tasks are incremental hardening on top of the above baseline.
+**Note on task 2.2 dependency inversion:** Task 2.2 (client renders list from one request) shipped in PRs #92–107 and deleted `fetchWaitingFor` / the per-row loop. Task 2.1 (server aggregation) was NOT shipped — so the waiting-for field is absent in the current list response and the detail column shows blank. Task 2.1 is deferred to `BACKLOG.md § P2.20` rather than implemented in this spec. The N+1 is gone, replaced by a missing-field gap until 2.1 ships.
+
+**Deferred item:** Task 2.1 — server-side waiting-for aggregation + pagination (see `BACKLOG.md § P2.20`). Do not implement from this spec.
 
 ## Tasks
 
-- [ ] 1. Diagnose and reproduce
+- [x] 1. Diagnose and reproduce
   - [x] 1.1 Repro the load/SSE failures under the browser harness
     - Add browser specs that shape the network (CDP `Network.emulateNetworkConditions`, route
       delay/abort, offline→online) to reproduce: list "Load failed" under request pressure, and
@@ -39,17 +43,11 @@ All other remaining tasks are incremental hardening on top of the above baseline
       expected-fail and become the regression suite.
     - _Requirements: 4.2, 4.3_
 
-- [ ] 2. One-request session list (kill the N+1)
-  - [ ] 2.1 **PRIMARY REMAINING WORK — server-side list aggregation + pagination**
-    - This is the highest-impact open task. The `/sessions` list handler (`src/web-routes.ts`)
-      currently returns bare session rows; the client fans out N individual `GET /sessions/<id>`
-      calls to fetch the waiting-for summary for each row — this is the N+1 that causes "Load
-      failed" under mobile / Cloudflare conditions.
-    - Extend the list handler so each item includes status, repo, timestamps, and the
-      waiting-for summary (computed server-side from the last stream entry). Add bounded
-      pagination (`limit`/`offset` or cursor) with active sessions always included; remove the
-      `limit=500` path. Additive wire shape — client must still work against an old server that
-      returns rows without the new fields.
+- [x] 2. One-request session list (kill the N+1)
+  - [ ] 2.1 **DEFERRED TO BACKLOG — server-side list aggregation + pagination**
+    - See `BACKLOG.md § P2.20`. **Do not implement from this spec.**
+    - Current state: task 2.2 shipped (per-row `fetchWaitingFor` loop deleted, single `/sessions` request). The server does NOT yet return the waiting-for summary field, so the column is blank in the current UI. This task adds that server-side computation.
+    - Extend the list handler (`src/web-routes.ts`) so each item includes the waiting-for summary computed server-side from the session's last stream entry. Add bounded pagination (`limit`/`offset`) with active sessions always included; remove the `limit=500` path. Additive wire shape — client still works against an old server that omits the new fields.
     - Tier 2: list response includes waiting-for and paginates; active always shown.
     - _Requirements: 1.2, 1.3, 1.4_
   - [x] 2.2 Client renders the list from one request
@@ -60,7 +58,7 @@ All other remaining tasks are incremental hardening on top of the above baseline
     - **Already implemented in PRs #92–107. Do not re-implement.**
     - _Requirements: 1.1, 1.4_
 
-- [ ] 3. Client fetch resilience
+- [x] 3. Client fetch resilience
   - [x] 3.1 Resilient fetch wrapper + error/auth UI
     - Replace `apiFetch` with a wrapper: bounded `AbortController` timeout, retry-with-backoff
       for network/5xx (not `401`), typed outcome. List/detail show an error state with a Retry
@@ -71,30 +69,31 @@ All other remaining tasks are incremental hardening on top of the above baseline
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
 - [ ] 4. SSE hardening for Cloudflare / mobile
-  - [x] 4.1 Server SSE header/flush + heartbeat
-    - In the SSE route (`src/web-server.ts`) / broker (`src/sse-broker.ts`): set
-      `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`, explicit event-stream
-      content type; write an initial flush; ensure each event has an `id:` and emit a `retry:`
-      hint; make heartbeat interval configurable (documented vs Cloudflare idle cap).
-    - Tier 2: SSE response carries the headers + initial flush; events carry ids.
-    - **SSE `id:` per event and configurable heartbeat already implemented in PRs #92–107.**
-      Verify remaining items (headers, initial flush, `retry:` hint) before treating as open.
-    - _Requirements: 3.1, 3.4_
+  - [x] 4.1a Server SSE id/heartbeat (shipped)
+    - SSE `id:` per event and configurable heartbeat implemented in PRs #92–107.
+    - _Requirements: 3.4_
+  - [ ] 4.1b Server SSE anti-buffering headers and initial flush (verify + patch if missing)
+    - Confirm `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`, explicit
+      `Content-Type: text/event-stream`, initial flush comment (`:ok\n\n`), and `retry:` hint
+      are present in `src/web-server.ts` / `src/sse-broker.ts`. If any are missing, add them.
+      These are the Cloudflare anti-buffering requirements.
+    - Tier 2: SSE response carries the anti-buffering headers and initial flush.
+    - _Requirements: 3.1_
   - [x] 4.2 Client reconnect on visibility/online + resume
     - Drive reconnect from `visibilitychange` and `online` (plus existing stream-error); send
       `Last-Event-ID` on reconnect and de-dupe by id; stop reconnecting on `session_ended`.
     - Browser tests: simulated drop + foreground/online → reconnect with no duplicate ids;
       `session_ended` → no reconnect (extends the existing harness reconnect specs).
-    - **All sub-items already implemented in PRs #92–107** (`visibilitychange`, `online`,
+    - **All reconnect logic already implemented in PRs #92–107** (`visibilitychange`, `online`,
       `Last-Event-ID`, `session_ended` guard, `computeBackoff`, `scheduleReconnect`).
-      The remaining work is browser-harness regression coverage for these paths.
+      The `[x]` covers the implementation; browser-harness regression coverage is a follow-on
+      tracked under `browser-test-harness-v2` spec.
     - _Requirements: 3.2, 3.3, 3.5, 5.1, 5.2_
 
 ## Notes
 
-- Depends on `.kiro/specs/browser-test-harness/` being merged (Playwright fixtures).
-- Group 2 (server aggregation) is the highest-impact fix — it removes the request fan-out that
-  causes most mobile "Load failed" cases. Do it before the resilience polish.
+- The `browser-test-harness` spec is deprecated (see that spec's deprecation header). Browser harness coverage for tasks 4.2 and 1.1 should reference the new `browser-test-harness-v2` spec once it is generated.
+- Group 2 (server aggregation) is deferred to `BACKLOG.md § P2.20`. Task 2.2 (client single-request) shipped in PRs #92–107 but without the server aggregation, so the waiting-for column is blank. The resilience polish (Groups 3–4) does not depend on 2.1.
 - Keep the fetch-based SSE transport (needed for the auth header); the fix is headers +
   reconnect triggers, not the transport.
 
@@ -104,9 +103,10 @@ All other remaining tasks are incremental hardening on top of the above baseline
 {
   "waves": [
     { "id": 0, "tasks": ["1.1"] },
-    { "id": 1, "tasks": ["2.1"] },
-    { "id": 2, "tasks": ["2.2", "3.1", "4.1"] },
-    { "id": 3, "tasks": ["4.2"] }
+    { "id": 1, "tasks": ["2.2", "3.1", "4.1a"] },
+    { "id": 2, "tasks": ["4.1b", "4.2"] }
   ]
 }
+```
+Note: Task 2.1 is removed from the wave graph — it is deferred to BACKLOG and has no dependency relationship with the remaining tasks.
 ```

@@ -64,7 +64,7 @@ The following items were debated and explicitly excluded:
 8. WHEN `verifySession` completes a write, THE daemon SHALL append a stream entry `{ type: 'session_verified', termination_reason, prs: [...] }` to `stream.log`.
 9. THE daemon SHALL guarantee no double-write of `meta.json` when two `verifySession` calls overlap for the same session (single-flight via a per-session promise map is sufficient).
 10. WHEN any GitHub API call fails (network, 5xx, timeout), `verifySession` SHALL log the error at `error`, append a `verification_failed` stream entry with the error message, leave `meta.json` unchanged, and resolve with a result object `{ verified: false, reason: 'github_error', error }` rather than throwing. Subsequent triggers re-try the verification.
-11. THE `verifySession` return type SHALL be `Promise<VerifyResult>` where `VerifyResult = { verified: true, termination_reason } | { verified: false, reason: 'github_error' | 'prs_still_open' | 'already_verified' | 'no_prs' }`. Callers (notably the inactivity watchdog) use this to distinguish "verified that the session shouldn't terminate yet" from "couldn't verify because GitHub is down."
+11. THE `verifySession` return type SHALL be `Promise<VerifyResult>` where `VerifyResult = { verified: true, termination_reason } | { verified: false, reason: 'github_error', error: string } | { verified: false, reason: 'prs_still_open', open_prs: Array<{ repo: string; pr_number: number }> } | { verified: false, reason: 'already_verified' | 'no_prs' | 'unknown_session' }`. Callers (notably the inactivity watchdog) use this to distinguish "verified that the session shouldn't terminate yet" from "couldn't verify because GitHub is down." The `unknown_session` variant is returned when `sessionFiles.sessionExists(sessionId)` is false — a legitimate no-op (e.g., a delayed hook event after the session directory was reaped).
 
 ### Requirement 3: AgentAdapter Interface
 
@@ -73,9 +73,10 @@ The following items were debated and explicitly excluded:
 #### Acceptance Criteria
 
 1. THE codebase SHALL define `AgentAdapter` in `src/agent-adapter.ts`, exporting `AgentAdapter`, `AdapterCapabilities`, and `SpawnOpts` types.
+   `SpawnOpts` SHALL include at minimum: `sessionId: string` and optional `env?: Record<string, string>`.
 2. `AgentAdapter` SHALL expose: `name: string`, `capabilities(): AdapterCapabilities`, `spawn(opts: SpawnOpts): ACPClient`, `installHooks(daemonUrl: string, token: string): Promise<void>`, `uninstallHooks(): Promise<void>`.
 3. `AdapterCapabilities` SHALL include: `events: ReadonlyArray<HookEventType>`, `perToolMatching: boolean`.
-4. THE daemon's session manager and `src/index.ts` SHALL accept an `AgentAdapter` instance rather than a raw `acpSpawner` lambda.
+4. THE daemon's session manager and `src/index.ts` SHALL accept an `AgentAdapter` instance (or an adapter-compatible shim for backward compatibility) rather than a raw `acpSpawner` lambda.
 5. AFTER this change, `src/index.ts` SHALL NOT import `spawnACPClient` directly — only through the adapter.
 
 ### Requirement 4: KiroAdapter
@@ -104,9 +105,12 @@ The following items were debated and explicitly excluded:
 1. WHEN `injectPrompt` resolves after `await acp.sendPrompt(prompt)` (i.e., the ACP `session/prompt` JSON-RPC response has arrived from the agent), THE daemon SHALL fire `void verifySession(sessionId)`. This is the post-prompt fast trigger — the agent has finished processing the injected prompt at the protocol level. Note: this differs from the original spec's "ACP prompt-end notification" wording because investigation of the current ACP client showed no streaming turn-end marker exists; the JSON-RPC response to `session/prompt` is the actual turn-end signal.
 2. WHEN the existing inactivity watchdog fires for a session, THE daemon SHALL call `await verifySession(sessionId)` **before** killing the subprocess. The watchdog SHALL inspect the returned `VerifyResult`:
    - `{ verified: true, termination_reason: 'merged' | 'closed_without_merge' }` → terminal state already written; skip the timeout-failed write and proceed to grace-period kill.
-   - `{ verified: false, reason: 'prs_still_open' }` → genuine timeout; write `termination_reason: 'timeout_inactivity'` and kill (existing behavior).
    - `{ verified: false, reason: 'github_error' }` → **do not** write `timeout_inactivity`; instead reset the watchdog for another inactivity window. This is the GitHub-outage protection: a transient GitHub failure mid-watchdog must not flip a successful session into a false timeout failure.
-   - `{ verified: false, reason: 'no_prs' | 'already_verified' }` → fall through to existing timeout-failed behavior (no PRs to verify, or session was already finalized).
+   - `{ verified: false, reason: 'already_verified' }` → session is already in a terminal state; `session-files.ts:updateMeta` **throws** (not a no-op) for non-active sessions (see `src/session-files.ts` line ~228: `if (current.status !== 'active') { throw ... }`), so the watchdog must skip the timeout-failed write and proceed to grace-period kill.
+   - `{ verified: false, reason: 'prs_still_open' }` → genuine timeout; write `termination_reason: 'timeout_inactivity'` and kill (existing behavior).
+   - `{ verified: false, reason: 'no_prs' }` → fall through to existing timeout-failed behavior (no PRs to verify; write `timeout_inactivity` and kill).
+   - `{ verified: false, reason: 'unknown_session' }` → session directory was reaped; `updateMeta` throws on missing `meta.json` (same as `already_verified`). Skip the write, proceed to kill.
+   Note: the active-only guard in `session-files.ts:updateMeta` enforces that writes to non-active sessions throw; `readFileSync` on a missing meta.json throws for reaped sessions. This means the `already_verified` and `unknown_session` branches above are not just optimizations but correctness requirements.
 3. THE ACP fallback SHALL not duplicate hook-path verifications — the single-flight guarantee from Requirement 2.9 covers both trigger paths.
 4. WHEN no `AgentAdapter` is wired and `injectPrompt` is never called, the fallback SHALL still fire on inactivity-watchdog expiry.
 
@@ -132,7 +136,8 @@ The following items were debated and explicitly excluded:
 1. ALL tests on the base branch HEAD SHALL continue to pass after this work lands. (The exact count varies as the base branch evolves; the rule is "no regressions," not a snapshot number.)
 2. WHERE a test directly exercises `acpSpawner` (e.g., `test/tier2/session-mgr.test.ts`, `test/tier2/cli-server.test.ts`, `test/tier2/merge-pr.test.ts`), it MAY be updated to construct a `KiroAdapter` (or test stub adapter) instead. This is the only allowable test-side change.
 3. NO existing public function signature visible from outside `src/index.ts` SHALL break, except `acpSpawner` which is internal.
-4. THE existing `complete_session` response contract — `{ ok: true }` on success, `{ error, open_prs: [...] }` on open-PR rejection — SHALL be preserved bit-for-bit through the new `verifySession` wiring. The existing 14 `merge-pr.test.ts` cases that assert this shape SHALL pass unmodified except for the mechanical adapter wiring in setup.
+4. THE existing `complete_session` response contract — `{ ok: true }` on success, `{ error, open_prs: [...] }` on open-PR rejection — SHALL be preserved bit-for-bit through the new `verifySession` wiring. The existing 18 `merge-pr.test.ts` cases that assert this shape SHALL pass unmodified except for the mechanical adapter wiring in setup.
+   The `github_error` path SHALL resolve `complete_session` with `{ error: 'GitHub verification failed: <message>' }` (third response shape).
 
 ### Requirement 8: GitHubClient Request Timeout
 

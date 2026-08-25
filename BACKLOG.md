@@ -586,13 +586,49 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P2.20 — Web UI: server-side waiting-for aggregation (kill the N+1)
+
+**Context.** `web-client` spec task 2.2 shipped in PRs #92–107: the client now issues a single `/sessions` request and renders from it; the per-row `fetchWaitingFor` loop was deleted. But task 2.1 (server-side aggregation) was NOT shipped, so the waiting-for column is blank in the list view — the server doesn't return that field yet.
+
+**Mini spec.**
+
+- Extend the `/sessions` list handler (`src/web-routes.ts`) so each item already includes the waiting-for summary computed server-side from the session's last stream entry.
+- Add real pagination: bounded default page size (20–50), active sessions always included, `limit`/`offset` params, replacing the `limit=500` path.
+- Keep the wire shape backward-compatible (additive fields only).
+- Remove the `limit=500` path once pagination is in place.
+- Tier 1: pure pagination logic (default cap, `--all`, `--limit`, active-always). Tier 2: list response includes waiting-for, single request, zero per-row follow-ups.
+
+**Acceptance.** List view renders the waiting-for column without any per-row `GET /sessions/<id>` requests. Pagination controls appear. Existing client still works against an old server that omits the new fields (graceful degradation).
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
-### P3.1 — Credential proxy spec implementation
+### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2)
 
-**Maps to PRODUCT.md Phase 4/6.** Already specced (auth-credential-proxy). Multi-week. Phase A (PAT-based MCP credential tools) is meaningful first deliverable.
+**Context.** The original auth-credential-proxy spec (PRs #71–80) shipped the Token_Store infrastructure (project-scoped PATs, env injection, MCP tools). A post-ship security review found three issues in the MCP tool surface that need to be fixed via a new spec:
 
-**When to do it.** After P0 items land and cron is running. Current single-PAT model works fine for one operator on one VM; the proxy is essential when scaling to multiple operators or hardware-key-grade isolation.
+1. **Authorization bypass:** `github_http_forward` authorizes on `repo` arg but builds the HTTP request from `path` arg — an agent can pass `{ repo: "mine/allowed", path: "/repos/other/victim/contents/x" }` to write unauthorized repos. Fix: validate that the `{owner}/{repo}` segment of `path` matches the `repo` arg after normalization; reject `..`, `//`, absolute URLs, `@` prefixes.
+2. **Session binding:** `get_token` accepts a raw project name from the caller — any MCP session can request any project's PAT. Fix: accept `session_id` instead, derive project from session metadata.
+3. **Socket separation:** `tokens_status` (CLI) and `get_token` (MCP) are on the CLI socket but design mandates `SO_PEERCRED` for daemon children — mutually exclusive. Fix: separate sockets or per-op auth.
+
+**When to do it.** Before enabling `credentialMode: "mcp"` in production. Track 1 (`credentialMode: "env"`) is unaffected — PAT is injected at spawn time, MCP tools not used.
+
+**Brief for spec-gen (auth-credential-proxy-v2):**
+```
+Feature slug: auth-credential-proxy-v2
+Prior implementation: Token_Store (src/token-store.ts), per-repo token injection
+(src/github.ts createTokenResolver) shipped in PRs #73-80.
+
+Security requirements (non-negotiable):
+1. github_http_forward: path's {owner}/{repo} segment MUST equal the repo arg after
+   normalization. Reject .., //, absolute URLs, @ prefixes.
+2. get_token: accept session_id, derive project from session metadata. Never accept
+   raw project name from caller.
+3. tokens_status (CLI) and get_token (MCP) must use separate sockets or per-op auth.
+
+Context files: src/token-store.ts, src/github.ts, src/mcp-server.ts, src/cli-server.ts
+```
 
 ---
 
