@@ -639,6 +639,16 @@ function renderControls(meta) {
   '</div>';
 }
 
+// DEFECT NOTE (browser-test-harness-v2, task G2):
+// The SSE backoff never escalates past 1000ms because this function resets attempt = 0
+// on every call. The reconnect cycle is: scheduleReconnect() reads attempt (always 0),
+// computes delay = computeBackoff(0) = 1000ms, increments attempt to 1, then setTimeout
+// calls connectSSE() which resets attempt back to 0. This means every reconnect — whether
+// triggered by a stream drop, visibility change, or online event — always waits exactly
+// 1000ms. Req 6.2 requires this fixed 1000ms first-retry behavior and tests 7.1/7.5
+// assert it. If escalating backoff is desired in future, the fix requires threading
+// lastAttempt from the reconnect cycle into the next connectSSE() call — open a
+// separate spec item for that change.
 function connectSSE(sessionId, lastId) {
   const url = '/sessions/' + sessionId + '/stream';
   const headers = {};

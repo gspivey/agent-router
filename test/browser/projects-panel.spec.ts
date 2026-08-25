@@ -1,5 +1,5 @@
 /**
- * Browser test: Projects panel and repo filter (ROADMAP #55, tasks 6, 7, 8).
+ * Projects panel browser tests.
  *
  * Validates:
  * - Projects panel renders when repos exist (ungrouped section)
@@ -8,6 +8,7 @@
  * - Clear button restores full list
  * - Collapse/expand toggle works
  * - No console errors during interaction
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7, 16.8
  */
 import { test, expect } from './fixtures.js';
 

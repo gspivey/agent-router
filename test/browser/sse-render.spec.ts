@@ -2,7 +2,7 @@
  * SSE rendering browser tests.
  * Verifies appended stream.log entries render in ID order, auto-scroll,
  * and session_ended hides controls.
- * Spec: .kiro/specs/browser-test-harness/ · task 7.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 6.1, 6.2, 6.3, 6.4
  */
 import { test, expect } from './fixtures.js';
 

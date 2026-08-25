@@ -2,7 +2,7 @@
  * Auth token browser tests.
  * Verifies token is accessible via window.__DAEMON_TOKEN when bindPublic: false,
  * and absent when bindPublic: true.
- * Spec: .kiro/specs/browser-test-harness/ · task 13.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 10.1, 10.2
  */
 import { test as base, expect } from './fixtures.js';
 import { test as playwrightBase } from '@playwright/test';

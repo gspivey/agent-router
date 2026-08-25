@@ -1,7 +1,7 @@
 /**
  * List view browser tests.
  * Verifies session rows render with correct status badges and no console errors.
- * Spec: .kiro/specs/browser-test-harness/ · task 5.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 4.1, 4.2, 4.3, 4.4
  */
 import { test, expect } from './fixtures.js';
 

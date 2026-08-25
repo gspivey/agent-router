@@ -2,7 +2,7 @@
  * Prompt injection browser tests.
  * Verifies seedSession({live:true}) with slow-multi-prompt.json scenario,
  * inject yields a web_inject stream entry and clears the textarea.
- * Spec: .kiro/specs/browser-test-harness/ · task 9.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 11.1, 11.2, 11.3, 11.4, 11.5, 11.6
  */
 import { test, expect } from './fixtures.js';
 
