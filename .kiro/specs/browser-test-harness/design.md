@@ -117,7 +117,53 @@ export default defineConfig({
 
 Playwright's built-in TypeScript transpilation uses esbuild under the hood. Since the root `tsconfig.json` specifies `moduleResolution: "Bundler"` and `module: "ESNext"`, Playwright's TS loader should resolve `.js` extension imports to `.ts` source files automatically. No additional configuration (custom loaders, plugins, or `webServer` directive) is needed — the fixture manages server lifecycle directly.
 
-**Verification required**: The first implementation task creates `test/browser/smoke.spec.ts` that imports `createWebApp` from `../../src/web-server.js` and asserts it's a function. If `npx playwright test test/browser/smoke.spec.ts` fails with "Cannot find module", the fallback is to add a `transform` field to the Playwright config with an esbuild plugin that strips `.js` extensions before resolution.
+**Verification required**: The first implementation task creates `test/browser/smoke.spec.ts` that imports `createWebApp` from `../../src/web-server.js` and asserts it's a function. If `npx playwright test test/browser/smoke.spec.ts` fails with "Cannot find module", apply the following fallback by replacing `playwright.config.ts` with this version:
+
+```typescript
+import { defineConfig } from '@playwright/test';
+import { build } from 'esbuild';
+import path from 'node:path';
+
+export default defineConfig({
+  testDir: './test/browser',
+  testMatch: '**/*.spec.ts',
+  timeout: 30_000,
+  retries: 0,
+  workers: process.env.CI ? 1 : 4,
+  reporter: [['list'], ['html', { open: 'never' }]],
+  use: {
+    browserName: 'chromium',
+    headless: true,
+    trace: 'on-first-retry',
+  },
+  // Fallback: rewrite .js imports to .ts so esbuild resolves them correctly.
+  // Only needed if Playwright's built-in TS loader cannot resolve .js → .ts
+  // from the root tsconfig.json (moduleResolution: "Bundler").
+  transform: {
+    '**/*.{ts,tsx}': {
+      loader: 'ts',
+      target: 'es2022',
+      // Strip .js extensions from relative imports before esbuild resolves them
+      plugins: [
+        {
+          name: 'rewrite-js-to-ts',
+          setup(build) {
+            build.onResolve({ filter: /\.js$/ }, (args) => {
+              // Only rewrite relative imports (starts with . or ..)
+              if (!args.path.startsWith('.')) return;
+              const tsPath = args.path.replace(/\.js$/, '.ts');
+              const resolved = path.resolve(args.resolveDir, tsPath);
+              return { path: resolved };
+            });
+          },
+        },
+      ],
+    },
+  },
+});
+```
+
+This plugin intercepts relative `.js` import paths at esbuild's resolve phase and redirects them to the corresponding `.ts` source file on disk. It is only needed when `moduleResolution: "Bundler"` in the root `tsconfig.json` is not honoured by Playwright's loader.
 
 ### fixtures.ts — Playwright Fixture Interface
 
@@ -197,23 +243,49 @@ export interface SSEBroker {
 }
 ```
 
-Implementation in `createSSEBroker` — follows the same cleanup pattern as the existing `unsubscribe()` and `shutdown()` methods (clearing client map, stopping poll timer when no clients remain, checking heartbeat state):
+Full implementation in `createSSEBroker`:
 
 ```typescript
 disconnectAll(sessionId: string): void {
   const state = sessions.get(sessionId);
   if (!state) return;
+
+  // 1. Close every active client response writer.
+  //    Calling close() triggers the browser's ReadableStream reader to see
+  //    done: true, which fires the scheduleReconnect() path — no session_ended
+  //    event is written, so the browser will attempt to reconnect.
   for (const client of state.clients.values()) {
-    client.close();  // Triggers stream close in browser → reconnect logic
+    client.close();
   }
   state.clients.clear();
-  // Same cleanup as unsubscribe: stop polling when no clients, check heartbeat
+
+  // 2. Stop the per-session poll timer now that there are no subscribers.
+  //    Pattern mirrors unsubscribe(): only clear if the timer is running.
   if (state.pollTimer !== null) {
     clearInterval(state.pollTimer);
     state.pollTimer = null;
   }
-  // Check if any sessions still have clients for heartbeat
-  // (mirrors the pattern in unsubscribe)
+
+  // 3. Check the heartbeat timer: if NO session still has active clients,
+  //    stop the broker-level heartbeat interval to avoid ticking with no
+  //    audience. Pattern mirrors the tail of unsubscribe():
+  //      - Iterate all sessions; if any has clients.size > 0, leave heartbeat running.
+  //      - If none do, clearInterval(heartbeatTimer) and set heartbeatTimer = null.
+  let anyClientsRemaining = false;
+  for (const s of sessions.values()) {
+    if (s.clients.size > 0) {
+      anyClientsRemaining = true;
+      break;
+    }
+  }
+  if (!anyClientsRemaining && heartbeatTimer !== null) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+
+  // Note: sessions.delete(sessionId) is intentionally NOT called here.
+  // The session entry stays so the broker can resume polling if the browser
+  // reconnects (subscribe() will restart the poll timer for the same sessionId).
 }
 ```
 
@@ -265,13 +337,18 @@ Tests need pre-existing sessions. The fixture exposes a `seedSession` helper:
 
 ```typescript
 async function seedSession(opts: {
+  live?: boolean;            // default false
   status?: 'active' | 'completed' | 'abandoned';
   repo?: string;
   streamEntries?: Array<Record<string, unknown>>;
 }): Promise<{ sessionId: string }>;
 ```
 
-For active sessions, this uses `sessionManager.createSession()` with the FakeKiroBackend configured via a minimal scenario. For terminal sessions, it uses `sessionFiles.writeMeta()` (the existing atomic-write abstraction via temp+rename) rather than direct `fs.writeFileSync`, preserving atomicity guarantees and avoiding race conditions with concurrent readers.
+**`seedSession({ live: false })` (default)** — filesystem-only seed. Writes session metadata directly via `sessionFiles.createSession()` + `sessionFiles.updateMeta()` (atomic temp+rename write). No process is spawned. Safe for list view, detail view, SSE render, reconnect, visibility, and auth tests where the web server endpoint does not require a live process handle.
+
+**`seedSession({ live: true })`** — spawns a live process via `sessionManager.createSession()`. **Each call to `seedSession({ live: true })` creates a brand-new `FakeKiroBackend` instance loaded with `test/scenarios/slow-multi-prompt.json` and registers it with the session manager as a fresh session.** It does NOT reload or reconfigure the existing `FakeKiroBackend` instance already held by the fixture. The fixture holds a single `FakeKiroBackend` reference for the default server setup, but live sessions each get their own backend instance to avoid scenario-state cross-contamination between sessions created in the same test. Required for inject tests (the `/inject` endpoint calls `sessionMgr.getActiveSession()` and returns 409 without a live handle) and kill tests (the kill endpoint calls `sessionMgr.getActiveSession()` and `sessionMgr.terminateSession()`, both requiring a live handle).
+
+For terminal sessions, `sessionFiles.updateMeta()` (the existing atomic-write abstraction via temp+rename) is used rather than direct `fs.writeFileSync`, preserving atomicity guarantees and avoiding race conditions with concurrent readers.
 
 ## Data Models
 

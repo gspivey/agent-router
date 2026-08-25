@@ -150,6 +150,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - If `credentialMode === 'mcp'` → omit `GITHUB_TOKEN` from subprocess env
     - Record `boundProject`, `boundProjectRepos`, `credential_mode` in session metadata
     - Log Bound_Project name and repos (not token value) on injection
+    - **NOTE (hot-reload / `src/index.ts`):** Any `createTokenResolver` helper or similar closure in `src/index.ts` that snapshots a token value at startup MUST be replaced with a live lookup: `tokenStore.getToken(tokenStore.findProjectByRepo(repo))?.reveal()`. A snapshot means `GitHubClient` (and anything else using that resolver) silently continues using revoked tokens after a rotation — it will never see the hot-reloaded value. The lookup must go through `tokenStore` at call time so hot-reload and SIGHUP-triggered reloads propagate to all callers, not just new sessions.
     - _Requirements: 3.1, 3.5, 3.7, 3.8, 4.1, 4.2, 4.3, 4.5_
   - [x] 10.4 Write Tier 2 session credential tests in `test/tier2/session-credential.test.ts`
     - Test `GITHUB_TOKEN` present in env for `credentialMode: "env"`
