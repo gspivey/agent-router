@@ -102,7 +102,7 @@ This plan implements a structured CI reporting pipeline that posts machine-reada
   - Run again with no input files — verify minimal "no parseable output" report
   - Check in a fixture: `test/fixtures/ci-report/example-failure.md` (real output from the typecheck-failure run above)
 
-- [ ] 4. Write property-based tests for report builder
+- [x] 4. Write property-based tests for report builder
   - [x] 4.1 Create test file with fast-check generators for JUnit XML and typecheck output
     - Create `test/tier1/ci-report.test.ts`
     - Implement `arbitraryJunitXml(opts)` generator: produces valid JUnit XML with configurable failure count, test count, trace lengths
@@ -112,44 +112,44 @@ This plan implements a structured CI reporting pipeline that posts machine-reada
     - Note: subprocess-per-iteration means ~800 spawns across all properties. Acceptable (~30-60s) but mark these tests with a longer timeout if needed.
     - _Requirements: 7.1, 7.2_
 
-  - [ ]* 4.2 Write property test: Output size invariant (Property 1)
+  - [x]* 4.2 Write property test: Output size invariant (Property 1)
     - **Property 1: Output size invariant**
     - For any combination of JUnit XML and typecheck output (including arbitrarily large inputs), verify output ≤ 60,000 chars
     - Generate large inputs (many failures, long traces) to stress the truncation logic
     - **Validates: Requirements 6.1**
 
-  - [ ]* 4.3 Write property test: Status and run link placement (Property 2)
+  - [x]* 4.3 Write property test: Status and run link placement (Property 2)
     - **Property 2: Status and run link placement**
     - For any failure report, verify first 5 lines contain both a pass/fail indicator and the run link URL
     - **Validates: Requirements 3.1**
 
-  - [ ]* 4.4 Write property test: Failed test extraction completeness (Property 3)
+  - [x]* 4.4 Write property test: Failed test extraction completeness (Property 3)
     - **Property 3: Failed test extraction completeness**
     - For any valid JUnit XML with `<failure>` elements, verify every failed test's name, file path, and error message appear in the output (subject to truncation — if truncation notice present, property is satisfied)
     - **Validates: Requirements 3.2**
 
-  - [ ]* 4.5 Write property test: Typecheck error extraction completeness (Property 4)
+  - [x]* 4.5 Write property test: Typecheck error extraction completeness (Property 4)
     - **Property 4: Typecheck error extraction completeness**
     - For any typecheck output with error lines, verify every error's file path, line number, and message appear in output (or truncation notice is present)
     - **Validates: Requirements 3.4**
 
-  - [ ]* 4.6 Write property test: Details wrapping threshold (Property 5)
+  - [x]* 4.6 Write property test: Details wrapping threshold (Property 5)
     - **Property 5: Details wrapping threshold**
     - For any individual diagnostic section, if char count > 5,000 it is wrapped in `<details>`; if ≤ 5,000 it appears inline
     - Note: property matcher should check `<details>` presence per-trace, not globally
     - **Validates: Requirements 3.3, 6.4**
 
-  - [ ]* 4.7 Write property test: Truncation preserves priority order (Property 6)
+  - [x]* 4.7 Write property test: Truncation preserves priority order (Property 6)
     - **Property 6: Truncation preserves priority order**
     - For any input producing a report > 60K chars before truncation, verify truncated output preserves status header, run link, failure summary table, and contains truncation notice
     - **Validates: Requirements 6.2, 6.3**
 
-  - [ ]* 4.8 Write property test: Exit code invariant (Property 7)
+  - [x]* 4.8 Write property test: Exit code invariant (Property 7)
     - **Property 7: Exit code invariant**
     - For any input (missing files, malformed XML, empty files, binary garbage), verify script exits with code 0
     - **Validates: Requirements 7.5**
 
-  - [ ]* 4.9 Write property test: Structured section headers (Property 8)
+  - [x]* 4.9 Write property test: Structured section headers (Property 8)
     - **Property 8: Structured section headers**
     - For any failure report, verify all top-level sections are delimited by line-anchored `^## ` headers (not `###` or `####`), and at least one `## ` header exists
     - **Validates: Requirements 3.6**
@@ -179,13 +179,13 @@ This plan implements a structured CI reporting pipeline that posts machine-reada
     - Verify `permissions: pull-requests: write` is present
     - Verify trigger is `pull_request` (not `pull_request_target`)
 
-- [ ]* 7. Post-merge manual E2E validation
-  - [ ]* 7.1 Set `vars.ENABLE_PR_COMMENTS = "true"` in GitHub repo settings → Variables
-  - [ ]* 7.2 Push a commit with a deliberate type error → verify structured comment appears with typecheck errors, file paths, line numbers
-  - [ ]* 7.3 Push a commit with a deliberate test failure → verify comment appears with test name, file, error message, stack trace
-  - [ ]* 7.4 Push a commit where everything passes → verify one-line success comment with run link
-  - [ ]* 7.5 Set `vars.ENABLE_PR_COMMENTS = "false"` → push a commit → verify no comment is posted
-  - [ ]* 7.6 Verify agent-router daemon logs show `issue_comment.created` classified as Tier 1 trust when comment lands
+- [x]* 7. Post-merge manual E2E validation
+  - [x]* 7.1 Set `vars.ENABLE_PR_COMMENTS = "true"` in GitHub repo settings → Variables
+  - [x]* 7.2 Push a commit with a deliberate type error → verify structured comment appears with typecheck errors, file paths, line numbers
+  - [x]* 7.3 Push a commit with a deliberate test failure → verify comment appears with test name, file, error message, stack trace
+  - [x]* 7.4 Push a commit where everything passes → verify one-line success comment with run link
+  - [x]* 7.5 Set `vars.ENABLE_PR_COMMENTS = "false"` → push a commit → verify no comment is posted
+  - [x]* 7.6 Verify agent-router daemon logs show `issue_comment.created` classified as Tier 1 trust when comment lands
 
 ## Notes
 
