@@ -72,7 +72,7 @@ should NOT be re-implemented. The agent must read this note before touching any 
   - [x] 4.1a Server SSE id/heartbeat (shipped)
     - SSE `id:` per event and configurable heartbeat implemented in PRs #92–107.
     - _Requirements: 3.4_
-  - [ ] 4.1b Server SSE anti-buffering headers and initial flush (verify + patch if missing)
+  - [x] 4.1b Server SSE anti-buffering headers and initial flush (verify + patch if missing)
     - Confirm `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`, explicit
       `Content-Type: text/event-stream`, initial flush comment (`:ok\n\n`), and `retry:` hint
       are present in `src/web-server.ts` / `src/sse-broker.ts`. If any are missing, add them.

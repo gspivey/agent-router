@@ -33,7 +33,13 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+(No items — next item to be added by operator or spec serialization.)
+
 ---
+
+## Completed
+
+Items move here after they merge to `development`.
 
 ### 58. Web client: SSE anti-buffering headers and initial flush
 
@@ -41,11 +47,7 @@ Read `.kiro/specs/web-client/requirements.md`, `design.md`, and `tasks.md` in fu
 then implement task `4.1b`.
 
 - Spec: `.kiro/specs/web-client/` · task `4.1b`
-- [ ] Complete
-
----
-
-## Completed
+- [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
 
