@@ -33,7 +33,27 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
-(No items — next item to be added by operator or spec serialization.)
+---
+
+### 59. Browser test harness v2 — missing tests (Last-Event-ID header, fetch timeout budget, stale test.fail marks)
+
+Read `.kiro/specs/browser-test-harness-v2/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `8.2`, `14.5`, `G4`.
+
+- Spec: `.kiro/specs/browser-test-harness-v2/` · tasks `8.2`, `14.5`, `G4`
+- [ ] Complete · PR: —
+
+---
+
+### 60. Browser test harness v2 — housekeeping (update stale v1 spec headers, record backoff defect note)
+
+Read `.kiro/specs/browser-test-harness-v2/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `G2`, `G3`. G2 is documentation-only — add a code comment in `src/web-ui.ts`
+near `connectSSE` noting the reset behavior; do NOT change the backoff logic (Req 6.2 requires
+fixed 1000ms first retry). Depends on item 59.
+
+- Spec: `.kiro/specs/browser-test-harness-v2/` · tasks `G2`, `G3`
+- [ ] Complete · PR: —
 
 ---
 
