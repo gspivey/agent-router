@@ -3,16 +3,17 @@
  * Uses CDP Network.emulateNetworkConditions and Playwright route delay/abort
  * to reproduce failures observed on mobile/cloudflared-like connections.
  *
- * These tests are EXPECTED-FAIL: they expose the N+1 fan-out and SSE fragility
- * that items 27-29 will fix. Once those fixes land, remove the test.fail() marks
- * and these become the regression suite.
+ * These tests form the regression suite that validates the fixes from items 27-29:
+ *   - Item 27 eliminated the N+1 fan-out
+ *   - Item 28 added fetch resilience (retry, timeout, error state)
+ *   - Item 29 added the online event listener for proactive SSE reconnect
  *
  * Repro matrix:
  *   - desktop-direct: low latency, high bandwidth — generally works
  *   - mobile/cloudflared-like: high latency (150ms RTT), limited bandwidth (1.6Mbps),
  *     request concurrency limits, mid-stream cuts, offline transitions
  *
- * Spec: .kiro/specs/web-client/ · task 1.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 14.1–14.5
  */
 import { test, expect } from './fixtures.js';
 
@@ -115,12 +116,10 @@ test.describe('List load failures under network pressure', () => {
 
 test.describe('SSE failures on mid-stream network cut', () => {
 
-  test.fail('online event alone triggers SSE health check and reconnect', async ({
+  test('online event alone triggers SSE health check and reconnect', async ({
     page, baseUrl, seedSession, sessionFiles, sseBroker,
   }) => {
-    // The bug: dispatching 'online' does NOT trigger a reconnect or health check.
-    // Item 29 will add an `online` event listener that either reconnects or verifies
-    // the stream is healthy. This test verifies that behavior exists.
+    // The online event listener in web-ui.ts triggers a proactive reconnect.
     const { sessionId } = await seedSession({ live: false, status: 'active' });
 
     await page.goto(`${baseUrl}#/sessions/${sessionId}`);
@@ -141,15 +140,13 @@ test.describe('SSE failures on mid-stream network cut', () => {
       }
     });
 
-    // Dispatch 'online' — a fixed client should proactively verify stream health
-    // by making a new connection attempt (abort current + reconnect, or ping check)
+    // Dispatch 'online' — the client's online listener proactively reconnects SSE
     await page.evaluate(`window.dispatchEvent(new Event('online'))`);
 
-    // Wait enough time for a proactive reconnect to fire
+    // Wait enough time for the proactive reconnect to fire
     await page.waitForTimeout(2000);
 
-    // The assertion: `online` event should have triggered a stream request.
-    // Currently it does NOT — the client has no `online` listener.
+    // The online event triggers a stream request
     expect(streamRequestAfterOnline).toBe(true);
   });
 
@@ -174,12 +171,10 @@ test.describe('SSE failures on mid-stream network cut', () => {
 
 test.describe('SSE failures on backgrounding (mobile)', () => {
 
-  test.fail('online event triggers proactive reconnect request', async ({
+  test('online event triggers proactive reconnect request', async ({
     page, baseUrl, seedSession, sessionFiles,
   }) => {
-    // The bug: dispatching 'online' does NOT trigger any stream request.
-    // Item 29 will add a listener that verifies/re-establishes the SSE connection.
-    // This is the simplest proof: does the client react to 'online' at all?
+    // The online event listener in web-ui.ts triggers a proactive reconnect.
     const { sessionId } = await seedSession({ live: false, status: 'active' });
 
     await page.goto(`${baseUrl}#/sessions/${sessionId}`);
@@ -201,15 +196,13 @@ test.describe('SSE failures on backgrounding (mobile)', () => {
       }
     });
 
-    // Dispatch 'online' event — this simulates the device reconnecting to WiFi/cell.
-    // A robust client should proactively verify or re-establish the SSE stream.
+    // Dispatch 'online' event — the client's online listener proactively reconnects SSE
     await page.evaluate(`window.dispatchEvent(new Event('online'))`);
 
-    // Wait for any proactive reconnect to fire
+    // Wait for the proactive reconnect to fire
     await page.waitForTimeout(2000);
 
-    // The online event should have triggered at least one new stream request.
-    // Currently it does NOT — the client has no 'online' event listener for SSE.
+    // The online event triggers at least one new stream request
     expect(streamRequestsAfterMark.length).toBeGreaterThan(0);
   });
 });

@@ -3,7 +3,7 @@
  * Verifies CDP Page.setWebLifecycleState (hidden → active) triggers SSE
  * reconnect with last event ID; entries appended while hidden appear on
  * resume; no duplicate IDs.
- * Spec: .kiro/specs/browser-test-harness/ · task 12.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 8.1, 8.2, 8.3
  */
 import { test, expect } from './fixtures.js';
 
@@ -19,13 +19,43 @@ test('hidden→active triggers SSE reconnect with last event ID', async ({ page,
   }
   await expect(page.locator('.log-entry').filter({ hasText: 'vis-3' })).toBeVisible({ timeout: 2000 });
 
+  // Wait for the SSE connection to be stable
+  await expect(page.locator('#sse-status')).toHaveText('Connected', { timeout: 5000 });
+
+  // Set up page.route() intercept to capture the Last-Event-ID header on reconnect
+  let capturedLastEventId: string | null = null;
+  await page.route(`**/sessions/${sessionId}/stream`, (route) => {
+    const lastEventIdHeader = route.request().headers()['last-event-id'];
+    if (lastEventIdHeader !== undefined) {
+      capturedLastEventId = lastEventIdHeader;
+    }
+    return route.continue();
+  });
+
   // Use CDP to transition frozen → active (triggers visibilitychange reconnect)
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Page.setWebLifecycleState', { state: 'frozen' });
   await cdp.send('Page.setWebLifecycleState', { state: 'active' });
 
-  // Wait for reconnect to succeed
+  // The CDP lifecycle state change may not reliably trigger visibilitychange in
+  // headless Chromium. Supplement with a direct visibilitychange dispatch that
+  // matches how the web-ui.ts handler checks document.visibilityState === 'visible'.
+  // The active state should set visibilityState to 'visible', but if the handler
+  // didn't fire from CDP alone, explicitly dispatch the event.
+  await page.evaluate(`
+    if (document.visibilityState === 'visible') {
+      document.dispatchEvent(new Event('visibilitychange'));
+    }
+  `);
+
+  // Wait for the reconnect request to complete
   await expect(page.locator('#sse-status')).toHaveText('Connected', { timeout: 5000 });
+
+  // Assert the reconnect carried the correct Last-Event-ID header
+  expect(capturedLastEventId).toBe('3');
+
+  // Clean up the route intercept
+  await page.unroute(`**/sessions/${sessionId}/stream`);
 
   // Append a new entry after reconnect — it should arrive via the new SSE stream
   sessionFiles.appendStream(sessionId, { ts: new Date().toISOString(), source: 'agent', type: 'agent_message', content: 'after-reconnect' });
