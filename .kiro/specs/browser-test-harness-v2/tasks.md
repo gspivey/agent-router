@@ -65,7 +65,7 @@ _Requirements: 6_
 _Requirements: 7_
 
 - [x] 8.1. Test: CDP `frozen` → `active` triggers SSE reconnect with last event ID. **Note:** This test verifies entries appear after reconnect but does NOT assert the `Last-Event-ID` header via `page.route()` intercept — that assertion is the gap in task 8.2.
-- [ ] 8.2. Test: entries appended while frozen appear on resume to active. Add `page.route()` intercept to assert reconnect request includes `Last-Event-ID` header — current `[x]` test in 8.1 does not verify the header, only that entries appear (which passes even on full replay without Last-Event-ID).
+- [x] 8.2. Test: entries appended while frozen appear on resume to active. Add `page.route()` intercept to assert reconnect request includes `Last-Event-ID` header — current `[x]` test in 8.1 does not verify the header, only that entries appear (which passes even on full replay without Last-Event-ID).
 - [x] 8.3. Test: no duplicate IDs after visibility-change reconnect
 
 ## 9. SSE Hardening — Online Event (`sse-hardening.spec.ts`)
@@ -119,7 +119,7 @@ _Requirements: 14_
 - [x] 14.2. Test: list renders within 5s under 200ms route delay per request
 - [x] 14.3. Test: transient network failure on list shows recovery
 - [x] 14.4. Test: hung fetch times out and shows error
-- [ ] 14.5. Cleanup: remove stale `test.fail()` marks from online-event tests (feature is implemented; marks are leftover from before implementation)
+- [x] 14.5. Cleanup: remove stale `test.fail()` marks from online-event tests (feature is implemented; marks are leftover from before implementation)
 
 ## 15. One-Request List Optimization (`one-request-list.spec.ts`)
 _Requirements: 15_
@@ -144,4 +144,4 @@ _Requirements: 16_
 
 - [ ] G2 (DEFECT NOTE — documentation only): The SSE backoff never escalates past 1000ms because `connectSSE()` resets `attempt=0` on every call. Add a code comment in `src/web-ui.ts` near `connectSSE` explaining this behavior. Do NOT change the backoff logic — Req 6.2 requires fixed 1000ms first retry and tests 7.1/7.5 assert it. If escalating backoff is desired in future, open a separate spec item: the fix requires threading `lastAttempt` from the reconnect cycle into the next `connectSSE()` call.
 - [ ] G3. Update spec headers in all 15 `test/browser/*.spec.ts` files to reference `.kiro/specs/browser-test-harness-v2/` with the correct v2 task numbers
-- [ ] G4. Fetch resilience timeout budget: tasks 13.4 and 14.4 exercise the full 3× retry loop with 10s per attempt (Req 9.5), consuming 30s minimum — equal to the Playwright test timeout. Apply `test.setTimeout(60_000)` to these tests, or reduce the `AbortController` timeout in tests (e.g., 2s) to avoid a race with the Playwright deadline. This is a correctness issue: without it, the timeout-expired test itself can expire.
+- [x] G4. Fetch resilience timeout budget: tasks 13.4 and 14.4 exercise the full 3× retry loop with 10s per attempt (Req 9.5), consuming 30s minimum — equal to the Playwright test timeout. Apply `test.setTimeout(60_000)` to these tests, or reduce the `AbortController` timeout in tests (e.g., 2s) to avoid a race with the Playwright deadline. This is a correctness issue: without it, the timeout-expired test itself can expire.
