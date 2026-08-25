@@ -2,7 +2,7 @@
  * SSE reconnection browser tests.
  * Verifies drop via disconnectAll triggers reconnect with Last-Event-ID,
  * no duplicate IDs, no reconnect after session_ended, and delay reset.
- * Spec: .kiro/specs/browser-test-harness/ · task 8.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 7.1, 7.2, 7.3, 7.4, 7.5
  */
 import { test, expect } from './fixtures.js';
 

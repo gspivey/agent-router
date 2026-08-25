@@ -1,7 +1,7 @@
 /**
  * Kill session browser tests.
  * Verifies kill confirms, terminates with terminated_web, hides controls.
- * Spec: .kiro/specs/browser-test-harness/ · task 10.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 12.1, 12.2, 12.3, 12.4, 12.5
  */
 import { test, expect } from './fixtures.js';
 

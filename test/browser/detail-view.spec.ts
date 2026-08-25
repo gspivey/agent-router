@@ -1,7 +1,7 @@
 /**
  * Detail view browser tests.
  * Verifies hash-based routing: row click → detail, not-found state, back to list.
- * Spec: .kiro/specs/browser-test-harness/ · task 6.1
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 5.1, 5.2, 5.3, 5.4
  */
 import { test, expect } from './fixtures.js';
 

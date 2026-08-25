@@ -1,6 +1,7 @@
 /**
- * Browser test: one-request session list (ROADMAP #27, task 2.2).
- * Verifies: exactly one /sessions request, zero /sessions/<id> follow-ups on list render.
+ * One-request list optimization browser tests.
+ * Verifies: exactly one /repos/sessions request, zero /sessions/<id> follow-ups on list render.
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 15.1, 15.2, 15.3
  */
 import { test, expect } from './fixtures.js';
 

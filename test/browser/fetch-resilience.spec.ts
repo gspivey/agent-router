@@ -1,10 +1,11 @@
 /**
- * Browser test: client fetch resilience (ROADMAP #28, task 3.1).
+ * Fetch resilience browser tests.
  * Verifies:
  * - Transient failure then recovery → silent retry, list renders
  * - Permanent failure → error state with working Retry button
  * - 401 → auth-specific message, no blind retry
  * - Hung request → timeout, not infinite spinner
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.7
  */
 import { test, expect } from './fixtures.js';
 

@@ -2,7 +2,7 @@
  * SSE hardening browser tests.
  * Verifies: online event triggers reconnect, de-dupe by event id,
  * no reconnect after session_ended.
- * Spec: .kiro/specs/web-client/ · task 4.2
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 9.1, 9.2, 9.3, 9.4
  */
 import { test, expect } from './fixtures.js';
 

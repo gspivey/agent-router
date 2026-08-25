@@ -35,6 +35,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+## Completed
+
+Items move here after they merge to `development`.
+
 ### 60. Browser test harness v2 — housekeeping (update stale v1 spec headers, record backoff defect note)
 
 Read `.kiro/specs/browser-test-harness-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -43,13 +47,9 @@ near `connectSSE` noting the reset behavior; do NOT change the backoff logic (Re
 fixed 1000ms first retry). Depends on item 59.
 
 - Spec: `.kiro/specs/browser-test-harness-v2/` · tasks `G2`, `G3`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #113
 
 ---
-
-## Completed
-
-Items move here after they merge to `development`.
 
 ### 59. Browser test harness v2 — missing tests (Last-Event-ID header, fetch timeout budget, stale test.fail marks)
 

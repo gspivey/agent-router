@@ -4,6 +4,7 @@
  * Proves the per-test server lifecycle: server starts on an ephemeral port,
  * seedSession works in both live:false and live:true modes, ConsoleCollector
  * captures errors, and teardown cleans up.
+ * Spec: .kiro/specs/browser-test-harness-v2/ · tasks 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8
  */
 import { test, expect } from './fixtures.js';
 
