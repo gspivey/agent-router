@@ -35,6 +35,16 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 58. Web client: SSE anti-buffering headers and initial flush
+
+Read `.kiro/specs/web-client/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `4.1b`.
+
+- Spec: `.kiro/specs/web-client/` · task `4.1b`
+- [ ] Complete
+
+---
+
 ## Completed
 
 Items move here after they merge to `development`.

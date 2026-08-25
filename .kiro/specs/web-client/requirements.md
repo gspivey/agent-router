@@ -77,8 +77,8 @@ mobile/proxied failures, so the bugs are characterized and regression-tested.
 **Acceptance criteria:**
 1. There SHALL be a documented way to run the web client against a local or remote daemon
    (existing control server + token), captured in README.
-2. The failure modes SHALL be reproduced under test using the existing browser harness
-   (`.kiro/specs/browser-test-harness/`) — including a throttled/offline simulation for the
+2. The failure modes SHALL be reproduced under test using the browser harness
+   (`browser-test-harness-v2` spec — the original `browser-test-harness` spec is deprecated) — including a throttled/offline simulation for the
    fetch-resilience and SSE-reconnect paths.
 3. A repro matrix SHALL be documented: desktop-direct vs mobile-over-cloudflared, with the
    observed failure and the fix that addresses it.

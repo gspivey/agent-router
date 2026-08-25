@@ -1,3 +1,9 @@
+> **DEPRECATED** — This spec has critical inaccuracies against the current codebase:
+> (1) CDP state enum: spec uses "hidden" but only "frozen"/"active" are valid in the actual implementation
+> (2) Fixture ports: hardcoded port 9999 conflicts when controlPort equals httpPort; use getFreePort()
+> (3) SSE backoff: spec asserts exponential doubling but connectSSE() always resets attempt=0, so delay is always 1000ms
+> Replaced by browser-test-harness-v2 spec (pending spec-gen). Do not queue these tasks.
+
 # Requirements Document
 
 ## Introduction
