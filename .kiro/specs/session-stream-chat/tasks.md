@@ -4,21 +4,21 @@ All work is in `src/web-ui.ts` (inlined browser script + CSS) plus new Tier 1 un
 Tier 2 browser tests. No backend changes.
 
 ## Task 1: Add `parseStreamEntry` pure function
-- [ ] Add an exported pure function `parseStreamEntry(raw)` to the inlined script that normalizes a stream entry into the tagged union from design (`system`, `agent_chunk` [streaming:true], `agent_message` [streaming:false], `tool_call`, `tool_update`, `permission`, `internal`, `unknown`)
-- [ ] Implement router dispatch: map `session_started`, `prompt_injected`, `session_ended`, `session_verified`, `verification_failed`, `web_inject`, `web_interrupt` to `system` with human text + badge color
-- [ ] Implement agent `session/update` dispatch on `update.sessionUpdate`: `agent_message_chunk` → `agent_chunk`, `tool_call` → `tool_call`, `tool_call_update` → `tool_update` (concat `update.content[].content.text`)
-- [ ] Implement `session/request_permission` → `permission` (`toolCall.title`)
-- [ ] Implement `_kiro.dev/*` → `internal` (subtype preserved)
-- [ ] Implement legacy fallbacks: `type === 'agent_message'` (top-level `content`) → `agent_message` (`streaming: false`); bare `type === 'tool_call'` → `tool_call` with `toolCallId: null` (renderer assigns synthetic id from `ctx.entryCount`)
-- [ ] Fall back to `unknown` with `typeLabel = raw.type || 'unknown'` for unrecognized shapes; never throw, never expose `JSON.stringify(raw)`
+- [x] Add an exported pure function `parseStreamEntry(raw)` to the inlined script that normalizes a stream entry into the tagged union from design (`system`, `agent_chunk` [streaming:true], `agent_message` [streaming:false], `tool_call`, `tool_update`, `permission`, `internal`, `unknown`)
+- [x] Implement router dispatch: map `session_started`, `prompt_injected`, `session_ended`, `session_verified`, `verification_failed`, `web_inject`, `web_interrupt` to `system` with human text + badge color
+- [x] Implement agent `session/update` dispatch on `update.sessionUpdate`: `agent_message_chunk` → `agent_chunk`, `tool_call` → `tool_call`, `tool_call_update` → `tool_update` (concat `update.content[].content.text`)
+- [x] Implement `session/request_permission` → `permission` (`toolCall.title`)
+- [x] Implement `_kiro.dev/*` → `internal` (subtype preserved)
+- [x] Implement legacy fallbacks: `type === 'agent_message'` (top-level `content`) → `agent_message` (`streaming: false`); bare `type === 'tool_call'` → `tool_call` with `toolCallId: null` (renderer assigns synthetic id from `ctx.entryCount`)
+- [x] Fall back to `unknown` with `typeLabel = raw.type || 'unknown'` for unrecognized shapes; never throw, never expose `JSON.stringify(raw)`
 
 **Requirements**: 1.2, 1.3, 2.1, 3.2, 4.1, 4.2, 5.1, 7.1
 
 ## Task 1b: Tier 1 tests for `parseStreamEntry`
-- [ ] Unit test each taxonomy row maps to the correct `kind`/fields (router, agent stream, permission, internal)
-- [ ] Unit test legacy `agent_message` and bare `tool_call` fallbacks
-- [ ] Unit test unrecognized entry → `unknown`, no throw
-- [ ] Property test (fast-check, ≥100 iters): a sequence of `agent_message_chunk` fragments, when concatenated by the reassembly rule, equals the raw concatenation of their `text` values
+- [x] Unit test each taxonomy row maps to the correct `kind`/fields (router, agent stream, permission, internal)
+- [x] Unit test legacy `agent_message` and bare `tool_call` fallbacks
+- [x] Unit test unrecognized entry → `unknown`, no throw
+- [x] Property test (fast-check, ≥100 iters): a sequence of `agent_message_chunk` fragments, when concatenated by the reassembly rule, equals the raw concatenation of their `text` values
 
 **Requirements**: 1.3, 3.1, 3.2
 
