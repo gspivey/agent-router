@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { parseStreamEntry } from '../../../src/ui/logic.js';
+import { parseStreamEntry, formatMetadataPill } from '../../../src/ui/logic.js';
 import type { ParsedEntry } from '../../../src/ui/logic.js';
 
 describe('parseStreamEntry', () => {
@@ -263,5 +263,61 @@ describe('parseStreamEntry', () => {
         { numRuns: 100 },
       );
     });
+  });
+});
+
+describe('formatMetadataPill', () => {
+  it('formats context percentage and turn duration in seconds', () => {
+    expect(formatMetadataPill({ context_usage_percent: 42, turn_duration_ms: 1300 })).toBe(
+      'Context 42% · 1.3s',
+    );
+  });
+
+  it('formats sub-second durations in milliseconds', () => {
+    expect(formatMetadataPill({ context_percent: 7, turn_duration_ms: 850 })).toBe(
+      'Context 7% · 850ms',
+    );
+  });
+
+  it('reads fields from a nested metadata object', () => {
+    expect(formatMetadataPill({ metadata: { contextPercent: 15 } })).toBe('Context 15%');
+  });
+
+  it('accepts numeric strings', () => {
+    expect(formatMetadataPill({ contextUsagePercent: '33', durationMs: '2000' })).toBe(
+      'Context 33% · 2s',
+    );
+  });
+
+  it('formats duration alone when no percentage is present', () => {
+    expect(formatMetadataPill({ turn_duration_ms: 500 })).toBe('500ms');
+  });
+
+  it('accepts a turn duration expressed in seconds', () => {
+    expect(formatMetadataPill({ context_percent: 10, turn_duration_seconds: 2.5 })).toBe(
+      'Context 10% · 2.5s',
+    );
+  });
+
+  it('rounds a fractional percentage to one decimal', () => {
+    expect(formatMetadataPill({ context_percent: 42.37 })).toBe('Context 42.4%');
+  });
+
+  it('falls back to the content string when no numeric fields are present', () => {
+    expect(formatMetadataPill({ content: 'raw note' })).toBe('raw note');
+  });
+
+  it('falls back to a generic label for an empty entry', () => {
+    expect(formatMetadataPill({})).toBe('metadata');
+  });
+
+  it('never throws for arbitrary values (property)', () => {
+    fc.assert(
+      fc.property(fc.anything(), (input) => {
+        expect(() => formatMetadataPill(input)).not.toThrow();
+        expect(typeof formatMetadataPill(input)).toBe('string');
+      }),
+      { numRuns: 100 },
+    );
   });
 });
