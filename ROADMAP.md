@@ -35,16 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 65. Session stream chat — tool cards, permission/internal rendering, and wiring
-
-Read `.kiro/specs/session-stream-chat/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `5`, `6`, `7`. Depends on item 64.
-
-- Spec: `.kiro/specs/session-stream-chat/` · tasks `5`, `6`, `7`
-- [ ] Complete · PR: —
-
----
-
 ### 66. Session stream chat — Tier 2 browser tests and regression verification
 
 Read `.kiro/specs/session-stream-chat/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -104,6 +94,16 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 65. Session stream chat — tool cards, permission/internal rendering, and wiring
+
+Read `.kiro/specs/session-stream-chat/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `5`, `6`, `7`. Depends on item 64.
+
+- Spec: `.kiro/specs/session-stream-chat/` · tasks `5`, `6`, `7`
+- [x] Complete · PR: #121
+
+---
 
 ### 64. Session stream chat — CSS, markdown renderer, and render context
 
