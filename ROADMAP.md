@@ -91,7 +91,7 @@ Read `.kiro/specs/session-stream-chat/requirements.md`, `design.md`, and `tasks.
 then implement tasks `8`, `9`. Depends on item 65.
 
 - Spec: `.kiro/specs/session-stream-chat/` · tasks `8`, `9`
-- [x] Complete · PR: #PLACEHOLDER
+- [x] Complete · PR: #122
 
 ---
 
