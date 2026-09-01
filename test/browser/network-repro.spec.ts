@@ -31,11 +31,13 @@ test.describe('List load failures under network pressure', () => {
       await seedSession({ live: false, status: 'active' });
     }
 
-    // Track all requests to prove the N+1 pattern
+    // Track all requests to prove the N+1 pattern. The list endpoint is
+    // `/repos/sessions` (web-ui-project-concept migration); per-session detail
+    // fetches would hit `/sessions/{id}?lines=`.
     const requests: string[] = [];
     page.on('request', (req) => {
       const url = new URL(req.url());
-      if (url.pathname.startsWith('/sessions')) {
+      if (url.pathname === '/repos/sessions' || url.pathname.startsWith('/sessions')) {
         requests.push(url.pathname + url.search);
       }
     });
@@ -47,7 +49,7 @@ test.describe('List load failures under network pressure', () => {
 
     // The N+1 bug: client issues 1 list request + N per-session detail requests.
     // Item 27 fixed this: the client now issues exactly 1 request.
-    const listRequests = requests.filter(r => r.startsWith('/sessions?'));
+    const listRequests = requests.filter(r => r.startsWith('/repos/sessions'));
     const detailRequests = requests.filter(r => /^\/sessions\/[^/]+\?lines=/.test(r));
 
     // Fixed by item 27: zero per-session detail requests.
@@ -92,9 +94,9 @@ test.describe('List load failures under network pressure', () => {
   }) => {
     await seedSession({ live: false, status: 'active' });
 
-    // First request to /sessions fails (simulates transient network blip)
+    // First request to the list endpoint (`/repos/sessions`) fails (transient blip)
     let requestCount = 0;
-    await page.route('**/sessions?*', async (route) => {
+    await page.route('**/repos/sessions*', async (route) => {
       requestCount++;
       if (requestCount === 1) {
         await route.abort('connectionfailed');
@@ -156,8 +158,9 @@ test.describe('SSE failures on mid-stream network cut', () => {
     test.setTimeout(90_000);
     await seedSession({ live: false, status: 'active' });
 
-    // Make the list request hang forever (simulates a proxy that accepts but doesn't respond)
-    await page.route('**/sessions?*', async () => {
+    // Make the list request hang forever (simulates a proxy that accepts but doesn't respond).
+    // The list endpoint is `/repos/sessions` (web-ui-project-concept migration).
+    await page.route('**/repos/sessions*', async () => {
       // Never respond — the request hangs
       await new Promise(() => {});
     });
