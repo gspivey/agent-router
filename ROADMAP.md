@@ -35,17 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-
-### 63. Session stream chat — parser, types, and Tier 1 tests
-
-Read `.kiro/specs/session-stream-chat/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `1`, `1b`.
-
-- Spec: `.kiro/specs/session-stream-chat/` · tasks `1`, `1b`
-- [ ] Complete · PR: —
-
----
-
 ### 64. Session stream chat — CSS, markdown renderer, and render context
 
 Read `.kiro/specs/session-stream-chat/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -125,6 +114,16 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 63. Session stream chat — parser, types, and Tier 1 tests
+
+Read `.kiro/specs/session-stream-chat/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1`, `1b`.
+
+- Spec: `.kiro/specs/session-stream-chat/` · tasks `1`, `1b`
+- [x] Complete · PR: #119
+
+---
 
 ### 57. Claude Code adapter — wiring, hot-reload, and tests
 
