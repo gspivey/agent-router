@@ -85,19 +85,19 @@ Tier 2 browser tests. No backend changes.
 
 ## Task 8: Tier 2 browser tests for chat rendering
 **Depends on**: Task 7
-- [ ] Add a spec asserting an agent message renders markdown in `.chat-msg-agent` with no visible JSON/HTML escaping
-- [ ] Assert a `tool_call` (+ `tool_call_update`) renders a `.chat-tool` card, collapsed by default on a completed session, expandable on header click
-- [ ] Assert a `_kiro.dev/metadata` entry is hidden until "Show internals" is toggled, then shows a `.chat-meta-pill`
-- [ ] Assert a `session/request_permission` entry renders a `.chat-permission` card on an active session
-- [ ] Assert `#jump-to-bottom` appears after scrolling up on a live session and returns to bottom on click
+- [x] Add a spec asserting an agent message renders markdown in `.chat-msg-agent` with no visible JSON/HTML escaping
+- [x] Assert a `tool_call` (+ `tool_call_update`) renders a `.chat-tool` card, collapsed by default on a completed session, expandable on header click
+- [x] Assert a `_kiro.dev/metadata` entry is hidden until "Show internals" is toggled, then shows a `.chat-meta-pill`
+- [x] Assert a `session/request_permission` entry renders a `.chat-permission` card on an active session
+- [x] Assert `#jump-to-bottom` appears after scrolling up on a live session and returns to bottom on click
 
 **Requirements**: 1.4, 2.2, 2.3, 4.4, 4.7, 5.1, 6.4, 7.2, 7.3
 
 ## Task 9: Regression-verify existing browser tests + selector updates
 **Depends on**: Task 7, Task 8
-- [ ] Run the full `test/browser` suite; confirm `detail-view`, `sse-render`, `sse-hardening`, `sse-reconnect`, `visibility-reconnect`, `network-repro` pass
-- [ ] Confirm legacy `agent_message` entries render one `.log-entry.chat-msg-agent` each so `sse-reconnect`'s per-`msg-N` count and `sse-render`'s ID-order assertions still hold (no test edits expected here per design resolution)
-- [ ] Only where a test asserts a DOM shape that legitimately changed (e.g. verbatim raw JSON in `.log-entry`), update the selector/assertion to the new chat rendering — do not delete tests to make them pass
-- [ ] Run `npm run typecheck` and `npm test`; both must pass before push
+- [x] Run the full `test/browser` suite; confirm `detail-view`, `sse-render`, `sse-hardening`, `sse-reconnect`, `visibility-reconnect`, `network-repro` pass
+- [x] Confirm legacy `agent_message` entries render one `.log-entry.chat-msg-agent` each so `sse-reconnect`'s per-`msg-N` count and `sse-render`'s ID-order assertions still hold (no test edits expected here per design resolution)
+- [x] Only where a test asserts a DOM shape that legitimately changed (e.g. verbatim raw JSON in `.log-entry`), update the selector/assertion to the new chat rendering — do not delete tests to make them pass
+- [x] Run `npm run typecheck` and `npm test`; both must pass before push
 
 **Requirements**: 9.1, 9.2, 9.3, 9.4, 9.6, 9.7

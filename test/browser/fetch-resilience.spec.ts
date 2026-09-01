@@ -17,7 +17,7 @@ test.describe('Fetch resilience: list view', () => {
     await seedSession({ live: false, status: 'active' });
 
     let requestCount = 0;
-    await page.route('**/sessions?*', async (route) => {
+    await page.route('**/repos/sessions*', async (route) => {
       requestCount++;
       if (requestCount <= 2) {
         // First 2 requests fail with network error
@@ -41,7 +41,7 @@ test.describe('Fetch resilience: list view', () => {
 
     // All requests fail
     let failCount = 0;
-    await page.route('**/sessions?*', async (route) => {
+    await page.route('**/repos/sessions*', async (route) => {
       failCount++;
       await route.abort('connectionfailed');
     });
@@ -56,7 +56,7 @@ test.describe('Fetch resilience: list view', () => {
     expect(failCount).toBe(3);
 
     // Now make subsequent requests succeed and click Retry
-    await page.unroute('**/sessions?*');
+    await page.unroute('**/repos/sessions*');
     await page.locator('#retry-list-btn').click();
     await expect(page.locator('.session-item').first()).toBeVisible({ timeout: 15_000 });
   });
@@ -67,7 +67,7 @@ test.describe('Fetch resilience: list view', () => {
     await seedSession({ live: false, status: 'active' });
 
     let requestCount = 0;
-    await page.route('**/sessions?*', async (route) => {
+    await page.route('**/repos/sessions*', async (route) => {
       requestCount++;
       await route.fulfill({
         status: 401,
@@ -93,7 +93,7 @@ test.describe('Fetch resilience: list view', () => {
     await seedSession({ live: false, status: 'active' });
 
     // Make all requests hang (never respond)
-    await page.route('**/sessions?*', async () => {
+    await page.route('**/repos/sessions*', async () => {
       // Never call route.fulfill or route.continue — request hangs
       await new Promise(() => {});
     });
