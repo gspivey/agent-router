@@ -13,6 +13,7 @@ import * as fc from 'fast-check';
 import {
   validateMethod,
   validatePathPrefix,
+  validatePathMatchesRepo,
   validateBodySize,
   validateRepoAuthorization,
   VALID_METHODS,
@@ -232,6 +233,68 @@ describe('credential-validators property tests', () => {
       );
     });
   });
+
+  // Feature: auth-credential-proxy-v2, Requirement 5: path/repo cross-check
+  describe('Requirement 5: validatePathMatchesRepo', () => {
+    // A GitHub owner/name segment (safe chars only — no slashes/dots/@ so the
+    // arbitrary itself never trips a traversal rule).
+    const arbSegment = fc.stringMatching(/^[A-Za-z0-9_-]{1,20}$/);
+
+    it('accepts iff the arg equals the path owner/repo (case-insensitive)', () => {
+      fc.assert(
+        fc.property(
+          arbSegment,
+          arbSegment,
+          arbSegment,
+          arbSegment,
+          (owner, name, argOwner, argName) => {
+            const path = `/repos/${owner}/${name}/contents/file.txt`;
+            const arg = `${argOwner}/${argName}`;
+            const result = validatePathMatchesRepo(path, arg);
+            if (`${owner}/${name}`.toLowerCase() === arg.toLowerCase()) {
+              expect(result).toBeNull();
+            } else {
+              expect(result).not.toBeNull();
+              expect(result!.code).toBe('repo_unauthorized');
+            }
+          },
+        ),
+        { numRuns: 200 },
+      );
+    });
+
+    it('same owner/repo differing only in case is accepted', () => {
+      fc.assert(
+        fc.property(arbSegment, arbSegment, (owner, name) => {
+          const path = `/repos/${owner.toUpperCase()}/${name}/pulls`;
+          const arg = `${owner.toLowerCase()}/${name.toUpperCase()}`;
+          expect(validatePathMatchesRepo(path, arg)).toBeNull();
+        }),
+        { numRuns: 100 },
+      );
+    });
+
+    it('injected traversal/injection sequences force path_invalid', () => {
+      const arbInjection = fc.constantFrom('..', '//', '://', '@', '%2e', '%2E');
+      fc.assert(
+        fc.property(
+          arbSegment,
+          arbSegment,
+          arbInjection,
+          (owner, name, injection) => {
+            // Place the injection inside the path; the owner/repo still matches
+            // the arg, so only the injection can cause rejection.
+            const path = `/repos/${owner}/${name}/contents/${injection}x`;
+            const arg = `${owner}/${name}`;
+            const result = validatePathMatchesRepo(path, arg);
+            expect(result).not.toBeNull();
+            expect(result!.code).toBe('path_invalid');
+          },
+        ),
+        { numRuns: 200 },
+      );
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -433,6 +496,98 @@ describe('credential-validators unit tests', () => {
         expect(validateRepoAuthorization('POST', 'org/repo-extra', ctx2)).not.toBeNull();
         expect(validateRepoAuthorization('POST', 'org/rep', ctx2)).not.toBeNull();
       });
+    });
+  });
+
+  describe('validatePathMatchesRepo', () => {
+    it('accepts when path owner/repo matches the arg', () => {
+      expect(
+        validatePathMatchesRepo('/repos/org/my-repo/pulls', 'org/my-repo'),
+      ).toBeNull();
+      expect(
+        validatePathMatchesRepo('/repos/org/my-repo/contents/a/b/c', 'org/my-repo'),
+      ).toBeNull();
+    });
+
+    it('accepts case-insensitive owner/repo match', () => {
+      expect(
+        validatePathMatchesRepo('/repos/Org/My-Repo/issues', 'org/my-repo'),
+      ).toBeNull();
+    });
+
+    it('rejects owner mismatch with repo_unauthorized', () => {
+      const result = validatePathMatchesRepo('/repos/other/my-repo/contents/x', 'org/my-repo');
+      expect(result).not.toBeNull();
+      expect(result!.code).toBe('repo_unauthorized');
+    });
+
+    it('rejects repo (name) mismatch with repo_unauthorized', () => {
+      const result = validatePathMatchesRepo('/repos/org/victim/contents/x', 'org/my-repo');
+      expect(result).not.toBeNull();
+      expect(result!.code).toBe('repo_unauthorized');
+    });
+
+    it('rejects `..` traversal with path_invalid', () => {
+      const result = validatePathMatchesRepo('/repos/org/my-repo/../victim', 'org/my-repo');
+      expect(result).not.toBeNull();
+      expect(result!.code).toBe('path_invalid');
+    });
+
+    it('rejects URL-encoded dot sequences (%2e and %2E) with path_invalid', () => {
+      const lower = validatePathMatchesRepo('/repos/org/my-repo/%2e%2e/victim', 'org/my-repo');
+      expect(lower!.code).toBe('path_invalid');
+      const upper = validatePathMatchesRepo('/repos/org/my-repo/%2E%2E/victim', 'org/my-repo');
+      expect(upper!.code).toBe('path_invalid');
+    });
+
+    it('rejects `//` with path_invalid', () => {
+      const result = validatePathMatchesRepo('/repos//org/my-repo', 'org/my-repo');
+      expect(result).not.toBeNull();
+      expect(result!.code).toBe('path_invalid');
+    });
+
+    it('rejects an absolute URL (`://`) with path_invalid', () => {
+      const result = validatePathMatchesRepo('/repos/org/my-repo/https://evil.example', 'org/my-repo');
+      expect(result).not.toBeNull();
+      expect(result!.code).toBe('path_invalid');
+    });
+
+    it('rejects `@` with path_invalid', () => {
+      const result = validatePathMatchesRepo('/repos/@evil/x', 'org/my-repo');
+      expect(result).not.toBeNull();
+      expect(result!.code).toBe('path_invalid');
+    });
+
+    it('returns null when path has no /repos/ segment', () => {
+      expect(validatePathMatchesRepo('/search/repositories', 'org/my-repo')).toBeNull();
+      expect(validatePathMatchesRepo('/orgs/foo', 'org/my-repo')).toBeNull();
+      expect(validatePathMatchesRepo('/users/octocat', 'org/my-repo')).toBeNull();
+    });
+
+    it('returns null when /repos/ has fewer than two following segments', () => {
+      expect(validatePathMatchesRepo('/repos/org', 'org/my-repo')).toBeNull();
+      expect(validatePathMatchesRepo('/repos', 'org/my-repo')).toBeNull();
+    });
+
+    it('strips the query string before checks (matching path with query returns null)', () => {
+      expect(
+        validatePathMatchesRepo('/repos/org/my-repo/pulls?state=open&per_page=100', 'org/my-repo'),
+      ).toBeNull();
+    });
+
+    it('a query string cannot smuggle a mismatched repo', () => {
+      // The real target is org/my-repo; the query mentions a different repo but
+      // is stripped, so the check passes on the path component.
+      expect(
+        validatePathMatchesRepo('/repos/org/my-repo/pulls?ref=/repos/other/victim', 'org/my-repo'),
+      ).toBeNull();
+    });
+
+    it('uses the first /repos/ segment as authoritative', () => {
+      // Second repo mention is ignored; first must match.
+      expect(
+        validatePathMatchesRepo('/repos/org/my-repo/compare/repos/other/victim', 'org/my-repo'),
+      ).toBeNull();
     });
   });
 });

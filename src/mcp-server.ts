@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import {
   validateMethod,
   validatePathPrefix,
+  validatePathMatchesRepo,
   validateBodySize,
   validateRepoAuthorization,
 } from './credential-validators.js';
@@ -427,6 +428,20 @@ export function createMcpServer(ctx: McpContext): McpServer {
             logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'path_invalid');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: pathErr.message, code: pathErr.code }) }],
+              isError: true,
+            }));
+            return;
+          }
+
+          // Cross-check the path's owner/repo against the authorized repo argument
+          // (Requirement 5): reject before any token is fetched so a crafted path
+          // cannot use an allowed `repo` to write an unauthorized repo.
+          const matchErr = validatePathMatchesRepo(path, repo);
+          if (matchErr) {
+            const code = matchErr.code === 'repo_unauthorized' ? 'repo_unauthorized' : 'path_invalid';
+            logCredentialCall('github_http_forward', repo, '', startTime, 'error', code);
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: matchErr.message, code: matchErr.code }) }],
               isError: true,
             }));
             return;

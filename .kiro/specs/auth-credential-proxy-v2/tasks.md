@@ -39,8 +39,8 @@ are the three fixes this spec introduces and are the work to be picked up.
 
 ## Fixes (this spec)
 
-- [ ] 9. Path/repo authorization cross-check (SECURITY — Issue 1)
-  - [ ] 9.1 Add pure `validatePathMatchesRepo(path, repo)` to `src/credential-validators.ts`:
+- [x] 9. Path/repo authorization cross-check (SECURITY — Issue 1)
+  - [x] 9.1 Add pure `validatePathMatchesRepo(path, repo)` to `src/credential-validators.ts`:
     strip query string first; reject `path_invalid` on `..`, `//`, `://`, `@`, or any
     URL-encoded dot sequence (`%2e`/`%2E`) in the path component to prevent WHATWG URL
     normalization bypass; return null when no `/repos/{owner}/{repo}` segment is present
@@ -48,17 +48,17 @@ are the three fixes this spec introduces and are the work to be picked up.
     `{owner}/{repo}`, lowercase both sides, reject `repo_unauthorized` on mismatch, return
     null on match.
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
-  - [ ] 9.2 Call `validatePathMatchesRepo(path, repo)` in the `github_http_forward` handler
+  - [x] 9.2 Call `validatePathMatchesRepo(path, repo)` in the `github_http_forward` handler
     (`src/mcp-server.ts`) after `validatePathPrefix` and before token fetch; map failures to
     the `path_invalid` / `repo_unauthorized` credential log codes and return `isError: true`.
     - _Requirements: 5.6, 5.7_
-  - [ ] 9.3 Tier 1: unit + property tests (≥100 iterations) for `validatePathMatchesRepo` in
+  - [x] 9.3 Tier 1: unit + property tests (≥100 iterations) for `validatePathMatchesRepo` in
     `test/tier1/credential-validators.test.ts`. Cases must include: match, case-insensitive
     match, owner mismatch, repo mismatch, `..`, `%2e` (URL-encoded dot, both cases), `//`,
     absolute URL (`://`), `@`, missing `/repos/` segment (returns null), short path, path with
     query string (null returned), `/orgs/foo` path (null returned — no /repos/).
     - _Requirements: 5.1–5.5_
-  - [ ] 9.4 Tier 2: in `test/tier2/credential-mcp.test.ts`, assert `github_http_forward` rejects
+  - [x] 9.4 Tier 2: in `test/tier2/credential-mcp.test.ts`, assert `github_http_forward` rejects
     a `repo`/`path` owner mismatch (`repo_unauthorized`, no upstream request, no `get_token`
     IPC) and still succeeds when they match.
     - _Requirements: 5.6, 5.7_

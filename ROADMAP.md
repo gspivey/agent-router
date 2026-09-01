@@ -35,16 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 61. Auth credential proxy v2 — path/repo cross-check security fix
-
-Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `9.1`, `9.2`, `9.3`, `9.4`.
-
-- Spec: `.kiro/specs/auth-credential-proxy-v2/` · tasks `9.1`, `9.2`, `9.3`, `9.4`
-- [ ] Complete · PR: —
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -58,6 +48,16 @@ then implement tasks `10.1`, `10.2`, `10.3`, `10.4`, `11`. Depends on item 61.
 ## Completed
 
 Items move here after they merge to `development`.
+
+### 61. Auth credential proxy v2 — path/repo cross-check security fix
+
+Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `9.1`, `9.2`, `9.3`, `9.4`.
+
+- Spec: `.kiro/specs/auth-credential-proxy-v2/` · tasks `9.1`, `9.2`, `9.3`, `9.4`
+- [x] Complete · PR: #115
+
+---
 
 ### 60. Browser test harness v2 — housekeeping (update stale v1 spec headers, record backoff defect note)
 
