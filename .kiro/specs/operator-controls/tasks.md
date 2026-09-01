@@ -9,7 +9,7 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
 
 ## Tasks
 
-- [ ] 1. Child-environment secret hygiene (env-scrub)
+- [x] 1. Child-environment secret hygiene (env-scrub)
   - [x] 1.1 Pure `buildChildEnv(parentEnv, overrides, allowlist)` helper
     - Add to the spawn path module (`src/agent-adapter.ts` or `src/acp.ts`). Forward only an
       allowlist of parent env keys (PATH, HOME, LANG, `AGENT_ROUTER_*`, plus an optional extra
@@ -25,7 +25,7 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
       `GITHUB_TOKEN` is still present.
     - _Requirements: 5.1, 5.3_
 
-- [ ] 2. Per-repo cron pause / resume
+- [x] 2. Per-repo cron pause / resume
   - [x] 2.1 `cron_state` persistence
     - Add `cron_state(name TEXT PRIMARY KEY, paused INTEGER NOT NULL, updated_at INTEGER)` to
       `src/db.ts` with `getCronState`/`setCronPaused` methods; absent row defaults to active.
@@ -39,7 +39,7 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
     - Tier 2: paused cron does not fire; state survives a simulated restart; resume re-enables.
     - _Requirements: 3.1, 3.2, 3.3, 3.5, 3.6_
 
-- [ ] 3. Session resumption across restart
+- [x] 3. Session resumption across restart
   - [x] 3.1 Persist `kiro_session_id` + new termination reason
     - Add `kiro_session_id?: string` to `SessionMeta` (`src/session-files.ts`); write it in
       `createSession` after `newSessionWithPrompt`. Add `terminated_by_restart` to the
@@ -55,7 +55,7 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
       `terminated_by_restart`; never left corrupted.
     - _Requirements: 6.2, 6.3, 6.4, 6.6_
 
-- [ ] 4. CI-reconciliation nudge (wake watchdog)
+- [x] 4. CI-reconciliation nudge (wake watchdog)
   - [x] 4.1 Check-status fetch + nudge idempotency (pure parts)
     - GitHub client method for a PR head-sha's combined check conclusion; pure
       `nudgeKey(session, pr, headSha, conclusion)` and "all terminal?" predicate.
@@ -70,7 +70,7 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
       stays alive; GitHub error → logged, no crash, no false termination.
     - _Requirements: 4.1, 4.2, 4.3, 4.6_
 
-- [ ] 5. Config hot-reload
+- [x] 5. Config hot-reload
   - [x] 5.1 `classifyConfigChange(old, next)` pure partitioner
     - In `src/config.ts`: returns `{ reloadable, restartRequired }` changed-field lists.
       Restart-required: `port`, `controlPort`, `bindPublic`, `kiroPath`, `trustedProxy`.
@@ -90,7 +90,7 @@ restart-themed groups (5, 3) and the cron-reconcile in group 5 share `src/index.
       session; invalid reload is rejected and the daemon keeps running.
     - _Requirements: 1.3, 1.5, 1.6_
 
-- [ ] 6. Restart-required surfacing (env caveat)
+- [x] 6. Restart-required surfacing (env caveat)
   - [x] 6.1 `restart_required` condition + surfacing
     - Record `{ fields, since }` when a reload sees a restart-required field differ from the
       startup value; log `warn` each reload while it persists; expose `restart_required` on
