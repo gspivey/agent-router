@@ -641,6 +641,62 @@ describe('github_http_forward Tier 2 tests', () => {
       expect(content.code).toBe('path_invalid');
     });
   });
+
+  describe('path/repo cross-check (Requirement 5)', () => {
+    it('rejects a path whose owner/repo differs from the repo argument', async () => {
+      // Authorized for BOUND_REPO but the path targets a different repo.
+      const resp = await mcp.callTool('github_http_forward', {
+        method: 'PUT',
+        path: '/repos/org/victim/contents/x',
+        repo: BOUND_REPO,
+        body: JSON.stringify({ message: 'pwn' }),
+      });
+
+      expect(resp.result?.isError).toBe(true);
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.code).toBe('repo_unauthorized');
+
+      // No upstream request was issued (no Authorization header ever reached GitHub).
+      expect(github.getAllAuthorizationHeaders()).toEqual([]);
+      // No token was fetched from the daemon.
+      const tokenRequests = mockDaemon.getRequests().filter((r) => r.op === 'get_token');
+      expect(tokenRequests.length).toBe(0);
+    });
+
+    it('rejects a traversal path with path_invalid before any token fetch', async () => {
+      const resp = await mcp.callTool('github_http_forward', {
+        method: 'GET',
+        path: '/repos/org/my-repo/../victim/contents/x',
+        repo: BOUND_REPO,
+      });
+
+      expect(resp.result?.isError).toBe(true);
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.code).toBe('path_invalid');
+      expect(github.getAllAuthorizationHeaders()).toEqual([]);
+      const tokenRequests = mockDaemon.getRequests().filter((r) => r.op === 'get_token');
+      expect(tokenRequests.length).toBe(0);
+    });
+
+    it('still succeeds when path owner/repo matches the repo argument', async () => {
+      github.setCannedResponse('GET', '/repos/org/my-repo/pulls', {
+        status: 200,
+        body: [],
+      });
+
+      const resp = await mcp.callTool('github_http_forward', {
+        method: 'GET',
+        path: '/repos/org/my-repo/pulls',
+        repo: BOUND_REPO,
+      });
+
+      expect(resp.result?.isError).toBeFalsy();
+      const content = JSON.parse(resp.result!.content![0]!.text);
+      expect(content.status).toBe(200);
+      // The upstream request carried the injected token.
+      expect(github.getLastAuthorizationHeader()).toBe(`Bearer ${TOKEN}`);
+    });
+  });
 });
 
 /**
