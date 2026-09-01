@@ -25,9 +25,13 @@ active sessions.
    a bounded debounce window (default 1s after the last write).
 2. WHEN the reloaded config fails validation THEN the daemon SHALL retain the previously
    loaded config, log the validation error, and SHALL NOT crash or drop sessions.
-3. WHEN reloadable fields change — `repos`, `cron`, `rateLimit`, `sessionTimeout`,
-   `defaultGithubToken`, `allowedEmails` — THEN the daemon SHALL apply them to the running
-   components (token resolver, cron schedule, wake policy, timeout config) without a restart.
+3. WHEN reloadable fields change — `repos`, `cron`, `rateLimit`, `defaultGithubToken` —
+   THEN the daemon SHALL apply them to the running components (token resolver, cron schedule,
+   wake policy) without a restart. `sessionTimeout` changes apply to sessions created after
+   the reload; active sessions retain the timeout values they started with (per Requirement
+   1.5). `allowedEmails` is listed as a reloadable field in the config schema; whether the
+   running web-auth layer picks up the new value at reload was not verified against PR #64 —
+   treat as best-effort until confirmed.
 4. WHEN a restart-required field changes — `port`, `controlPort`, `bindPublic`, `kiroPath`,
    `trustedProxy` — THEN the daemon SHALL log a warning naming the field and SHALL continue
    using the value loaded at startup until an operator restarts.
