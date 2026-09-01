@@ -224,32 +224,69 @@ describe('MockDaemonSocket', () => {
   });
 
   describe('get_token', () => {
-    it('returns token for a configured project', async () => {
+    it('returns the session project token for a configured session', async () => {
+      mock.setSessionProject('session-tok', {
+        project: 'my-project',
+        repos: ['org/repo-a'],
+        read_repos: [],
+      });
       mock.setProjectToken('my-project', 'ghp_secret_123', '2027-04-25T00:00:00Z');
-      const resp = await sendIpc({ op: 'get_token', project: 'my-project' });
+      const resp = await sendIpc({ op: 'get_token', session_id: 'session-tok' });
       expect(resp).toEqual({ token: 'ghp_secret_123', expires_at: '2027-04-25T00:00:00Z' });
     });
 
     it('returns token without expires_at when not set', async () => {
+      mock.setSessionProject('session-noexp', {
+        project: 'no-expiry',
+        repos: ['org/repo-a'],
+        read_repos: [],
+      });
       mock.setProjectToken('no-expiry', 'ghp_noexp');
-      const resp = await sendIpc({ op: 'get_token', project: 'no-expiry' });
+      const resp = await sendIpc({ op: 'get_token', session_id: 'session-noexp' });
       expect(resp).toEqual({ token: 'ghp_noexp' });
     });
 
-    it('returns error for unknown project', async () => {
-      const resp = await sendIpc({ op: 'get_token', project: 'nonexistent' });
-      expect(resp).toEqual({ error: 'project_not_found' });
+    it('ignores a caller-supplied project and serves the session project', async () => {
+      mock.setSessionProject('session-scoped', {
+        project: 'my-project',
+        repos: ['org/repo-a'],
+        read_repos: [],
+      });
+      mock.setProjectToken('my-project', 'ghp_secret_123', '2027-04-25T00:00:00Z');
+      mock.setProjectToken('other-project', 'ghp_other_999');
+      const resp = await sendIpc({
+        op: 'get_token',
+        session_id: 'session-scoped',
+        project: 'other-project',
+      });
+      expect(resp).toEqual({ token: 'ghp_secret_123', expires_at: '2027-04-25T00:00:00Z' });
     });
 
-    it('returns error when project is missing', async () => {
+    it('returns error for unknown session', async () => {
+      const resp = await sendIpc({ op: 'get_token', session_id: 'nonexistent-session' });
+      expect(resp).toEqual({ error: 'session_not_found' });
+    });
+
+    it('returns error when session_id is missing', async () => {
       const resp = await sendIpc({ op: 'get_token' });
-      expect(resp).toEqual({ error: 'missing_project' });
+      expect(resp).toEqual({ error: 'missing_session_id' });
     });
 
-    it('returns error after project token is cleared', async () => {
+    it('returns error when the session has no bound project', async () => {
+      mock.setSessionProject('session-null-tok', null);
+      const resp = await sendIpc({ op: 'get_token', session_id: 'session-null-tok' });
+      expect(resp).toEqual({ error: 'no_project_bound' });
+    });
+
+    it('returns error after the project token is cleared', async () => {
+      mock.setSessionProject('session-temp', {
+        project: 'temp-project',
+        repos: ['org/repo-a'],
+        read_repos: [],
+      });
       mock.setProjectToken('temp-project', 'ghp_temp');
       mock.clearProjectToken('temp-project');
-      const resp = await sendIpc({ op: 'get_token', project: 'temp-project' });
+      const resp = await sendIpc({ op: 'get_token', session_id: 'session-temp' });
       expect(resp).toEqual({ error: 'project_not_found' });
     });
   });

@@ -53,7 +53,8 @@ export interface IpcRequest {
 /**
  * A newline-delimited JSON IPC server that handles:
  * - `get_session_project { session_id }` → `{ project, repos, read_repos }` or `{ error }`
- * - `get_token { project }` → `{ token, expires_at? }` or `{ error }`
+ * - `get_token { session_id }` → `{ token, expires_at? }` or `{ error }`
+ *   (the project is derived from the session's configured project, never from the caller)
  *
  * Any other `op` returns `{ error: "unknown_op" }`.
  */
@@ -143,9 +144,16 @@ export function createMockDaemonSocket(): MockDaemonSocket {
     }
 
     if (op === 'get_token') {
-      const project = req['project'] as string | undefined;
-      if (!project) return { error: 'missing_project' };
+      // The served project is derived from the caller's session (matching the
+      // daemon's session-derived get_token), never from a caller-supplied name.
+      const sessionId = req['session_id'] as string | undefined;
+      if (!sessionId) return { error: 'missing_session_id' };
 
+      if (!sessionProjects.has(sessionId)) return { error: 'session_not_found' };
+      const sessionInfo = sessionProjects.get(sessionId);
+      if (!sessionInfo) return { error: 'no_project_bound' };
+
+      const project = sessionInfo.project;
       if (!projectTokens.has(project)) return { error: 'project_not_found' };
       const info = projectTokens.get(project)!;
 
