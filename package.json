@@ -21,7 +21,7 @@
     "better-sqlite3": "^11.9.1",
     "hono": "^4.7.7",
     "node-cron": "^3.0.3",
-    "tsx": "^4.19.3"
+    "tsx": "4.23.13"
   },
   "devDependencies": {
     "@octokit/rest": "^22.0.1",
