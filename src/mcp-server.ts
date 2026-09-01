@@ -481,10 +481,11 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
 
-          // Fetch token (not cached — fetched per call so rotation propagates)
+          // Fetch token (not cached — fetched per call so rotation propagates).
+          // The daemon derives the project from this session's bound project.
           const tokenResp = await sendToDaemon(daemonSocket, {
             op: 'get_token',
-            project: sessionProject.project,
+            session_id: sessionId,
           });
           if (tokenResp['error']) {
             logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'token_missing');
@@ -589,10 +590,11 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
 
-          // Fetch token (not cached — fetched per call so rotation propagates)
+          // Fetch token (not cached — fetched per call so rotation propagates).
+          // The daemon derives the project from this session's bound project.
           const tokenResp = await sendToDaemon(daemonSocket, {
             op: 'get_token',
-            project: sessionProject.project,
+            session_id: sessionId,
           });
           if (tokenResp['error']) {
             logCredentialCall('git_credential', repo, sessionProject.project, startTime, 'error', 'token_missing');
