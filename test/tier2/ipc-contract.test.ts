@@ -256,49 +256,74 @@ describe('get_session_project IPC op', () => {
 });
 
 describe('get_token IPC op', () => {
-  it('returns token and expires_at for a known project', async () => {
+  it('returns token and expires_at for the session bound project', async () => {
+    // Session bound to org/repo-a → my-project (token ghp_test_token_12345)
+    const handle = await mgr.createSession('Fix the bug in org/repo-a', 'org/repo-a');
+
     const result = await sendRaw(socketPath, {
       op: 'get_token',
-      project: 'my-project',
+      session_id: handle.sessionId,
     });
 
     expect(result['error']).toBeUndefined();
     expect(result['token']).toBe('ghp_test_token_12345');
     expect(result['expires_at']).toBe(TEST_EXPIRY.toISOString());
-  });
+  }, 15_000);
 
-  it('returns expires_at as null when project has no expiry', async () => {
+  it('returns expires_at as null when the bound project has no expiry', async () => {
+    // Session bound to other/repo-c → other-project (no expiry)
+    const handle = await mgr.createSession('Fix the bug in other/repo-c', 'other/repo-c');
+
     const result = await sendRaw(socketPath, {
       op: 'get_token',
-      project: 'other-project',
+      session_id: handle.sessionId,
     });
 
     expect(result['error']).toBeUndefined();
     expect(result['token']).toBe('ghp_other_token_67890');
     expect(result['expires_at']).toBeNull();
-  });
+  }, 15_000);
 
-  it('returns error for unknown project', async () => {
+  it('ignores a caller-supplied project and derives from the session', async () => {
+    // Session bound to org/repo-a → my-project. A crafted `project` must not
+    // let the caller obtain other-project's token.
+    const handle = await mgr.createSession('Fix the bug in org/repo-a', 'org/repo-a');
+
     const result = await sendRaw(socketPath, {
       op: 'get_token',
-      project: 'non-existent-project',
+      session_id: handle.sessionId,
+      project: 'other-project',
     });
 
+    expect(result['error']).toBeUndefined();
+    expect(result['token']).toBe('ghp_test_token_12345');
+  }, 15_000);
+
+  it('returns error for unknown session_id and no token', async () => {
+    const result = await sendRaw(socketPath, {
+      op: 'get_token',
+      session_id: 'non-existent-session-id',
+    });
+
+    expect(result['token']).toBeUndefined();
     expect(result['error']).toBeDefined();
     expect(typeof result['error']).toBe('string');
-    expect(String(result['error'])).toContain('non-existent-project');
+    expect(String(result['error'])).toContain('non-existent-session-id');
   });
 
-  it('returns error when project param is missing', async () => {
+  it('returns error when session_id param is missing and no token', async () => {
     const result = await sendRaw(socketPath, {
       op: 'get_token',
     });
 
+    expect(result['token']).toBeUndefined();
     expect(result['error']).toBeDefined();
-    expect(String(result['error'])).toMatch(/project/i);
+    expect(String(result['error'])).toMatch(/session_id/i);
   });
 
   it('returns error when token store is not configured', async () => {
+    const handle = await mgr.createSession('Fix the bug in org/repo-a', 'org/repo-a');
+
     // Create a CLI server without tokenStore
     const socketPath3 = path.join(rootDir, 'sock3');
     const cliServer3 = createCliServer({
@@ -313,24 +338,26 @@ describe('get_token IPC op', () => {
     try {
       const result = await sendRaw(socketPath3, {
         op: 'get_token',
-        project: 'my-project',
+        session_id: handle.sessionId,
       });
 
+      expect(result['token']).toBeUndefined();
       expect(result['error']).toBeDefined();
       expect(String(result['error'])).toContain('not configured');
     } finally {
       await cliServer3.shutdown();
     }
-  });
+  }, 15_000);
 
   it('expires_at reflects the tokens.json value exactly', async () => {
-    // This verifies Tier 2 requirement: get_token's expires_at reflects tokens.json's expires_at
+    const handle = await mgr.createSession('Fix the bug in org/repo-a', 'org/repo-a');
+
     const result = await sendRaw(socketPath, {
       op: 'get_token',
-      project: 'my-project',
+      session_id: handle.sessionId,
     });
 
     // expires_at should be the ISO string of the configured Date
     expect(result['expires_at']).toBe('2027-06-15T00:00:00.000Z');
-  });
+  }, 15_000);
 });

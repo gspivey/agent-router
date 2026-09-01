@@ -270,13 +270,24 @@ export function createCliServer(deps: {
     },
 
     async get_token(req: CliRequest): Promise<Record<string, unknown>> {
-      const project = req['project'];
-      if (typeof project !== 'string' || project.length === 0) {
-        return { error: 'Missing or empty "project" parameter' };
+      // The project is derived solely from the caller's session Bound_Project,
+      // never from a caller-supplied name. Any `project` argument is ignored so
+      // a session cannot request another project's PAT (Requirement 6).
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        return { error: 'Missing or empty "session_id" parameter' };
       }
       if (!tokenStore) {
         return { error: 'Token store not configured' };
       }
+      const handle = sessionMgr.getActiveSession(sessionId);
+      if (!handle) {
+        return { error: `Session not found: ${sessionId}` };
+      }
+      if (!handle.boundProject) {
+        return { error: `Session "${sessionId}" has no bound project` };
+      }
+      const project = handle.boundProject;
       const secret = tokenStore.getToken(project);
       if (!secret) {
         return { error: `No token found for project "${project}"` };

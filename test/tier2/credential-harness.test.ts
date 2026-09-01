@@ -224,32 +224,55 @@ describe('MockDaemonSocket', () => {
   });
 
   describe('get_token', () => {
-    it('returns token for a configured project', async () => {
+    it('returns token for the session bound project', async () => {
+      mock.setSessionProject('tok-session', { project: 'my-project', repos: ['org/repo-a'], read_repos: [] });
       mock.setProjectToken('my-project', 'ghp_secret_123', '2027-04-25T00:00:00Z');
-      const resp = await sendIpc({ op: 'get_token', project: 'my-project' });
+      const resp = await sendIpc({ op: 'get_token', session_id: 'tok-session' });
       expect(resp).toEqual({ token: 'ghp_secret_123', expires_at: '2027-04-25T00:00:00Z' });
     });
 
     it('returns token without expires_at when not set', async () => {
+      mock.setSessionProject('noexp-session', { project: 'no-expiry', repos: ['org/repo-x'], read_repos: [] });
       mock.setProjectToken('no-expiry', 'ghp_noexp');
-      const resp = await sendIpc({ op: 'get_token', project: 'no-expiry' });
+      const resp = await sendIpc({ op: 'get_token', session_id: 'noexp-session' });
       expect(resp).toEqual({ token: 'ghp_noexp' });
     });
 
-    it('returns error for unknown project', async () => {
-      const resp = await sendIpc({ op: 'get_token', project: 'nonexistent' });
+    it('ignores a caller-supplied project and derives from the session', async () => {
+      mock.setSessionProject('mine-session', { project: 'my-project', repos: ['org/repo-a'], read_repos: [] });
+      mock.setProjectToken('my-project', 'ghp_secret_123', '2027-04-25T00:00:00Z');
+      mock.setProjectToken('other-project', 'ghp_other_999');
+      const resp = await sendIpc({ op: 'get_token', session_id: 'mine-session', project: 'other-project' });
+      expect(resp).toEqual({ token: 'ghp_secret_123', expires_at: '2027-04-25T00:00:00Z' });
+    });
+
+    it('returns error for unknown session', async () => {
+      const resp = await sendIpc({ op: 'get_token', session_id: 'no-such-session' });
+      expect(resp).toEqual({ error: 'session_not_found' });
+    });
+
+    it('returns error for a session with no bound project', async () => {
+      mock.setSessionProject('null-session', null);
+      const resp = await sendIpc({ op: 'get_token', session_id: 'null-session' });
+      expect(resp).toEqual({ error: 'no_project_bound' });
+    });
+
+    it("returns error when the session's project has no token", async () => {
+      mock.setSessionProject('missing-tok-session', { project: 'nonexistent', repos: [], read_repos: [] });
+      const resp = await sendIpc({ op: 'get_token', session_id: 'missing-tok-session' });
       expect(resp).toEqual({ error: 'project_not_found' });
     });
 
-    it('returns error when project is missing', async () => {
+    it('returns error when session_id is missing', async () => {
       const resp = await sendIpc({ op: 'get_token' });
-      expect(resp).toEqual({ error: 'missing_project' });
+      expect(resp).toEqual({ error: 'missing_session_id' });
     });
 
     it('returns error after project token is cleared', async () => {
+      mock.setSessionProject('temp-session', { project: 'temp-project', repos: [], read_repos: [] });
       mock.setProjectToken('temp-project', 'ghp_temp');
       mock.clearProjectToken('temp-project');
-      const resp = await sendIpc({ op: 'get_token', project: 'temp-project' });
+      const resp = await sendIpc({ op: 'get_token', session_id: 'temp-session' });
       expect(resp).toEqual({ error: 'project_not_found' });
     });
   });
@@ -264,12 +287,12 @@ describe('MockDaemonSocket', () => {
   describe('getRequests', () => {
     it('records all IPC requests', async () => {
       mock.clearRequests();
-      await sendIpc({ op: 'get_token', project: 'my-project' });
+      await sendIpc({ op: 'get_token', session_id: 'session-123' });
       await sendIpc({ op: 'get_session_project', session_id: 'session-123' });
 
       const requests = mock.getRequests();
       expect(requests).toHaveLength(2);
-      expect(requests[0]).toEqual({ op: 'get_token', project: 'my-project' });
+      expect(requests[0]).toEqual({ op: 'get_token', session_id: 'session-123' });
       expect(requests[1]).toEqual({ op: 'get_session_project', session_id: 'session-123' });
     });
   });

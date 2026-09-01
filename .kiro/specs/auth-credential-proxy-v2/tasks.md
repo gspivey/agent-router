@@ -63,27 +63,27 @@ are the three fixes this spec introduces and are the work to be picked up.
     IPC) and still succeeds when they match.
     - _Requirements: 5.6, 5.7_
 
-- [ ] 10. `get_token` derives project from session (Issue 2)
-  - [ ] 10.1 Change the `get_token` IPC op in `src/cli-server.ts` to accept `{ session_id }`,
+- [x] 10. `get_token` derives project from session (Issue 2)
+  - [x] 10.1 Change the `get_token` IPC op in `src/cli-server.ts` to accept `{ session_id }`,
     look up the active session, read its `bound_project`, and return that project's
     `{ token, expires_at }`; ignore any caller-supplied `project`. Return an error (no token)
     for missing `session_id`, unknown/inactive session, or missing `bound_project`.
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
-  - [ ] 10.2 Update both token fetches in `src/mcp-server.ts` (`github_http_forward` and
+  - [x] 10.2 Update both token fetches in `src/mcp-server.ts` (`github_http_forward` and
     `git_credential`) to send `{ op: 'get_token', session_id: sessionId }`.
     - _Requirements: 6.5_
-  - [ ] 10.3 Tier 2: update `test/harness/mock-daemon-socket.ts` and the `get_token` cases in
+  - [x] 10.3 Tier 2: update `test/harness/mock-daemon-socket.ts` and the `get_token` cases in
     `test/tier2/ipc-contract.test.ts` / `test/tier2/credential-harness.test.ts` to key on
     `session_id`; assert a known active session returns its bound project's token+expiry and
     that missing/unknown/inactive session returns an error with no token.
     - _Requirements: 6.1, 6.2, 6.3_
 
-- [ ] 11. Document CLI vs MCP socket separation (Issue 3)
-  - [ ] 11.1 Ensure `get_token` is reached only via the MCP server's `sendToDaemon` path with
+- [x] 11. Document CLI vs MCP socket separation (Issue 3)
+  - [x] 11.1 Ensure `get_token` is reached only via the MCP server's `sendToDaemon` path with
     `session_id`, and `tokens_status` remains the operator `tokens status` CLI path (no code
     change beyond task 10 — verify and adjust if needed).
     - _Requirements: 7.1, 7.2_
-  - [ ] 11.2 Record the separate-code-paths-on-a-shared-socket design and the rationale for not
+  - [x] 11.2 Record the separate-code-paths-on-a-shared-socket design and the rationale for not
     using `SO_PEERCRED` in `design.md` (done in this spec) and in any operator-facing docs the
     change touches.
     - _Requirements: 7.3_
