@@ -66,8 +66,33 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 .detail-meta h2{margin:0 0 8px;font-size:16px}
 .detail-meta-row{font-size:13px;color:#8b949e;margin:4px 0}
 .detail-meta-row span{color:#eee}
-#log-container{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;max-height:60vh;overflow-y:auto;overflow-x:auto;font-family:monospace;font-size:13px;line-height:1.4;white-space:pre}
-.log-entry{margin:0;padding:2px 0}
+#log-container{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.log-entry{margin:0}
+.stream-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:8px;font-size:13px;color:#8b949e}
+.stream-toolbar label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.chat-system{align-self:flex-start}
+.chat-pill{display:inline-block;background:#21262d;color:#8b949e;border-radius:12px;padding:4px 10px;font-size:12px}
+.chat-pill.badge-green{background:#238636;color:#fff}
+.chat-pill.badge-red{background:#da3633;color:#fff}
+.chat-pill.badge-yellow{background:#9e6a03;color:#fff}
+.chat-pill .pr-chip{margin-left:6px;color:#fff;text-decoration:underline}
+.chat-msg-agent{align-self:stretch;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 12px}
+.chat-md{font-size:14px;line-height:1.5;word-wrap:break-word;overflow-wrap:anywhere}
+.chat-md code{font-family:monospace;background:#0d1117;padding:1px 4px;border-radius:4px}
+.chat-md pre{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 12px;overflow-x:auto}
+.chat-md pre code{background:none;padding:0}
+.chat-md a{color:#58a6ff}
+.chat-tool{border:1px solid #30363d;border-radius:8px;overflow:hidden}
+.chat-tool-header{cursor:pointer;padding:8px 12px;background:#161b22;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.chat-tool-title{font-size:13px;font-weight:600}
+.chat-tool-body{margin:0;padding:8px 12px;font-family:monospace;font-size:12px;line-height:1.4;white-space:pre-wrap;overflow-x:auto}
+.chat-tool.collapsed .chat-tool-body,.chat-tool.collapsed .show-more-btn{display:none}
+.chat-permission{background:#3a2d00;border:1px solid #9e6a03;color:#e3b341;border-radius:8px;padding:10px 12px;font-size:14px}
+.chat-permission.resolved{opacity:0.6}
+.chat-internal{color:#8b949e;font-size:12px}
+.chat-meta-pill{display:inline-block;background:#21262d;color:#8b949e;border-radius:10px;padding:2px 8px;font-size:11px}
+.chat-unknown{color:#8b949e;font-size:12px;font-style:italic}
+#jump-to-bottom{position:sticky;bottom:8px;align-self:center;background:#21262d;color:#eee;border:1px solid #30363d;border-radius:16px;padding:6px 14px;font-size:13px;cursor:pointer;min-width:auto;min-height:auto}
 .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
 .controls textarea{flex:1;min-width:200px;resize:vertical;padding:8px;border:1px solid #30363d;border-radius:6px;background:#0d1117;color:#eee;font-size:14px;font-family:inherit}
 .controls-buttons{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -82,7 +107,7 @@ button,a.btn{min-width:44px;min-height:44px;padding:8px 16px;border:none;border-
 .confirm-dialog p{margin:0 0 16px;font-size:15px}
 .confirm-dialog button{margin:0 8px}
 @media(max-width:480px){main{padding:8px}body{font-size:16px}.session-header{flex-direction:column;align-items:flex-start}.controls{flex-direction:column}.controls textarea{min-width:100%}.repo-header{gap:4px}.repo-header h2{font-size:14px}}
-@media(max-width:768px){#log-container{overflow-x:auto;font-size:14px}}
+@media(max-width:768px){#log-container{font-size:14px}}
 .error-state{text-align:center;padding:40px 16px;color:#f85149}
 .error-state p{margin:8px 0}
 .error-state .error-message{font-size:14px;color:#8b949e}
@@ -208,6 +233,301 @@ function parseHashRoute(hash) {
   const match = /^\\/sessions\\/([^/]+)$/.exec(trimmed);
   if (match && match[1]) return { view: 'detail', sessionId: match[1] };
   return { view: 'list' };
+}
+
+// --- Inlined stream-chat logic from src/ui/logic.ts (parser + markdown) ---
+// Kept in sync with the exported, Tier 1-tested functions in src/ui/logic.ts.
+function mdEscapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function isSafeLinkHref(href) {
+  const cleaned = href.replace(/[\\u0000-\\u0020]+/g, '');
+  const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(cleaned);
+  if (!schemeMatch) return true;
+  const scheme = (schemeMatch[1] || '').toLowerCase();
+  return scheme === 'http' || scheme === 'https' || scheme === 'mailto';
+}
+
+function safeLinkHref(href) {
+  return isSafeLinkHref(href) ? href : '#';
+}
+
+function renderMarkdown(text) {
+  const escaped = mdEscapeHtml(text);
+  const codeBlocks = [];
+  let out = escaped.replace(/\`\`\`[^\\n]*\\n?([\\s\\S]*?)\`\`\`/g, function(_m, body) {
+    const idx = codeBlocks.length;
+    codeBlocks.push('<pre><code>' + body + '</code></pre>');
+    return '\\u0000CODEBLOCK' + idx + '\\u0000';
+  });
+  const inlineCode = [];
+  out = out.replace(/\`([^\`\\n]+)\`/g, function(_m, body) {
+    const idx = inlineCode.length;
+    inlineCode.push('<code>' + body + '</code>');
+    return '\\u0000INLINECODE' + idx + '\\u0000';
+  });
+  out = out.replace(/\\[([^\\]]*)\\]\\(([^)\\s]+)\\)/g, function(_m, label, url) {
+    const decoded = url.replace(/&amp;/g, '&');
+    const href = mdEscapeHtml(safeLinkHref(decoded));
+    return '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+  });
+  out = out.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+  out = out.replace(/\\*([^*\\n]+)\\*/g, '<em>$1</em>');
+  out = out.replace(/_([^_\\n]+)_/g, '<em>$1</em>');
+  out = out.replace(/\\n/g, '<br>');
+  out = out.replace(/\\u0000INLINECODE(\\d+)\\u0000/g, function(_m, i) { return inlineCode[Number(i)] || ''; });
+  out = out.replace(/\\u0000CODEBLOCK(\\d+)\\u0000/g, function(_m, i) { return codeBlocks[Number(i)] || ''; });
+  return out;
+}
+
+function asText(value) {
+  return typeof value === 'string' ? value : '';
+}
+
+const SYSTEM_SUBTYPES = ['session_started', 'prompt_injected', 'session_ended', 'session_verified', 'verification_failed', 'web_inject', 'web_interrupt'];
+
+function mapSystem(subtype, raw) {
+  switch (subtype) {
+    case 'session_started': return { kind: 'system', subtype: subtype, text: 'Session started' };
+    case 'prompt_injected': return { kind: 'system', subtype: subtype, text: 'Prompt injected (' + (asText(raw.prompt_source) || 'unknown') + ')' };
+    case 'session_ended': return { kind: 'system', subtype: subtype, text: 'Session ended — ' + (asText(raw.reason) || 'unknown') };
+    case 'session_verified': return { kind: 'system', subtype: subtype, text: 'Verified — ' + (asText(raw.termination_reason) || 'unknown'), badge: 'green' };
+    case 'verification_failed': return { kind: 'system', subtype: subtype, text: 'Verification failed — ' + (asText(raw.error) || 'unknown'), badge: 'red' };
+    case 'web_inject': return { kind: 'system', subtype: subtype, text: 'Operator inject' };
+    case 'web_interrupt': return { kind: 'system', subtype: subtype, text: 'Operator interrupt' };
+    default: return { kind: 'unknown', typeLabel: subtype };
+  }
+}
+
+function concatToolUpdateText(content) {
+  if (!Array.isArray(content)) return '';
+  let out = '';
+  for (const item of content) {
+    if (item && typeof item === 'object' && item.content && typeof item.content === 'object') {
+      out += asText(item.content.text);
+    }
+  }
+  return out;
+}
+
+function parseStreamEntry(raw) {
+  if (!raw || typeof raw !== 'object') return { kind: 'unknown', typeLabel: 'unknown' };
+  const entry = raw;
+  const source = entry.source;
+  const type = typeof entry.type === 'string' ? entry.type : undefined;
+  const typeLabel = type || 'unknown';
+  if (source === 'router') {
+    if (type && SYSTEM_SUBTYPES.indexOf(type) !== -1) return mapSystem(type, entry);
+    return { kind: 'unknown', typeLabel: typeLabel };
+  }
+  if (source === 'agent') {
+    if (type === 'session/update') {
+      const update = entry.update;
+      if (update && typeof update === 'object') {
+        const sub = update.sessionUpdate;
+        if (sub === 'agent_message_chunk') {
+          const content = update.content;
+          const text = content && typeof content === 'object' ? asText(content.text) : '';
+          return { kind: 'agent_chunk', text: text, streaming: true };
+        }
+        if (sub === 'tool_call') {
+          const toolCallId = typeof update.toolCallId === 'string' ? update.toolCallId : null;
+          return { kind: 'tool_call', toolCallId: toolCallId, title: asText(update.title) };
+        }
+        if (sub === 'tool_call_update') {
+          const toolCallId = typeof update.toolCallId === 'string' ? update.toolCallId : '';
+          return { kind: 'tool_update', toolCallId: toolCallId, text: concatToolUpdateText(update.content) };
+        }
+      }
+      return { kind: 'unknown', typeLabel: typeLabel };
+    }
+    if (type === 'session/request_permission') {
+      const toolCall = entry.toolCall;
+      const title = toolCall && typeof toolCall === 'object' ? asText(toolCall.title) : '';
+      return { kind: 'permission', title: title };
+    }
+    if (type && type.indexOf('_kiro.dev/') === 0) {
+      return { kind: 'internal', subtype: type, text: asText(entry.content) };
+    }
+    if (type === 'agent_message') {
+      return { kind: 'agent_message', text: asText(entry.content), streaming: false };
+    }
+    if (type === 'tool_call') {
+      const toolCallId = typeof entry.toolCallId === 'string' ? entry.toolCallId : null;
+      return { kind: 'tool_call', toolCallId: toolCallId, title: asText(entry.title) };
+    }
+    return { kind: 'unknown', typeLabel: typeLabel };
+  }
+  return { kind: 'unknown', typeLabel: typeLabel };
+}
+
+// --- Stream-chat renderer (render context) ---
+// makeRenderCtx builds the per-detail-mount mutable state the renderer needs.
+function makeRenderCtx(container, meta) {
+  return {
+    container: container,
+    isActive: meta && meta.status === 'active',
+    showInternals: false,
+    openBubble: null,
+    toolCards: new Map(),
+    autoScroll: true,
+    entryCount: 0,
+    repo: (meta && meta.repo) || '',
+    prs: (meta && meta.prs) || [],
+  };
+}
+
+function chatAutoScroll(ctx) {
+  if (ctx.autoScroll) ctx.container.scrollTop = ctx.container.scrollHeight;
+}
+
+function makeAgentBubble() {
+  const div = document.createElement('div');
+  div.className = 'log-entry chat-msg-agent';
+  const md = document.createElement('div');
+  md.className = 'chat-md';
+  div.appendChild(md);
+  return { div: div, md: md };
+}
+
+// renderStreamEntry: stateful, mutates ctx.container. Dispatches on parsed.kind.
+// Agent-chunk reassembly, agent_message bubbles, system pills and the unknown
+// fallback are fully implemented here (item 64). Tool cards, permission and
+// internal rows get baseline rendering; their collapse/toggle behaviour is
+// completed by tasks 5-7 (item 65).
+function renderStreamEntry(parsed, ctx) {
+  ctx.entryCount++;
+
+  if (parsed.kind === 'agent_chunk') {
+    if (ctx.openBubble) {
+      ctx.openBubble.__text += parsed.text;
+      ctx.openBubble.__md.innerHTML = renderMarkdown(ctx.openBubble.__text);
+    } else {
+      const b = makeAgentBubble();
+      b.div.setAttribute('data-bubble-open', 'true');
+      b.div.__text = parsed.text;
+      b.div.__md = b.md;
+      b.md.innerHTML = renderMarkdown(parsed.text);
+      ctx.container.appendChild(b.div);
+      ctx.openBubble = b.div;
+    }
+    chatAutoScroll(ctx);
+    return;
+  }
+
+  // Any non-chunk kind closes the current reassembly bubble first.
+  if (ctx.openBubble) {
+    ctx.openBubble.removeAttribute('data-bubble-open');
+    ctx.openBubble = null;
+  }
+
+  if (parsed.kind === 'agent_message') {
+    const b = makeAgentBubble();
+    b.md.innerHTML = renderMarkdown(parsed.text);
+    ctx.container.appendChild(b.div);
+    chatAutoScroll(ctx);
+    return;
+  }
+
+  if (parsed.kind === 'system') {
+    const div = document.createElement('div');
+    div.className = 'log-entry chat-system';
+    const pill = document.createElement('span');
+    pill.className = 'chat-pill' + (parsed.badge ? ' badge-' + parsed.badge : '');
+    pill.textContent = parsed.text;
+    if (parsed.subtype === 'session_verified' && ctx.prs && ctx.prs.length) {
+      ctx.prs.forEach(function(pr) {
+        const a = document.createElement('a');
+        a.className = 'pr-chip';
+        a.href = 'https://github.com/' + pr.repo + '/pull/' + pr.pr_number;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = 'PR #' + pr.pr_number;
+        pill.appendChild(a);
+      });
+    }
+    div.appendChild(pill);
+    ctx.container.appendChild(div);
+    chatAutoScroll(ctx);
+    return;
+  }
+
+  if (parsed.kind === 'tool_call' || parsed.kind === 'tool_update') {
+    renderToolEntry(parsed, ctx);
+    chatAutoScroll(ctx);
+    return;
+  }
+
+  if (parsed.kind === 'permission') {
+    const div = document.createElement('div');
+    div.className = 'log-entry chat-permission' + (ctx.isActive ? '' : ' resolved');
+    div.textContent = 'Waiting for approval: ' + parsed.title;
+    ctx.container.appendChild(div);
+    chatAutoScroll(ctx);
+    return;
+  }
+
+  if (parsed.kind === 'internal') {
+    const div = document.createElement('div');
+    div.className = 'log-entry chat-internal';
+    if (!ctx.showInternals) div.style.display = 'none';
+    div.textContent = parsed.subtype + (parsed.text ? ' — ' + parsed.text : '');
+    ctx.container.appendChild(div);
+    chatAutoScroll(ctx);
+    return;
+  }
+
+  // unknown
+  const div = document.createElement('div');
+  div.className = 'log-entry chat-unknown';
+  div.textContent = parsed.typeLabel;
+  ctx.container.appendChild(div);
+  chatAutoScroll(ctx);
+}
+
+// Baseline tool-entry rendering. Full collapse/last-N/Show-more behaviour is
+// finished in item 65 (tasks 5-7); here each tool call is a card whose body
+// accumulates its update text so the dispatch is total and non-throwing.
+function renderToolEntry(parsed, ctx) {
+  let id;
+  if (parsed.kind === 'tool_call') {
+    id = parsed.toolCallId != null ? parsed.toolCallId : 'legacy-' + ctx.entryCount;
+  } else {
+    id = parsed.toolCallId || 'legacy-' + ctx.entryCount;
+  }
+  let card = ctx.toolCards.get(id);
+  if (!card) {
+    const div = document.createElement('div');
+    div.className = 'log-entry chat-tool';
+    const header = document.createElement('div');
+    header.className = 'chat-tool-header';
+    const title = document.createElement('span');
+    title.className = 'chat-tool-title';
+    title.textContent = parsed.kind === 'tool_call' && parsed.title
+      ? String(parsed.title).split('\\n')[0]
+      : 'Tool call';
+    header.appendChild(title);
+    const body = document.createElement('pre');
+    body.className = 'chat-tool-body';
+    div.appendChild(header);
+    div.appendChild(body);
+    ctx.container.appendChild(div);
+    card = { card: div, body: body, lines: [] };
+    ctx.toolCards.set(id, card);
+  } else if (parsed.kind === 'tool_call' && parsed.title) {
+    const titleEl = card.card.querySelector('.chat-tool-title');
+    if (titleEl) titleEl.textContent = String(parsed.title).split('\\n')[0];
+  }
+  if (parsed.kind === 'tool_update' && parsed.text) {
+    parsed.text.split('\\n').forEach(function(line) { card.lines.push(line); });
+    card.body.textContent = card.lines.join('\\n');
+  }
 }
 
 // --- API helpers ---
