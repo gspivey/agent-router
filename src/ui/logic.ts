@@ -325,7 +325,12 @@ export function parseStreamEntry(raw: unknown): ParsedEntry {
 
     // Kiro internal noise.
     if (type && type.startsWith('_kiro.dev/')) {
-      return { kind: 'internal', subtype: type, text: asText(entry.content) };
+      // For metadata entries, precompute a compact context%/duration pill string
+      // so the renderer can display `text` directly; other internal events keep
+      // their raw `content` text.
+      const text =
+        type === '_kiro.dev/metadata' ? formatMetadataPill(entry) : asText(entry.content);
+      return { kind: 'internal', subtype: type, text };
     }
 
     // Legacy flat fallbacks emitted by older sessions / the test harness.
@@ -455,4 +460,102 @@ export function renderMarkdown(text: string): string {
   out = out.replace(/\u0000CODEBLOCK(\d+)\u0000/g, (_m, i: string) => codeBlocks[Number(i)] ?? '');
 
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Kiro internal metadata pill (session stream chat view)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the first numeric candidate field from a raw entry (and its optional
+ * nested `metadata` object). Tolerant of missing/differently-named fields
+ * because the exact `_kiro.dev/metadata` shape is not pinned down in this
+ * codebase — several plausible key spellings are accepted.
+ */
+function firstNumber(raw: Record<string, unknown>, keys: readonly string[]): number | undefined {
+  const nested =
+    raw.metadata && typeof raw.metadata === 'object'
+      ? (raw.metadata as Record<string, unknown>)
+      : undefined;
+  for (const key of keys) {
+    const v = raw[key] ?? nested?.[key];
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return undefined;
+}
+
+/** Candidate field names for the context-usage percentage. */
+const CONTEXT_PERCENT_KEYS: readonly string[] = [
+  'context_usage_percent',
+  'contextUsagePercent',
+  'context_percent',
+  'contextPercent',
+  'context_usage',
+  'contextUsage',
+];
+
+/** Candidate field names for the turn duration, expressed in milliseconds. */
+const TURN_DURATION_MS_KEYS: readonly string[] = [
+  'turn_duration_ms',
+  'turnDurationMs',
+  'duration_ms',
+  'durationMs',
+];
+
+/** Candidate field names for the turn duration, expressed in seconds. */
+const TURN_DURATION_S_KEYS: readonly string[] = [
+  'turn_duration_seconds',
+  'turnDurationSeconds',
+  'duration_seconds',
+  'durationSeconds',
+];
+
+/**
+ * Format a compact, human-readable pill string for a `_kiro.dev/metadata`
+ * entry, showing context-usage percentage and turn duration when present.
+ *
+ * Pure and total: never throws. The exact metadata field shape is not defined
+ * in this codebase, so this reads a tolerant set of candidate keys (see
+ * {@link CONTEXT_PERCENT_KEYS} / {@link TURN_DURATION_MS_KEYS}) at the top level
+ * or inside a nested `metadata` object. When neither the percentage nor the
+ * duration can be found, it falls back to the entry's `content` string, then to
+ * a generic `'metadata'` label — so the pill always has something to show.
+ *
+ * Examples:
+ * - `{ context_usage_percent: 42, turn_duration_ms: 1300 }` → `"Context 42% · 1.3s"`
+ * - `{ metadata: { contextPercent: 7 } }` → `"Context 7%"`
+ * - `{ turn_duration_ms: 850 }` → `"850ms"`
+ * - `{ content: 'raw note' }` → `"raw note"`
+ * - `{}` → `"metadata"`
+ */
+export function formatMetadataPill(raw: unknown): string {
+  if (!raw || typeof raw !== 'object') return 'metadata';
+  const entry = raw as Record<string, unknown>;
+
+  const parts: string[] = [];
+
+  const pct = firstNumber(entry, CONTEXT_PERCENT_KEYS);
+  if (pct !== undefined) {
+    // Round to at most one decimal, dropping a trailing `.0`.
+    const rounded = Math.round(pct * 10) / 10;
+    parts.push(`Context ${rounded}%`);
+  }
+
+  const durMs = firstNumber(entry, TURN_DURATION_MS_KEYS);
+  const durS = firstNumber(entry, TURN_DURATION_S_KEYS);
+  if (durMs !== undefined) {
+    parts.push(durMs >= 1000 ? `${Math.round(durMs / 100) / 10}s` : `${Math.round(durMs)}ms`);
+  } else if (durS !== undefined) {
+    parts.push(`${Math.round(durS * 10) / 10}s`);
+  }
+
+  if (parts.length > 0) return parts.join(' · ');
+
+  const content = asText(entry.content);
+  if (content.trim() !== '') return content;
+  return 'metadata';
 }

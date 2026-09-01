@@ -290,6 +290,47 @@ function asText(value) {
   return typeof value === 'string' ? value : '';
 }
 
+// formatMetadataPill: mirror of src/ui/logic.ts formatMetadataPill (Tier 1-tested).
+// Tolerant read of context% + turn duration from a _kiro.dev/metadata entry.
+function mdFirstNumber(raw, keys) {
+  const nested = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : undefined;
+  for (const key of keys) {
+    let v = raw[key];
+    if (v == null && nested) v = nested[key];
+    if (typeof v === 'number' && isFinite(v)) return v;
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v);
+      if (isFinite(n)) return n;
+    }
+  }
+  return undefined;
+}
+
+const CONTEXT_PERCENT_KEYS = ['context_usage_percent', 'contextUsagePercent', 'context_percent', 'contextPercent', 'context_usage', 'contextUsage'];
+const TURN_DURATION_MS_KEYS = ['turn_duration_ms', 'turnDurationMs', 'duration_ms', 'durationMs'];
+const TURN_DURATION_S_KEYS = ['turn_duration_seconds', 'turnDurationSeconds', 'duration_seconds', 'durationSeconds'];
+
+function formatMetadataPill(raw) {
+  if (!raw || typeof raw !== 'object') return 'metadata';
+  const parts = [];
+  const pct = mdFirstNumber(raw, CONTEXT_PERCENT_KEYS);
+  if (pct !== undefined) {
+    const rounded = Math.round(pct * 10) / 10;
+    parts.push('Context ' + rounded + '%');
+  }
+  const durMs = mdFirstNumber(raw, TURN_DURATION_MS_KEYS);
+  const durS = mdFirstNumber(raw, TURN_DURATION_S_KEYS);
+  if (durMs !== undefined) {
+    parts.push(durMs >= 1000 ? (Math.round(durMs / 100) / 10) + 's' : Math.round(durMs) + 'ms');
+  } else if (durS !== undefined) {
+    parts.push((Math.round(durS * 10) / 10) + 's');
+  }
+  if (parts.length > 0) return parts.join(' · ');
+  const content = asText(raw.content);
+  if (content.trim() !== '') return content;
+  return 'metadata';
+}
+
 const SYSTEM_SUBTYPES = ['session_started', 'prompt_injected', 'session_ended', 'session_verified', 'verification_failed', 'web_inject', 'web_interrupt'];
 
 function mapSystem(subtype, raw) {
@@ -353,7 +394,8 @@ function parseStreamEntry(raw) {
       return { kind: 'permission', title: title };
     }
     if (type && type.indexOf('_kiro.dev/') === 0) {
-      return { kind: 'internal', subtype: type, text: asText(entry.content) };
+      const text = type === '_kiro.dev/metadata' ? formatMetadataPill(entry) : asText(entry.content);
+      return { kind: 'internal', subtype: type, text: text };
     }
     if (type === 'agent_message') {
       return { kind: 'agent_message', text: asText(entry.content), streaming: false };
@@ -376,6 +418,7 @@ function makeRenderCtx(container, meta) {
     showInternals: false,
     openBubble: null,
     toolCards: new Map(),
+    latestToolCard: null,
     autoScroll: true,
     entryCount: 0,
     repo: (meta && meta.repo) || '',
@@ -477,7 +520,14 @@ function renderStreamEntry(parsed, ctx) {
     const div = document.createElement('div');
     div.className = 'log-entry chat-internal';
     if (!ctx.showInternals) div.style.display = 'none';
-    div.textContent = parsed.subtype + (parsed.text ? ' — ' + parsed.text : '');
+    if (parsed.subtype === '_kiro.dev/metadata') {
+      const pill = document.createElement('span');
+      pill.className = 'chat-meta-pill';
+      pill.textContent = parsed.text || 'metadata';
+      div.appendChild(pill);
+    } else {
+      div.textContent = parsed.subtype + (parsed.text ? ' — ' + parsed.text : '');
+    }
     ctx.container.appendChild(div);
     chatAutoScroll(ctx);
     return;
@@ -491,9 +541,38 @@ function renderStreamEntry(parsed, ctx) {
   chatAutoScroll(ctx);
 }
 
-// Baseline tool-entry rendering. Full collapse/last-N/Show-more behaviour is
-// finished in item 65 (tasks 5-7); here each tool call is a card whose body
-// accumulates its update text so the dispatch is total and non-throwing.
+// Tool-call collapsible cards (item 65, task 5).
+// - Cards are keyed by toolCallId (synthetic 'legacy-' + entryCount when null).
+// - tool_update appends lines; a card is created lazily if the id is unknown.
+// - Body shows the last TOOL_TAIL_LINES lines with a "Show more" toggle for the full output.
+// - On terminal sessions every card is collapsed by default. On active sessions the
+//   latest tool card is expanded and the previously-latest one collapses.
+// - Clicking the header toggles expand/collapse.
+var TOOL_TAIL_LINES = 20;
+
+function renderToolBody(card) {
+  const lines = card.lines;
+  const showingAll = card.showAll || lines.length <= TOOL_TAIL_LINES;
+  const visible = showingAll ? lines : lines.slice(lines.length - TOOL_TAIL_LINES);
+  card.body.textContent = visible.join('\\n');
+  if (lines.length > TOOL_TAIL_LINES) {
+    card.showMore.style.display = '';
+    card.showMore.textContent = card.showAll
+      ? 'Show less'
+      : 'Show more (' + (lines.length - TOOL_TAIL_LINES) + ' more lines)';
+  } else {
+    card.showMore.style.display = 'none';
+  }
+}
+
+function setToolCollapsed(card, collapsed) {
+  card.collapsed = collapsed;
+  if (collapsed) card.card.classList.add('collapsed');
+  else card.card.classList.remove('collapsed');
+  const icon = card.card.querySelector('.collapse-icon');
+  if (icon) icon.textContent = collapsed ? '\\u25B6' : '\\u25BC';
+}
+
 function renderToolEntry(parsed, ctx) {
   let id;
   if (parsed.kind === 'tool_call') {
@@ -512,21 +591,48 @@ function renderToolEntry(parsed, ctx) {
     title.textContent = parsed.kind === 'tool_call' && parsed.title
       ? String(parsed.title).split('\\n')[0]
       : 'Tool call';
+    const icon = document.createElement('span');
+    icon.className = 'collapse-icon';
     header.appendChild(title);
+    header.appendChild(icon);
     const body = document.createElement('pre');
     body.className = 'chat-tool-body';
+    const showMore = document.createElement('button');
+    showMore.className = 'show-more-btn';
+    showMore.style.display = 'none';
     div.appendChild(header);
     div.appendChild(body);
+    div.appendChild(showMore);
     ctx.container.appendChild(div);
-    card = { card: div, body: body, lines: [] };
+    card = { card: div, header: header, body: body, showMore: showMore, lines: [], collapsed: true, showAll: false };
     ctx.toolCards.set(id, card);
+
+    header.addEventListener('click', function() { setToolCollapsed(card, !card.collapsed); });
+    showMore.addEventListener('click', function(e) {
+      e.stopPropagation();
+      card.showAll = !card.showAll;
+      renderToolBody(card);
+    });
+
+    // Collapse state: on active sessions the newest card is expanded and the
+    // previously-expanded latest card collapses. On terminal sessions all cards
+    // stay collapsed by default.
+    if (ctx.isActive) {
+      if (ctx.latestToolCard && ctx.latestToolCard !== card) setToolCollapsed(ctx.latestToolCard, true);
+      setToolCollapsed(card, false);
+      ctx.latestToolCard = card;
+    } else {
+      setToolCollapsed(card, true);
+    }
+    renderToolBody(card);
   } else if (parsed.kind === 'tool_call' && parsed.title) {
     const titleEl = card.card.querySelector('.chat-tool-title');
     if (titleEl) titleEl.textContent = String(parsed.title).split('\\n')[0];
   }
+
   if (parsed.kind === 'tool_update' && parsed.text) {
     parsed.text.split('\\n').forEach(function(line) { card.lines.push(line); });
-    card.body.textContent = card.lines.join('\\n');
+    renderToolBody(card);
   }
 }
 
@@ -916,6 +1022,7 @@ async function handleShowMore(btn) {
 
 // --- Detail view ---
 let activeSSE = null; // { eventSource, sessionId, reconnectTimer, attempt, lastId, ended }
+let activeRenderCtx = null; // RenderCtx for the mounted detail view; survives SSE reconnects
 
 function closeSSE() {
   if (!activeSSE) return;
@@ -1021,7 +1128,11 @@ function connectSSE(sessionId, lastId) {
               }
               activeSSE.lastId = trackLastEventId(activeSSE.lastId, id);
             }
-            appendLogEntry(currentData);
+            if (activeRenderCtx) {
+              try {
+                renderStreamEntry(parseStreamEntry(JSON.parse(currentData)), activeRenderCtx);
+              } catch (e) { /* ignore malformed SSE payloads */ }
+            }
             if (currentEvent === 'session_ended') {
               activeSSE.ended = true;
               updateSSEStatus('Stream ended');
@@ -1056,16 +1167,6 @@ function scheduleReconnect(sessionId) {
       connectSSE(sessionId, activeSSE.lastId);
     }
   }, delay);
-}
-
-function appendLogEntry(data) {
-  const container = document.getElementById('log-container');
-  if (!container) return;
-  const div = document.createElement('div');
-  div.className = 'log-entry';
-  div.textContent = data;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
 }
 
 function updateSSEStatus(text) {
@@ -1113,16 +1214,53 @@ async function loadDetailView(sessionId) {
     html += renderDetailMeta(meta);
     html += renderControls(meta);
     html += '<div class="sse-status" id="sse-status"></div>';
-    html += '<div id="log-container"></div>';
+    html += '<div class="stream-toolbar"><label><input type="checkbox" id="toggle-internals"> Show internals</label></div>';
+    html += '<div id="log-container" class="chat-stream"></div>';
+    html += '<button id="jump-to-bottom" style="display:none">Jump to bottom \\u2193</button>';
     detailView.innerHTML = html;
 
-    // Render existing entries
+    // Build the render context and render existing entries through the shared
+    // per-type renderer (same code path as the SSE handler).
     const container = document.getElementById('log-container');
+    const ctx = makeRenderCtx(container, meta);
     for (const entry of data.entries) {
-      const div = document.createElement('div');
-      div.className = 'log-entry';
-      div.textContent = JSON.stringify(entry);
-      container.appendChild(div);
+      renderStreamEntry(parseStreamEntry(entry), ctx);
+    }
+    // After the initial batch, snap to the newest entry (preserves prior behavior).
+    container.scrollTop = container.scrollHeight;
+
+    // Wire the "Show internals" toggle: flip ctx.showInternals and show/hide
+    // all .chat-internal elements.
+    const toggleInternals = document.getElementById('toggle-internals');
+    if (toggleInternals) {
+      toggleInternals.addEventListener('change', function() {
+        ctx.showInternals = toggleInternals.checked;
+        const internals = container.querySelectorAll('.chat-internal');
+        for (let i = 0; i < internals.length; i++) {
+          internals[i].style.display = ctx.showInternals ? '' : 'none';
+        }
+      });
+    }
+
+    // Scroll listener: disable auto-scroll when the user scrolls up, re-enable
+    // (and hide the jump button) when they return to the bottom.
+    const jumpBtn = document.getElementById('jump-to-bottom');
+    container.addEventListener('scroll', function() {
+      const atBottom = container.scrollTop >= container.scrollHeight - container.clientHeight - 20;
+      if (atBottom) {
+        ctx.autoScroll = true;
+        if (jumpBtn) jumpBtn.style.display = 'none';
+      } else {
+        ctx.autoScroll = false;
+        if (jumpBtn && ctx.isActive) jumpBtn.style.display = '';
+      }
+    });
+    if (jumpBtn) {
+      jumpBtn.addEventListener('click', function() {
+        ctx.autoScroll = true;
+        container.scrollTop = container.scrollHeight;
+        jumpBtn.style.display = 'none';
+      });
     }
 
     // Wire controls
@@ -1172,8 +1310,15 @@ async function loadDetailView(sessionId) {
       });
     }
 
-    // Start SSE stream
-    connectSSE(sessionId, 0);
+    // Start SSE stream. Seed Last-Event-ID with the number of lines already
+    // rendered from the initial load so the broker's backlog replay only emits
+    // genuinely new entries (SSE ids are 1-indexed stream.log line numbers).
+    // entries.length + skipped_lines == total lines when the full file fit in
+    // the requested tail (lines=200), which covers ordinary sessions.
+    const initialLastId = (data.entries ? data.entries.length : 0) + (data.skipped_lines || 0);
+    connectSSE(sessionId, initialLastId);
+    // Store the render context so the SSE handler (and reconnects) reuse it.
+    activeRenderCtx = ctx;
 }
 
 function showKillConfirm(sessionId) {
@@ -1546,6 +1691,7 @@ function navigate() {
   const detailView = document.getElementById('detail-view');
   const configView = document.getElementById('config-view');
   closeSSE();
+  activeRenderCtx = null;
 
   // Update nav active state
   var navLinks = document.querySelectorAll('#main-nav .nav-link');

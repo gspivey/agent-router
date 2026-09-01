@@ -53,33 +53,33 @@ Tier 2 browser tests. No backend changes.
 
 ## Task 5: Tool-call collapsible cards
 **Depends on**: Task 4
-- [ ] `tool_call` creates a `.chat-tool` card keyed by `toolCallId` (or `'legacy-' + ctx.entryCount` when `toolCallId === null`), header = first line of `title`, registered in `ctx.toolCards`
-- [ ] `tool_update` appends `text` lines to the matching card's body; create the card lazily if the id is unknown
-- [ ] Body shows last 20 lines by default with a "Show more" button that expands full output
-- [ ] Collapsed by default on terminal sessions; latest tool card expanded by default on active sessions (previous collapses)
-- [ ] Header click toggles expand/collapse
+- [x] `tool_call` creates a `.chat-tool` card keyed by `toolCallId` (or `'legacy-' + ctx.entryCount` when `toolCallId === null`), header = first line of `title`, registered in `ctx.toolCards`
+- [x] `tool_update` appends `text` lines to the matching card's body; create the card lazily if the id is unknown
+- [x] Body shows last 20 lines by default with a "Show more" button that expands full output
+- [x] Collapsed by default on terminal sessions; latest tool card expanded by default on active sessions (previous collapses)
+- [x] Header click toggles expand/collapse
 
 **Requirements**: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7
 
 ## Task 6: Permission and internal rendering
 **Depends on**: Task 4
-- [ ] `permission` renders a yellow `.chat-permission` card "Waiting for approval: {title}"; muted style when session is terminal
-- [ ] `internal` renders `.chat-internal` hidden by default; `_kiro.dev/metadata` → gray `.chat-meta-pill` (context% + turn duration); others → compact row
-- [ ] Add the "Show internals" toggle in a `.stream-toolbar`; toggling flips `ctx.showInternals` and shows/hides `.chat-internal` elements
+- [x] `permission` renders a yellow `.chat-permission` card "Waiting for approval: {title}"; muted style when session is terminal
+- [x] `internal` renders `.chat-internal` hidden by default; `_kiro.dev/metadata` → gray `.chat-meta-pill` (context% + turn duration); others → compact row
+- [x] Add the "Show internals" toggle in a `.stream-toolbar`; toggling flips `ctx.showInternals` and shows/hides `.chat-internal` elements
 
 **Requirements**: 2.4, 2.5, 5.1, 5.2, 5.3, 7.1, 7.2, 7.3, 7.4
 
 ## Task 7: Wire loadDetailView, SSE path, and auto-scroll to the new renderer
 **Depends on**: Task 4, Task 5, Task 6
-- [ ] In `loadDetailView`, build the `.stream-toolbar` + `#log-container.chat-stream` + `#jump-to-bottom` markup
-- [ ] Create the `RenderCtx` (repo/`isActive` from `meta`, `entryCount: 0`) and store it on `activeSSE` so the SSE handler and reconnects reuse it
-- [ ] Replace the initial-load loop with `data.entries.forEach(e => renderStreamEntry(parseStreamEntry(e), ctx))`
-- [ ] Replace the `appendLogEntry(currentData)` call in the SSE message handler with `renderStreamEntry(parseStreamEntry(JSON.parse(currentData)), ctx)`; remove the old `appendLogEntry`
-- [ ] Preserve the `session_ended` special-case (set `ended`, "Stream ended", `hideControls()`)
-- [ ] Leave `connectSSE`, `scheduleReconnect`, de-dup, `Last-Event-ID`, visibility/online handlers, `renderDetailMeta`, and control wiring untouched
-- [ ] Add a `scroll` listener on `#log-container` that sets `ctx.autoScroll = false` and shows `#jump-to-bottom` (active sessions) when the user scrolls up past a threshold; re-enables and hides when back at bottom
-- [ ] `#jump-to-bottom` click scrolls to bottom and re-enables auto-scroll
-- [ ] Confirm the existing auto-scroll-on-new-entry behavior (Req 9.5) still holds for the `sse-render` auto-scroll test
+- [x] In `loadDetailView`, build the `.stream-toolbar` + `#log-container.chat-stream` + `#jump-to-bottom` markup
+- [x] Create the `RenderCtx` (repo/`isActive` from `meta`, `entryCount: 0`) and store it on `activeSSE` so the SSE handler and reconnects reuse it
+- [x] Replace the initial-load loop with `data.entries.forEach(e => renderStreamEntry(parseStreamEntry(e), ctx))`
+- [x] Replace the `appendLogEntry(currentData)` call in the SSE message handler with `renderStreamEntry(parseStreamEntry(JSON.parse(currentData)), ctx)`; remove the old `appendLogEntry`
+- [x] Preserve the `session_ended` special-case (set `ended`, "Stream ended", `hideControls()`)
+- [x] Leave `connectSSE`, `scheduleReconnect`, de-dup, `Last-Event-ID`, visibility/online handlers, `renderDetailMeta`, and control wiring untouched
+- [x] Add a `scroll` listener on `#log-container` that sets `ctx.autoScroll = false` and shows `#jump-to-bottom` (active sessions) when the user scrolls up past a threshold; re-enables and hides when back at bottom
+- [x] `#jump-to-bottom` click scrolls to bottom and re-enables auto-scroll
+- [x] Confirm the existing auto-scroll-on-new-entry behavior (Req 9.5) still holds for the `sse-render` auto-scroll test
 
 **Requirements**: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 8.1, 8.2, 8.3, 8.4, 9.1, 9.5
 
