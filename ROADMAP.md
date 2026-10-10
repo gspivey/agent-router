@@ -35,6 +35,46 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 70. Task/attempt/outcome — ROADMAP intake adapter + final verification
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `12.1`, `12.2`, `12.3`, `12.4`, `13.1`. Depends on item 69.
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `12.1`, `12.2`, `12.3`, `12.4`, `13.1`
+- [ ] Complete
+
+---
+
+### 69. Task/attempt/outcome — /v1 REST + SSE API, restart recovery, daemon wiring
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`, `10.5`, `11.1`, `11.2`, `11.3`. Depends on item 68.
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`, `10.5`, `11.1`, `11.2`, `11.3`
+- [ ] Complete
+
+---
+
+### 68. Task/attempt/outcome — attempt runner, repo scheduler/breaker, agent outcome channel, transcript retention
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `4.1`, `4.2`, `4.3`, `5.1`, `5.2`, `5.3`, `5.4`, `5.5`, `6.1`, `6.2`, `6.3`, `7.1`, `7.2`, `7.3`, `8.1`, `8.2`, `8.3`. Depends on item 67.
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `4.1`, `4.2`, `4.3`, `5.1`, `5.2`, `5.3`, `5.4`, `5.5`, `6.1`, `6.2`, `6.3`, `7.1`, `7.2`, `7.3`, `8.1`, `8.2`, `8.3`
+- [ ] Complete
+
+---
+
+### 67. Task/attempt/outcome — ULID, types, DB tables, task service/state machine
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1.1`, `1.2`, `1.3`, `1.4`, `2.1`, `2.2`, `2.3`, `2.4`, `2.5`, `3.1`, `3.2`, `3.3`.
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `1.1`, `1.2`, `1.3`, `1.4`, `2.1`, `2.2`, `2.3`, `2.4`, `2.5`, `3.1`, `3.2`, `3.3`
+- [ ] Complete
+
+---
+
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
