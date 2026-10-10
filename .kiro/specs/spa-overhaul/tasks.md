@@ -19,7 +19,7 @@ sub-task's box only when its code and its tests are on the branch and green.
 
 ---
 
-- [ ] 1. Client build infrastructure + history/SSE seam field (ROADMAP 71)
+- [x] 1. Client build infrastructure + history/SSE seam field (ROADMAP 71)
   > **Broker id prerequisite (HIGH-B):** before this task merges, verify in `src/sse-broker.ts`
   > that the broker assigns consecutive SSE ids to VALID entries only, by incrementing its own id
   > counter once per valid entry — malformed lines are dropped before id assignment and never
@@ -29,7 +29,7 @@ sub-task's box only when its code and its tests are on the branch and green.
   > derivation in sub-task 1.8 depends on this no-gaps guarantee. If the broker does NOT drop
   > malformed lines before id assignment or does NOT assign contiguous ids to valid entries,
   > the id-derivation approach must be redesigned and this task is BLOCKED until that is resolved.
-  - [ ] 1.1 Create `client/` with its own `package.json` declaring Svelte 5 (`svelte` `^5`),
+  - [x] 1.1 Create `client/` with its own `package.json` declaring Svelte 5 (`svelte` `^5`),
     Vite (`^5`), Tailwind CSS pinned to the v3 line (`tailwindcss` `^3.4.0`, must NOT resolve to
     v4), and TypeScript, plus the exact dev dependencies: `postcss ^8.4.0`, `autoprefixer ^10.4.0`,
     `@sveltejs/vite-plugin-svelte ^4.0.0`, `svelte-check ^4.0.0`, `vitest ^2.0.0`,
@@ -38,7 +38,7 @@ sub-task's box only when its code and its tests are on the branch and green.
     `svelte-routing` or any external routing library — hash routing is hand-rolled in
     `client/src/lib/router.svelte.ts` via the native `hashchange` event (HIGH-4). (Req 1.1, 1.2,
     1.9; HIGH-8.)
-  - [ ] 1.2 Add `client/vite.config.ts`, `client/svelte.config.js`, `client/tailwind.config.ts`,
+  - [x] 1.2 Add `client/vite.config.ts`, `client/svelte.config.js`, `client/tailwind.config.ts`,
     and `client/postcss.config.js`. Configure the Vite dev server with `port: 5174`,
     `strictPort: true`, `allowedHosts: ['localhost','127.0.0.1']`, `hmr: { port: 5175 }`, and a
     proxy of `/api`, `/sessions` (`ws: true`), `/repos`, `/projects`, `/config` to
@@ -46,25 +46,25 @@ sub-task's box only when its code and its tests are on the branch and green.
     Add the `@shared/logic` alias to `../src/ui/logic.ts` (the ONLY cross-directory import) and
     set `server.fs.allow: ['..']` so Vite can serve `../src/ui/logic.ts` in dev (HIGH-3).
     (Req 1.1, 2.2; design: dev proxy, Vite base + asset paths, shared logic.)
-  - [ ] 1.3 Add `client/tsconfig.json` targeting the DOM lib; it must NOT extend the root
+  - [x] 1.3 Add `client/tsconfig.json` targeting the DOM lib; it must NOT extend the root
     tsconfig (Req 1.5). Add a `compilerOptions.paths` entry
     `{ "@shared/logic": ["../src/ui/logic.ts"] }` (one level up, since `client/` and `src/` are
     siblings) mirroring the Vite alias so `svelte-check`
     and the TS language service resolve the shared module (HIGH-3).
-  - [ ] 1.4 Add `client/index.html` with
+  - [x] 1.4 Add `client/index.html` with
     `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`
     and the `<!--__DAEMON_TOKEN__-->` sentinel before `</head>` (Req 1.4; design: token embed).
     Acceptance: `svelte-check` exits 0 with the `@shared/logic` alias resolving correctly through
     the tsconfig `paths` entry (HIGH-3).
-  - [ ] 1.5 Add `client/src/app.css` defining the full palette as `:root` CSS custom properties
+  - [x] 1.5 Add `client/src/app.css` defining the full palette as `:root` CSS custom properties
     with the exact token names and values in Req 1.7, and wire Tailwind base/components/utilities
     layers (Req 1.7).
-  - [ ] 1.6 Add `client/src/main.ts` + `client/src/App.svelte` as a minimal "Hello World" mount
+  - [x] 1.6 Add `client/src/main.ts` + `client/src/App.svelte` as a minimal "Hello World" mount
     (no feature UI yet).
-  - [ ] 1.7 Add root `package.json` scripts `build:client` (`npm --prefix client run build`) and
+  - [x] 1.7 Add root `package.json` scripts `build:client` (`npm --prefix client run build`) and
     `dev:client` (`npm --prefix client run dev`), leaving `start`, `dev`, `typecheck`, `test`,
     `test:*` unchanged (Req 1.6).
-  - [ ] 1.8 **Backend seam (CRITICAL-2 / HIGH-B):** add the additive `first_event_id: number | null`
+  - [x] 1.8 **Backend seam (CRITICAL-2 / HIGH-B):** add the additive `first_event_id: number | null`
     and `last_event_id: number | null` fields to the `GET /sessions/:id?lines=200` response in
     `src/web-routes.ts`. `last_event_id` is the broker's own id counter value for the LAST valid
     entry in the slice (the counter advances once per valid entry, so this is NOT the raw line
@@ -92,7 +92,7 @@ sub-task's box only when its code and its tests are on the branch and green.
     entries replay in order, not the malformed ones).
     The test does NOT hang: the whole window is present in `stream.log` before the subscribe, and
     the SSE endpoint supports replay from `Last-Event-ID` (Req 10.1, 10.2, 10.4; NFR-2.1).
-  - [ ] 1.9 Add `client/dist/` to `.gitignore`. Verify `npm run build:client` emits
+  - [x] 1.9 Add `client/dist/` to `.gitignore`. Verify `npm run build:client` emits
     `client/dist/index.html` and exits 0, the gzipped JS payload is under 300 KB, and
     `npm run check` passes (Req 1.3; NFR-1.1).
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.9, 1.10, 10.1, 10.2, 10.4; NFR-1.1, NFR-2.1, NFR-2.3, NFR-3.1_
