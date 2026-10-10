@@ -35,16 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 70. Task/attempt/outcome — ROADMAP intake adapter + final verification
-
-Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `12.1`, `12.2`, `12.3`, `12.4`, `13.1`. Depends on item 69.
-
-- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `12.1`, `12.2`, `12.3`, `12.4`, `13.1`
-- [ ] Complete
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -94,6 +84,16 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 70. Task/attempt/outcome — ROADMAP intake adapter + final verification
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `12.1`, `12.2`, `12.3`, `12.4`, `13.1`. Depends on item 69.
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `12.1`, `12.2`, `12.3`, `12.4`, `13.1`
+- [x] Complete · PR: #128
+
+---
 
 ### 69. Task/attempt/outcome — /v1 REST + SSE API, restart recovery, daemon wiring
 
