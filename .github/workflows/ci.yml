@@ -17,21 +17,19 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.15'
           cache: npm
 
       - run: npm ci
 
       - name: Typecheck
         id: typecheck
-        continue-on-error: true
         env:
           NO_COLOR: '1'
         run: npx tsc --noEmit 2>&1 | tee typecheck-output.txt
 
       - name: Test
         id: test
-        continue-on-error: true
         run: npx vitest run --project tier1 --project tier2 --reporter=default --reporter=junit --outputFile=test-results.xml
 
       - name: Generate Report
