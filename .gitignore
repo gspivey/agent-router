@@ -1,5 +1,9 @@
 node_modules/
 
+# Svelte SPA build output (served in prod under /app) and its own deps.
+client/dist/
+client/node_modules/
+
 # Scratch dir for tier 3 webhook payload captures (AGENT_ROUTER_CAPTURE_PAYLOADS).
 # Promote interesting captures into test/fixtures/webhooks/ with a sidecar
 # .expect.json to make them permanent matrix-test fixtures.

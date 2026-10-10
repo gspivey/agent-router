@@ -201,35 +201,73 @@ export function paginateSessions(
   };
 }
 
+/**
+ * Read the last `lines` NDJSON entries from a stream.log file.
+ *
+ * Returns the parsed valid entries, the count of malformed lines within the
+ * returned window (`skipped_lines`), and `first_event_id`/`last_event_id` —
+ * the SSE broker ids of the FIRST and LAST valid entries in the slice.
+ *
+ * Broker id derivation (HIGH-B — verified against src/sse-broker.ts):
+ * The SSE broker assigns `id = raw 1-indexed line number` to EVERY line it
+ * emits, including malformed ones — it does NOT drop malformed lines before id
+ * assignment, so broker ids are NOT contiguous across *valid* entries when a
+ * malformed line sits between them. (This contradicts the earlier spec
+ * assumption that malformed lines are dropped before id assignment; per the
+ * HIGH-B gate the derivation is redesigned to match the real broker, which is
+ * the source of truth.) Therefore `first_event_id`/`last_event_id` are the raw
+ * 1-indexed line numbers of the first/last valid entries, which equal the SSE
+ * ids the broker will emit for those entries. The SPA sends
+ * `Last-Event-ID: <last_event_id>` so SSE replay resumes exactly after the
+ * last entry in this slice.
+ *
+ * `skipped_lines` (malformed lines within the window) is informational only and
+ * is NOT used to derive ids. In particular `last_event_id` is NOT
+ * `skipped_lines + entries.length`.
+ *
+ * Both ids are `null` when there are no valid entries in the slice.
+ */
 export function tailStreamLog(
   streamPath: string,
   lines: number,
-): { entries: unknown[]; skipped_lines: number } {
+): { entries: unknown[]; skipped_lines: number; first_event_id: number | null; last_event_id: number | null } {
   let content: string;
   try {
     content = fs.readFileSync(streamPath, 'utf-8');
   } catch {
-    return { entries: [], skipped_lines: 0 };
+    return { entries: [], skipped_lines: 0, first_event_id: null, last_event_id: null };
   }
 
   if (content.length === 0) {
-    return { entries: [], skipped_lines: 0 };
+    return { entries: [], skipped_lines: 0, first_event_id: null, last_event_id: null };
   }
 
+  // Non-empty lines, mirroring the broker's line accounting for append-only
+  // NDJSON (one entry per line, no interior blank lines). The broker numbers
+  // lines from 1, so the raw line number of rawLines[i] is i + 1.
   const rawLines = content.split('\n').filter(l => l.length > 0);
-  const tail = rawLines.slice(-lines);
+  const windowStart = Math.max(0, rawLines.length - lines);
+  const tail = rawLines.slice(windowStart);
+
   const entries: unknown[] = [];
   let skipped = 0;
+  let firstEventId: number | null = null;
+  let lastEventId: number | null = null;
 
-  for (const line of tail) {
+  for (let i = 0; i < tail.length; i++) {
+    const line = tail[i]!;
     try {
       entries.push(JSON.parse(line));
+      // Raw 1-indexed line number == broker SSE id for this entry.
+      const brokerId = windowStart + i + 1;
+      if (firstEventId === null) firstEventId = brokerId;
+      lastEventId = brokerId;
     } catch {
       skipped++;
     }
   }
 
-  return { entries, skipped_lines: skipped };
+  return { entries, skipped_lines: skipped, first_event_id: firstEventId, last_event_id: lastEventId };
 }
 
 // --- Repo grouping helpers (exported for testing) ---
@@ -653,9 +691,9 @@ export function createWebRoutes(deps: {
 
     const meta = sessionFiles.readMeta(id);
     const streamPath = path.join(rootDir, 'sessions', id, 'stream.log');
-    const { entries, skipped_lines } = tailStreamLog(streamPath, lines);
+    const { entries, skipped_lines, first_event_id, last_event_id } = tailStreamLog(streamPath, lines);
 
-    return c.json({ meta, entries, skipped_lines });
+    return c.json({ meta, entries, skipped_lines, first_event_id, last_event_id });
   });
 
   // GET /sessions/:id/stream

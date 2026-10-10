@@ -88,6 +88,92 @@ describe('Property 10: Detail Tail Correctness', () => {
   });
 });
 
+describe('first_event_id / last_event_id derivation (broker raw line numbers)', () => {
+  it('returns null ids for an empty / missing stream', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ids-empty-'));
+    const streamPath = path.join(tmpDir, 'stream.log');
+    fs.writeFileSync(streamPath, '');
+    const result = tailStreamLog(streamPath, 200);
+    expect(result.entries.length).toBe(0);
+    expect(result.first_event_id).toBeNull();
+    expect(result.last_event_id).toBeNull();
+    // Missing file
+    const missing = tailStreamLog(path.join(tmpDir, 'nope.log'), 200);
+    expect(missing.first_event_id).toBeNull();
+    expect(missing.last_event_id).toBeNull();
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it('ids are raw 1-indexed line numbers of first/last valid entries (all valid)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ids-valid-'));
+    const streamPath = path.join(tmpDir, 'stream.log');
+    const lines = Array.from({ length: 10 }, (_, i) =>
+      JSON.stringify({ ts: `2025-01-01T00:00:${String(i).padStart(2, '0')}Z`, source: 'router', type: `t${i}` }),
+    );
+    fs.writeFileSync(streamPath, lines.join('\n') + '\n');
+
+    const full = tailStreamLog(streamPath, 2000);
+    expect(full.entries.length).toBe(10);
+    expect(full.first_event_id).toBe(1);
+    expect(full.last_event_id).toBe(10);
+
+    // A window of the last 3 lines: broker ids are the raw line numbers 8,9,10.
+    const windowed = tailStreamLog(streamPath, 3);
+    expect(windowed.entries.length).toBe(3);
+    expect(windowed.first_event_id).toBe(8);
+    expect(windowed.last_event_id).toBe(10);
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it('malformed lines consume a broker id (ids NOT equal to valid-entry positions)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ids-malformed-'));
+    const streamPath = path.join(tmpDir, 'stream.log');
+    // Line 1: valid, line 2: malformed, line 3: valid, line 4: malformed, line 5: valid.
+    const lines = [
+      JSON.stringify({ ts: '2025-01-01T00:00:00Z', source: 'router', type: 'a' }),
+      'not json',
+      JSON.stringify({ ts: '2025-01-01T00:00:02Z', source: 'router', type: 'b' }),
+      '{broken',
+      JSON.stringify({ ts: '2025-01-01T00:00:04Z', source: 'router', type: 'c' }),
+    ];
+    fs.writeFileSync(streamPath, lines.join('\n') + '\n');
+
+    const result = tailStreamLog(streamPath, 2000);
+    expect(result.entries.length).toBe(3);
+    expect(result.skipped_lines).toBe(2);
+    // First valid entry is raw line 1; last valid entry is raw line 5.
+    expect(result.first_event_id).toBe(1);
+    expect(result.last_event_id).toBe(5);
+    // Prove the id is NOT skipped_lines + entries.length (= 5 here by coincidence of
+    // this fixture would be 2+3=5; use an asymmetric fixture below to disambiguate).
+  });
+
+  it('last_event_id is NOT skipped_lines + entries.length when malformed lines trail', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ids-trail-'));
+    const streamPath = path.join(tmpDir, 'stream.log');
+    // 3 valid lines then 2 trailing malformed lines. Last VALID entry is raw line 3.
+    const lines = [
+      JSON.stringify({ ts: '2025-01-01T00:00:00Z', source: 'router', type: 'a' }),
+      JSON.stringify({ ts: '2025-01-01T00:00:01Z', source: 'router', type: 'b' }),
+      JSON.stringify({ ts: '2025-01-01T00:00:02Z', source: 'router', type: 'c' }),
+      'garbage-1',
+      'garbage-2',
+    ];
+    fs.writeFileSync(streamPath, lines.join('\n') + '\n');
+
+    const result = tailStreamLog(streamPath, 2000);
+    expect(result.entries.length).toBe(3);
+    expect(result.skipped_lines).toBe(2);
+    expect(result.first_event_id).toBe(1);
+    expect(result.last_event_id).toBe(3);
+    // skipped_lines + entries.length === 5, but last_event_id === 3. They differ.
+    expect(result.last_event_id).not.toBe(result.skipped_lines + result.entries.length);
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+});
+
 describe('validateLines', () => {
   it('accepts integers between 1 and 2000', () => {
     fc.assert(
