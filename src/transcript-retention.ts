@@ -14,10 +14,48 @@
  */
 import { createReadStream, existsSync } from 'node:fs';
 import { readFile, writeFile, rm } from 'node:fs/promises';
-import { zstdCompressSync, zstdDecompressSync, createZstdDecompress } from 'node:zlib';
-import type { Readable } from 'node:stream';
+import * as zlib from 'node:zlib';
+import type { Readable, Transform } from 'node:stream';
 import type { Logger } from './log.js';
 import type { TaskDatabase } from './task-db.js';
+
+/**
+ * Lazy, version-safe accessors for the zstd helpers (Requirement 11.2/10.4).
+ *
+ * zstd support (`zstdCompressSync`/`zstdDecompressSync`/`createZstdDecompress`)
+ * was added to `node:zlib` in Node 22.15+/23.8+. Importing those as static named
+ * ESM bindings crashes module load on older runtimes (e.g. the CI Node 20),
+ * which would take the whole daemon down at startup. Reading them off the
+ * `node:zlib` namespace at call time keeps this module importable everywhere and
+ * surfaces a clear error only if archiving/reading an archive is actually
+ * attempted on a runtime without zstd.
+ */
+type ZstdSync = (buf: Buffer | Uint8Array) => Buffer;
+type ZstdDecompressStream = () => Transform;
+
+function zstdCompressSyncFn(): ZstdSync {
+  const fn = (zlib as unknown as { zstdCompressSync?: ZstdSync }).zstdCompressSync;
+  if (typeof fn !== 'function') {
+    throw new Error('zstd compression is unavailable on this Node runtime (requires Node 22.15+)');
+  }
+  return fn;
+}
+
+function zstdDecompressSyncFn(): ZstdSync {
+  const fn = (zlib as unknown as { zstdDecompressSync?: ZstdSync }).zstdDecompressSync;
+  if (typeof fn !== 'function') {
+    throw new Error('zstd decompression is unavailable on this Node runtime (requires Node 22.15+)');
+  }
+  return fn;
+}
+
+function createZstdDecompressFn(): ZstdDecompressStream {
+  const fn = (zlib as unknown as { createZstdDecompress?: ZstdDecompressStream }).createZstdDecompress;
+  if (typeof fn !== 'function') {
+    throw new Error('zstd decompression is unavailable on this Node runtime (requires Node 22.15+)');
+  }
+  return fn;
+}
 
 /** Retention phase for a transcript (Requirement 11). */
 export type RetentionPhase = 'active' | 'archived' | 'deleted';
@@ -61,7 +99,7 @@ export async function archiveTranscript(rawPath: string): Promise<string> {
     return archivedPath;
   }
   const raw = await readFile(rawPath);
-  const compressed = zstdCompressSync(raw);
+  const compressed = zstdCompressSyncFn()(raw);
   await writeFile(archivedPath, compressed);
   await rm(rawPath, { force: true });
   return archivedPath;
@@ -82,7 +120,7 @@ export function readTranscript(ref: string): Readable | null {
   if (!existsSync(ref)) return null;
   if (isArchivedRef(ref)) {
     const source = createReadStream(ref);
-    const decompress = createZstdDecompress();
+    const decompress = createZstdDecompressFn()();
     source.on('error', (err) => decompress.destroy(err));
     return source.pipe(decompress);
   }
@@ -94,7 +132,7 @@ export async function readTranscriptBuffer(ref: string): Promise<Buffer | null> 
   if (!existsSync(ref)) return null;
   const raw = await readFile(ref);
   if (isArchivedRef(ref)) {
-    return Buffer.from(zstdDecompressSync(raw));
+    return Buffer.from(zstdDecompressSyncFn()(raw));
   }
   return raw;
 }
