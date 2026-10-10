@@ -91,7 +91,7 @@ Read `.kiro/specs/mcp-server-wiring/requirements.md`, `design.md`, and `tasks.md
 then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `7b`, `8`, `9`, `9b`, `10`, `11`.
 
 - Spec: `.kiro/specs/mcp-server-wiring/` · tasks `1`–`11` (including `9b`)
-- [x] Complete · PR: #PRNUM
+- [x] Complete · PR: #142
 
 ### 78. SPA overhaul — cutover: migrate / and /ui to the SPA, remove the monolith
 
