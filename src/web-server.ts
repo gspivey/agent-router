@@ -14,6 +14,8 @@ import { createWebRoutes } from './web-routes.js';
 import { createV1Routes } from './v1-routes.js';
 import type { V1RouteDeps } from './v1-routes.js';
 import { renderWebUI } from './web-ui.js';
+import { registerSpaRoutes } from './web-spa.js';
+import type { Context } from 'hono';
 import { FatalError } from './errors.js';
 import * as fs from 'node:fs';
 
@@ -145,6 +147,20 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
     const v1Routes = createV1Routes({ ...v1, log, rootDir, shuttingDown });
     app.route('/v1', v1Routes);
   }
+
+  // --- SPA serving under /app (registered LAST so API routes win) ---
+  // During migration the legacy `/` and `/ui` handlers above are untouched; the
+  // SPA is reachable only under /app and /app/*. Auth stays scoped to the API
+  // prefixes, so /app/* assets remain publicly fetchable.
+  const hasProxyProof = (c: Context): boolean =>
+    config.trustedProxy ? c.req.header(config.trustedProxy.proofHeader) !== undefined : false;
+  registerSpaRoutes(app, {
+    log,
+    clientDist: './client/dist',
+    token: tokenStore.read(),
+    bindPublic: config.bindPublic,
+    hasProxyProof,
+  });
 
   return app;
 }
