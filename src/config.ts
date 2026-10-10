@@ -54,6 +54,46 @@ export interface AgentRouterConfig {
   reaper: ReaperConfig;
   /** Optional project groupings for multi-repo visibility. */
   projects?: ProjectConfig[];
+  /**
+   * Stuck-agent idle timeout in seconds for task attempts (default 900). An
+   * attempt whose agent has produced no activity for this long is ended
+   * `timed_out` (task-attempt-outcome Requirement 17.6).
+   */
+  idleTimeoutSeconds: number;
+  /**
+   * Bounds the attempt setup phase (worktree creation through agent spawn) in
+   * seconds (default 120). A hung setup can never pin a repo slot forever
+   * (task-attempt-outcome Requirement 4.1c).
+   */
+  setupTimeoutSeconds: number;
+  /** Two-phase transcript retention for task attempts. */
+  taskTranscript: TaskTranscriptConfig;
+  /** ROADMAP intake-adapter scan cadence. */
+  roadmap: RoadmapConfig;
+}
+
+/** Per-repo circuit-breaker configuration (task-attempt-outcome Requirement 12.4/12.7/12.11). */
+export interface RepoCircuitBreakerConfig {
+  /** Consecutive infra failures that open the breaker (default 3). */
+  failureThreshold: number;
+  /** Seconds before an open breaker may half-open for a probe (default 3600). */
+  timeoutSeconds: number;
+}
+
+/** Two-phase transcript retention config (task-attempt-outcome Requirement 11). */
+export interface TaskTranscriptConfig {
+  /** active → archived grace in minutes (default 60). */
+  archiveGraceMinutes: number;
+  /** archived → deleted TTL in days (default 90). */
+  retentionDays: number;
+  /** sweep cadence in minutes (default 30). */
+  sweepIntervalMinutes: number;
+}
+
+/** ROADMAP importer config (task-attempt-outcome Requirement 20.1). */
+export interface RoadmapConfig {
+  /** cron-tick scan cadence in minutes (default 15). */
+  scanIntervalMinutes: number;
 }
 
 export interface RepoAdapterConfig {
@@ -72,6 +112,13 @@ export interface RepoConfig {
   webhookSecret?: string;
   /** Optional adapter override. Defaults to kiro when absent. */
   adapter?: RepoAdapterConfig;
+  /**
+   * Concurrent running task attempts for this repo (default 1)
+   * (task-attempt-outcome Requirement 12.1).
+   */
+  concurrency?: number;
+  /** Optional per-repo circuit-breaker configuration (task-attempt-outcome Requirement 12.4). */
+  circuitBreaker?: RepoCircuitBreakerConfig;
 }
 
 export interface CronConfig {
@@ -249,6 +296,40 @@ export function validateConfig(config: unknown): AgentRouterConfig {
         ...(rawAdapter['model'] !== undefined ? { model: rawAdapter['model'] as string } : {}),
       };
     }
+    if (repo['concurrency'] !== undefined) {
+      const val = repo['concurrency'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError(`Invalid "repos[${i}].concurrency": must be a positive integer`);
+      }
+      entry.concurrency = val;
+    }
+    if (repo['circuitBreaker'] !== undefined) {
+      const rawBreaker = repo['circuitBreaker'];
+      if (!isRecord(rawBreaker)) {
+        throw new FatalError(`Invalid "repos[${i}].circuitBreaker": must be an object`);
+      }
+      const failureThreshold = rawBreaker['failureThreshold'];
+      if (
+        typeof failureThreshold !== 'number' ||
+        !Number.isInteger(failureThreshold) ||
+        failureThreshold < 1
+      ) {
+        throw new FatalError(
+          `Invalid "repos[${i}].circuitBreaker.failureThreshold": must be a positive integer`
+        );
+      }
+      let timeoutSeconds = 3600;
+      if (rawBreaker['timeoutSeconds'] !== undefined) {
+        const val = rawBreaker['timeoutSeconds'];
+        if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+          throw new FatalError(
+            `Invalid "repos[${i}].circuitBreaker.timeoutSeconds": must be a positive integer`
+          );
+        }
+        timeoutSeconds = val;
+      }
+      entry.circuitBreaker = { failureThreshold, timeoutSeconds };
+    }
     repos.push(entry);
   }
 
@@ -420,6 +501,80 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     credentialMode = val;
   }
 
+  // idleTimeoutSeconds (optional, default 900) — stuck-agent idle timeout (Req 17.6)
+  let idleTimeoutSeconds = 900;
+  if (config['idleTimeoutSeconds'] !== undefined) {
+    const val = config['idleTimeoutSeconds'];
+    if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+      throw new FatalError('Invalid "idleTimeoutSeconds": must be a positive integer');
+    }
+    idleTimeoutSeconds = val;
+  }
+
+  // setupTimeoutSeconds (optional, default 120) — bounds the attempt setup phase (Req 4.1c)
+  let setupTimeoutSeconds = 120;
+  if (config['setupTimeoutSeconds'] !== undefined) {
+    const val = config['setupTimeoutSeconds'];
+    if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+      throw new FatalError('Invalid "setupTimeoutSeconds": must be a positive integer');
+    }
+    setupTimeoutSeconds = val;
+  }
+
+  // taskTranscript (optional with defaults) — two-phase retention (Req 11)
+  let archiveGraceMinutes = 60;
+  let taskRetentionDays = 90;
+  let transcriptSweepIntervalMinutes = 30;
+  if (config['taskTranscript'] !== undefined) {
+    const raw = config['taskTranscript'];
+    if (!isRecord(raw)) {
+      throw new FatalError('Invalid "taskTranscript": must be an object');
+    }
+    if (raw['archiveGraceMinutes'] !== undefined) {
+      const val = raw['archiveGraceMinutes'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "taskTranscript.archiveGraceMinutes": must be a positive integer');
+      }
+      archiveGraceMinutes = val;
+    }
+    if (raw['retentionDays'] !== undefined) {
+      const val = raw['retentionDays'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "taskTranscript.retentionDays": must be a positive integer');
+      }
+      taskRetentionDays = val;
+    }
+    if (raw['sweepIntervalMinutes'] !== undefined) {
+      const val = raw['sweepIntervalMinutes'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "taskTranscript.sweepIntervalMinutes": must be a positive integer');
+      }
+      transcriptSweepIntervalMinutes = val;
+    }
+  }
+  const taskTranscript: TaskTranscriptConfig = {
+    archiveGraceMinutes,
+    retentionDays: taskRetentionDays,
+    sweepIntervalMinutes: transcriptSweepIntervalMinutes,
+  };
+
+  // roadmap (optional with defaults) — scan cadence (Req 20.1)
+  let scanIntervalMinutes = 15;
+  if (config['roadmap'] !== undefined) {
+    const raw = config['roadmap'];
+    if (!isRecord(raw)) {
+      throw new FatalError('Invalid "roadmap": must be an object');
+    }
+    if (raw['scanIntervalMinutes'] !== undefined) {
+      const val = raw['scanIntervalMinutes'];
+      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+        throw new FatalError('Invalid "roadmap.scanIntervalMinutes": must be a positive integer');
+      }
+      scanIntervalMinutes = val;
+    }
+  }
+  const roadmap: RoadmapConfig = { scanIntervalMinutes };
+
   // Build set of known "owner/name" for cron repo matching
   const repoKeys = new Set(repos.map(r => `${r.owner}/${r.name}`));
 
@@ -571,6 +726,10 @@ export function validateConfig(config: unknown): AgentRouterConfig {
     shutdownDrainSeconds,
     credentialMode,
     reaper: reaperConfig,
+    idleTimeoutSeconds,
+    setupTimeoutSeconds,
+    taskTranscript,
+    roadmap,
   };
   if (defaultGithubToken !== undefined) {
     result.defaultGithubToken = defaultGithubToken;

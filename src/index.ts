@@ -52,6 +52,16 @@ import type { TokenStore } from './token-store.js';
 import { validateTokenStoreStartup } from './token-store-startup.js';
 import { createReaper } from './reaper.js';
 import type { Reaper } from './reaper.js';
+import { initTaskDatabase } from './task-db.js';
+import type { TaskDatabase } from './task-db.js';
+import { TaskService } from './task-service.js';
+import { RepoScheduler } from './repo-scheduler.js';
+import type { RepoSchedulerConfig } from './repo-scheduler.js';
+import { AttemptRunner } from './attempt-runner.js';
+import type { WorktreeOps, ProcessOps } from './attempt-runner.js';
+import { TaskEventBroker } from './task-event-broker.js';
+import { TranscriptRetentionSweeper } from './transcript-retention.js';
+import { runRestartRecovery } from './task-recovery.js';
 
 export { FatalError, EventError, WakeError };
 
@@ -61,6 +71,9 @@ export { FatalError, EventError, WakeError };
 
 const rootDir = process.env['AGENT_ROUTER_HOME'] ?? path.join(process.env['HOME'] ?? '.', '.agent-router');
 const configPath = path.join(rootDir, 'config.json');
+
+/** Daemon version recorded on the `daemon.started` task event (Requirement 13.4). */
+const DAEMON_VERSION = '0.1.0';
 
 // ---------------------------------------------------------------------------
 // CLI flags
@@ -299,6 +312,8 @@ interface DaemonState {
   credentialTokenStore: TokenStore | null;
   sessionMgr: SessionManager | null;
   db: Database | null;
+  taskEventBroker: TaskEventBroker | null;
+  transcriptSweeper: TranscriptRetentionSweeper | null;
   log: Logger;
   cronTasks: cron.ScheduledTask[];
   shuttingDown: boolean;
@@ -397,6 +412,16 @@ function installShutdownHandlers(state: DaemonState): void {
         state.log.info('Session manager shut down');
       }
 
+      // 6b. Stop the transcript retention sweeper and the task event broker
+      if (state.transcriptSweeper) {
+        state.transcriptSweeper.stop();
+        state.log.info('Transcript retention sweeper stopped');
+      }
+      if (state.taskEventBroker) {
+        state.taskEventBroker.shutdown();
+        state.log.info('Task event broker shut down');
+      }
+
       // 7. Close SSE broker and web server listener (5s drain for SSE connections)
       if (state.sseBroker) {
         state.sseBroker.shutdown();
@@ -461,6 +486,90 @@ async function main(): Promise<void> {
   const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
   db.pruneOutboundComments(SEVEN_DAYS_SECONDS);
   log.info('Outbound comments pruned');
+
+  // ---- Task layer (task-attempt-outcome) ----
+  // Share the open better-sqlite3 handle so the task tables live in the same DB
+  // (WAL mode already set by initDatabase).
+  const taskDb: TaskDatabase = initTaskDatabase(db.raw());
+  log.info('Task database initialized');
+
+  const configuredRepoSet = new Set(config.repos.map((r) => `${r.owner}/${r.name}`));
+
+  // Per-repo scheduler config resolved from RepoConfig (concurrency + breaker).
+  const schedulerConfigFor = (repo: string): RepoSchedulerConfig | undefined => {
+    const rc = configHolder.current.repos.find((r) => `${r.owner}/${r.name}` === repo);
+    if (rc === undefined) return undefined;
+    const cfg: RepoSchedulerConfig = {};
+    if (rc.concurrency !== undefined) cfg.concurrency = rc.concurrency;
+    if (rc.circuitBreaker !== undefined) {
+      cfg.failureThreshold = rc.circuitBreaker.failureThreshold;
+      cfg.timeoutSeconds = rc.circuitBreaker.timeoutSeconds;
+    }
+    return cfg;
+  };
+
+  // The attempt-spawn orchestration (worktree creation + agent spawn) lands in a
+  // later roadmap item. Until then the task layer is wired for submission,
+  // observation, cancel, and restart recovery; the scheduler's starter is a
+  // no-op (tasks remain queued) and the git/process effects are inert.
+  const taskWorktreeOps: WorktreeOps = {
+    add: async () => {},
+    remove: async () => {},
+    headSha: async () => '',
+    hasDiff: async () => false,
+    remoteBranchMatchesHead: async () => null,
+    clearOutcomeFile: async () => {},
+    readOutcomeFile: async () => null,
+  };
+  const taskProcessOps: ProcessOps = {
+    killProcessGroup: async () => {},
+  };
+
+  const taskEventBroker = new TaskEventBroker({ db: taskDb });
+  const repoScheduler = new RepoScheduler({
+    db: taskDb,
+    log,
+    startAttempt: async () => false,
+    configFor: schedulerConfigFor,
+  });
+  const attemptRunner = new AttemptRunner({
+    db: taskDb,
+    scheduler: repoScheduler,
+    log,
+    worktree: taskWorktreeOps,
+    process: taskProcessOps,
+  });
+  const taskService = new TaskService({
+    db: taskDb,
+    scheduler: repoScheduler,
+    configuredRepos: configuredRepoSet,
+  });
+
+  // Restart recovery: mark running attempts interrupted, sweep stranded running
+  // tasks, emit daemon.started. Runs before the web server accepts traffic.
+  await runRestartRecovery({
+    db: taskDb,
+    attemptRunner,
+    broker: taskEventBroker,
+    log,
+    version: DAEMON_VERSION,
+  });
+
+  // Two-phase transcript retention sweeper (independent of the reaper TTL).
+  const transcriptSweeper = new TranscriptRetentionSweeper({
+    db: taskDb,
+    log,
+    config: {
+      archiveGraceMinutes: config.taskTranscript.archiveGraceMinutes,
+      retentionDays: config.taskTranscript.retentionDays,
+      sweepIntervalMinutes: config.taskTranscript.sweepIntervalMinutes,
+    },
+  });
+  transcriptSweeper.start();
+  log.info('Transcript retention sweeper started', {
+    archiveGraceMinutes: config.taskTranscript.archiveGraceMinutes,
+    retentionDays: config.taskTranscript.retentionDays,
+  });
 
   // ---- Credential Token_Store startup ----
 
@@ -716,6 +825,18 @@ async function main(): Promise<void> {
     shuttingDown: () => shuttingDownRef.value,
     credentialTokenStore,
     db,
+    v1: {
+      taskService,
+      scheduler: repoScheduler,
+      eventBroker: taskEventBroker,
+      db: taskDb,
+      attemptRunner,
+      configuredRepos: configuredRepoSet,
+      transcript: {
+        graceMs: config.taskTranscript.archiveGraceMinutes * 60_000,
+        ttlMs: config.taskTranscript.retentionDays * 24 * 60 * 60_000,
+      },
+    },
   });
 
   const webServer = startWebServer(webApp, effectiveConfig, log);
@@ -793,6 +914,8 @@ async function main(): Promise<void> {
     credentialTokenStore,
     sessionMgr,
     db,
+    taskEventBroker,
+    transcriptSweeper,
     log,
     cronTasks,
     shuttingDown: false,

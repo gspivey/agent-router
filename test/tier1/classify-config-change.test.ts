@@ -17,6 +17,10 @@ function baseConfig(overrides?: Partial<AgentRouterConfig>): AgentRouterConfig {
     shutdownDrainSeconds: 60,
     credentialMode: 'env',
     reaper: { enabled: true, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
+    idleTimeoutSeconds: 900,
+    setupTimeoutSeconds: 120,
+    taskTranscript: { archiveGraceMinutes: 60, retentionDays: 90, sweepIntervalMinutes: 30 },
+    roadmap: { scanIntervalMinutes: 15 },
     ...overrides,
   };
 }
