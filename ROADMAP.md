@@ -75,16 +75,6 @@ then implement task `5`. Depends on item 74.
 
 ---
 
-### 74. SPA overhaul — mobile-first session list view, single Sessions nav
-
-Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement task `4`. Depends on item 73.
-
-- Spec: `.kiro/specs/spa-overhaul/` · task `4`
-- [ ] Complete · PR: --
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -134,6 +124,14 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 74. SPA overhaul — mobile-first session list view, single Sessions nav
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `4`. Depends on item 73.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `4`
+- [x] Complete · PR: #134
 
 ### 73. SPA overhaul — auth flow, typed API client, SSE stream client
 
