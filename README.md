@@ -47,8 +47,13 @@ cloudflared tunnel run agent-router
 #   Secret: same value as GITHUB_WEBHOOK_SECRET
 #   Events: Check runs, Issue comments, Pull request review comments
 
-# 5. Install the MCP config so Kiro can talk back to the daemon
-./scripts/install-mcp-config.sh
+# 5. (Optional) Install a GLOBAL MCP config for Kiro.
+#     As of the mcp-server-wiring feature the daemon wires its MCP server into
+#     every session automatically — you do NOT need this for daemon-driven
+#     sessions. Run it only for standalone/manual Kiro use outside the daemon.
+#     If a global entry is present, the daemon warns at startup; remove it to
+#     avoid duplicate tool registration.
+# ./scripts/install-mcp-config.sh
 
 # 6. Run it
 npm run dev
@@ -233,7 +238,7 @@ GitHub webhook → POST /webhook → HMAC verify → event log (SQLite)
     → compose prompt → spawn Kiro CLI via ACP → stream output to session files
 ```
 
-The daemon exposes a Unix domain socket for the CLI. Sessions are managed in-memory with NDJSON state on disk. Each session gets its own working directory under `~/.agent-router/sessions/`. The MCP server (one instance per session) lets the agent call back to the daemon to register PRs and signal completion.
+The daemon exposes a Unix domain socket for the CLI. Sessions are managed in-memory with NDJSON state on disk. Each session gets its own working directory under `~/.agent-router/sessions/`. The MCP server (one instance per session) lets the agent call back to the daemon to register PRs and signal completion. The daemon wires this MCP server into every session automatically at session creation and resumption (via the ACP `session/new` / `session/load` `mcpServers` array) — no manual `~/.kiro/settings/mcp.json` edit is required. `scripts/install-mcp-config.sh` remains only for standalone Kiro use outside the daemon.
 
 ## Supported events
 

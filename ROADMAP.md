@@ -35,16 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 79. Wire MCP server into ACP sessions (register_pr, merge_pr, complete_session)
-
-Read `.kiro/specs/mcp-server-wiring/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `7b`, `8`, `9`, `9b`, `10`, `11`.
-
-- Spec: `.kiro/specs/mcp-server-wiring/` · tasks `1`–`11` (including `9b`)
-- [ ] Complete · PR: --
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -94,6 +84,14 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 79. Wire MCP server into ACP sessions (register_pr, merge_pr, complete_session)
+
+Read `.kiro/specs/mcp-server-wiring/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `7b`, `8`, `9`, `9b`, `10`, `11`.
+
+- Spec: `.kiro/specs/mcp-server-wiring/` · tasks `1`–`11` (including `9b`)
+- [x] Complete · PR: #PRNUM
 
 ### 78. SPA overhaul — cutover: migrate / and /ui to the SPA, remove the monolith
 

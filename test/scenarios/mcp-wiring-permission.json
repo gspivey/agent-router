@@ -1,0 +1,32 @@
+{
+  "name": "mcp-wiring-permission",
+  "steps": [
+    {
+      "trigger": "session/new",
+      "requests": [
+        {
+          "method": "session/request_permission",
+          "params": {
+            "sessionId": "fake-session-001",
+            "toolCall": { "title": "register_pr", "kind": "other" },
+            "options": [
+              { "optionId": "reject", "name": "Reject", "kind": "reject_once" },
+              { "optionId": "allow", "name": "Allow", "kind": "allow_always" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "trigger": "session/prompt",
+      "notifications": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/notification",
+          "params": { "type": "message", "content": "Working." }
+        }
+      ],
+      "result": { "ok": true }
+    }
+  ]
+}

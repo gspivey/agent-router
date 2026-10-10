@@ -8,11 +8,31 @@ export interface ACPNotification {
   params: unknown;
 }
 
+/**
+ * One entry of the ACP `session/new` (and `session/load`) `mcpServers` array.
+ *
+ * This is the Agent Client Protocol stdio server shape, distinct from the kiro
+ * `mcp.json` object format used by `scripts/install-mcp-config.sh`. Crucially,
+ * `env` is an ARRAY of `{ name, value }` pairs — NOT a `Record`.
+ *
+ * See https://agentclientprotocol.com/protocol/session-setup
+ */
+export interface McpServerEntry {
+  /** Human-recognizable server name, e.g. "agent-router". */
+  name: string;
+  /** Executable to spawn (stdio transport). */
+  command: string;
+  /** Arguments passed to `command`. */
+  args: string[];
+  /** Environment variables as an ARRAY of name/value pairs (NOT a Record). */
+  env: Array<{ name: string; value: string }>;
+}
+
 export interface ACPClient {
   initialize(): Promise<void>;
-  newSession(cwd: string): Promise<string>;
-  newSessionWithPrompt(cwd: string, prompt: string): Promise<string>;
-  loadSession(sessionId: string): Promise<void>;
+  newSession(cwd: string, mcpServers?: McpServerEntry[]): Promise<string>;
+  newSessionWithPrompt(cwd: string, prompt: string, mcpServers?: McpServerEntry[]): Promise<string>;
+  loadSession(sessionId: string, mcpServers?: McpServerEntry[]): Promise<void>;
   sendPrompt(prompt: string): Promise<void>;
   cancel(): void;
   readonly notifications: AsyncIterable<ACPNotification>;
@@ -166,6 +186,13 @@ export function createACPClientFromStreams(
       const request = msg as unknown as JsonRpcRequest;
 
       if (request.method === 'session/request_permission') {
+        // Option-based auto-approval. ACP permission requests are keyed by the
+        // options the agent offers (allow_always / allow_once / …), NOT by MCP
+        // tool name — so this single path covers permission requests for all
+        // eight daemon MCP tools (session_status, register_pr, merge_pr,
+        // complete_session, github_http_forward, git_credential,
+        // register_worktree, report_outcome) without any tool-name allowlist.
+        // See .kiro/specs/mcp-server-wiring/design.md §6 (Requirement 7.5).
         autoApprovePermission(request);
         return;
       }
@@ -271,18 +298,18 @@ export function createACPClientFromStreams(
       }
     },
 
-    async newSession(cwd: string): Promise<string> {
-      const result = await sendRequest('session/new', { cwd, mcpServers: [] });
+    async newSession(cwd: string, mcpServers?: McpServerEntry[]): Promise<string> {
+      const result = await sendRequest('session/new', { cwd, mcpServers: mcpServers ?? [] });
       const res = result as Record<string, unknown> | null | undefined;
       acpSessionId = (res?.['sessionId'] as string) ?? '';
       return acpSessionId;
     },
 
-    async newSessionWithPrompt(cwd: string, prompt: string): Promise<string> {
+    async newSessionWithPrompt(cwd: string, prompt: string, mcpServers?: McpServerEntry[]): Promise<string> {
       // Write session/new, and as soon as we get the sessionId back,
       // immediately write session/prompt in the same microtask to
       // prevent Kiro from exiting between the two calls.
-      const result = await sendRequest('session/new', { cwd, mcpServers: [] });
+      const result = await sendRequest('session/new', { cwd, mcpServers: mcpServers ?? [] });
       const res = result as Record<string, unknown> | null | undefined;
       acpSessionId = (res?.['sessionId'] as string) ?? '';
 
@@ -306,8 +333,16 @@ export function createACPClientFromStreams(
       return acpSessionId;
     },
 
-    async loadSession(sessionId: string): Promise<void> {
-      await sendRequest('session/load', { sessionId });
+    async loadSession(sessionId: string, mcpServers?: McpServerEntry[]): Promise<void> {
+      // Always send cwd and mcpServers: both are required by the ACP
+      // session/load schema. The pre-feature call sent only { sessionId },
+      // which violated the schema — adding both fields is a deliberate
+      // wire-format bug fix (R2.2).
+      await sendRequest('session/load', {
+        sessionId,
+        cwd: process.cwd(),
+        mcpServers: mcpServers ?? [],
+      });
     },
 
     async sendPrompt(prompt: string): Promise<void> {

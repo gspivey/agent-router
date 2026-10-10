@@ -1,5 +1,7 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import cron from 'node-cron';
@@ -46,6 +48,8 @@ import { shouldNotify, sendSessionEndNotification } from './notify.js';
 import { startTokenExpiryChecker } from './token-expiry.js';
 import { createWorktreeManager } from './worktree-manager.js';
 import { buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from './acp.js';
+import { resolveMcpServerCommand } from './mcp-resolver.js';
+import { warnOnConflictingMcpConfig } from './mcp-config-check.js';
 import { createRestartRequiredState } from './restart-required.js';
 import { createTokenStore } from './token-store.js';
 import type { TokenStore } from './token-store.js';
@@ -642,6 +646,33 @@ async function main(): Promise<void> {
   const worktreeManager = createWorktreeManager({ rootDir, log });
   log.info('Worktree manager initialized', { rootDir });
 
+  // ---- MCP per-session wiring resolution (must precede createSessionManager) ----
+  // The daemon socket path is computed once here (before the session manager)
+  // and reused verbatim by the CLI server later — a single source of truth.
+  const socketPath = path.join(rootDir, 'sock');
+
+  // Resolve the MCP server launch command/args relative to the daemon's own
+  // module directory (works under tsx dev and compiled node). Returns undefined
+  // if the entry point is absent — sessions then run without MCP tools.
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const mcpServerCommand = resolveMcpServerCommand(moduleDir, import.meta.resolve);
+  if (mcpServerCommand === undefined) {
+    log.warn('MCP server entry point not found; per-session MCP wiring disabled', { moduleDir });
+  }
+
+  // Forward env variables mcp-server.ts reads beyond the two required ones so
+  // the per-session MCP server uses the same GitHub API base as the daemon.
+  const mcpExtraEnv: Array<{ name: string; value: string }> = [];
+  const githubApiBase = process.env['GITHUB_API_BASE_URL'];
+  if (githubApiBase !== undefined && githubApiBase !== '') {
+    mcpExtraEnv.push({ name: 'GITHUB_API_BASE_URL', value: githubApiBase });
+  }
+
+  // Warn operators who previously ran install-mcp-config.sh: the global
+  // ~/.kiro/settings/mcp.json agent-router entry is now redundant and conflicts
+  // with per-session wiring.
+  warnOnConflictingMcpConfig(os.homedir(), log);
+
   // Create reaper (single instance — uses late-binding closure for isActive
   // so it can reference sessionMgr which is created below)
   let reaper: Reaper | undefined;
@@ -661,6 +692,9 @@ async function main(): Promise<void> {
     sessionFiles,
     tokenStore: credentialTokenStore,
     credentialMode: config.credentialMode,
+    daemonSocket: socketPath,
+    ...(mcpServerCommand !== undefined ? { mcpServerCommand } : {}),
+    extraEnv: mcpExtraEnv,
     acpSpawner: (sessionId: string, repo?: string) => {
       const tokenEnv = resolveSessionTokenEnv(repo, tokenResolver);
       if (repo !== undefined && tokenEnv['GITHUB_TOKEN'] === undefined) {
@@ -788,8 +822,8 @@ async function main(): Promise<void> {
   // ---- Task 19.3: Register cron jobs ----
   let cronTasks = setupCronJobs({ config, db, sessionMgr, sessionFiles, log });
 
-  // Start CLI IPC server on Unix socket
-  const socketPath = path.join(rootDir, 'sock');
+  // Start CLI IPC server on Unix socket (reuses the single socketPath computed
+  // before the session manager — no second, divergent computation).
   const cliServer = createCliServer({
     socketPath,
     sessionMgr,
