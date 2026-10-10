@@ -1,0 +1,112 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { api, AuthError, ApiError } from './api.js';
+import { auth, TOKEN_STORAGE_KEY } from './stores.svelte.js';
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  auth.token = 'tok';
+  auth.error = 'none';
+});
+
+describe('api — bearer header (Req 3.3)', () => {
+  it('attaches Authorization: Bearer <token> on listSessions', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(jsonResponse({ sessions: [], total: 0, offset: 0, limit: 20 }));
+
+    const res = await api.listSessions();
+
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer tok');
+    expect(res).toEqual({ sessions: [], total: 0, offset: 0, limit: 20 });
+    fetchSpy.mockRestore();
+  });
+
+  it('getSession requests the lines param and returns the seam fields', async () => {
+    const detail = {
+      meta: { session_id: 's1', status: 'active', created_at: 1, completed_at: null, prs: [] },
+      entries: [],
+      skipped_lines: 0,
+      first_event_id: null,
+      last_event_id: null,
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(detail));
+
+    const res = await api.getSession('s1', 200);
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe('/sessions/s1?lines=200');
+    expect(res.first_event_id).toBeNull();
+    expect(res.last_event_id).toBeNull();
+    fetchSpy.mockRestore();
+  });
+
+  it('inject posts the prompt as JSON and returns {accepted:true}', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(jsonResponse({ accepted: true }, 202));
+
+    const res = await api.inject('s1', 'do it');
+
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ prompt: 'do it' });
+    expect(res).toEqual({ accepted: true });
+    fetchSpy.mockRestore();
+  });
+
+  it('interrupt posts and returns {ok:true}', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
+
+    const res = await api.interrupt('s1');
+
+    expect((fetchSpy.mock.calls[0]?.[1] as RequestInit).method).toBe('POST');
+    expect(res).toEqual({ ok: true });
+    fetchSpy.mockRestore();
+  });
+});
+
+describe('api — auth failures (Req 3.4, 3.5)', () => {
+  it('throws AuthError("missing") and makes no request when there is no token', async () => {
+    auth.token = null;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    await expect(api.listSessions()).rejects.toMatchObject({ kind: 'missing' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('enters the expired lockout and throws AuthError("expired") on 401', async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'tok');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
+
+    await expect(api.listSessions()).rejects.toBeInstanceOf(AuthError);
+    expect(auth.error).toBe('expired');
+    expect(auth.token).toBeNull();
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+    fetchSpy.mockRestore();
+  });
+
+  it('enters the expired lockout on 403', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 403 }));
+
+    await expect(api.getSession('s1')).rejects.toMatchObject({ kind: 'expired' });
+    expect(auth.error).toBe('expired');
+    fetchSpy.mockRestore();
+  });
+
+  it('throws ApiError for a non-auth non-2xx (e.g. 500)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 500 }));
+
+    await expect(api.listSessions()).rejects.toBeInstanceOf(ApiError);
+    // A 500 is NOT an auth failure — the lockout must not fire.
+    expect(auth.error).toBe('none');
+    fetchSpy.mockRestore();
+  });
+});
