@@ -301,21 +301,21 @@ sub-task's box only when its code and its tests are on the branch and green.
     7.4, 7.6, 7.7, 7.8; NFR-4.1).
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8_
 
-- [ ] 7. JSON pivot toggle + polish + accessibility (ROADMAP 77)
-  - [ ] 7.1 Add `JsonToggle.svelte` (`{ }` glyph, ≥44×44) composed into every bubble/card/pill;
+- [x] 7. JSON pivot toggle + polish + accessibility (ROADMAP 77)
+  - [x] 7.1 Add `JsonToggle.svelte` (`{ }` glyph, ≥44×44) composed into every bubble/card/pill;
     per-entry toggle state swaps the rendered view for `<pre>{JSON.stringify(entry, null, 2)}</pre>`
     and back; ALWAYS visible on all viewports (a small `{ }` chip on mobile/tablet; desktop MAY
     add hover-reveal on top of the always-visible baseline) (Req 8.1, 8.2).
-  - [ ] 7.2 Audit every component so no hardcoded hex literal remains; all colors reference the
+  - [x] 7.2 Audit every component so no hardcoded hex literal remains; all colors reference the
     Req 1.7 custom properties (Req 8.3; NFR-3.1).
-  - [ ] 7.3 Add `role="log"` and `aria-live="polite"` to the conversation container; make entries
+  - [x] 7.3 Add `role="log"` and `aria-live="polite"` to the conversation container; make entries
     focusable (Req 8.4).
-  - [ ] 7.4 Add `HelpOverlay.svelte` and keyboard handling at `lg`+ (≥1024 px): `J` toggles JSON
+  - [x] 7.4 Add `HelpOverlay.svelte` and keyboard handling at `lg`+ (≥1024 px): `J` toggles JSON
     on the focused entry, `?` opens the help overlay (Req 8.5).
-  - [ ] 7.5 Enforce input font size ≥16 px (Composer included) and body font ≥14 px (Req 8.7).
-  - [ ] 7.6 Unit (vitest): JSON toggle swaps rendered↔`<pre>` per entry; toggle is present/visible
+  - [x] 7.5 Enforce input font size ≥16 px (Composer included) and body font ≥14 px (Req 8.7).
+  - [x] 7.6 Unit (vitest): JSON toggle swaps rendered↔`<pre>` per entry; toggle is present/visible
     at a mobile width (Req 8.1, 8.2).
-  - [ ] 7.7 Playwright (`test/browser/spa/json-a11y.spec.ts`): JSON toggle flips a bubble to
+  - [x] 7.7 Playwright (`test/browser/spa/json-a11y.spec.ts`): JSON toggle flips a bubble to
     `<pre>` and back and is visible at 375 px; `role="log"`/`aria-live` present; a tap-target
     bounding-box audit asserts every interactive element ≥44×44; screenshots of the JSON view at
     375 px and 1280 px (Req 8.1, 8.2, 8.4, 8.6; NFR-4.1).
