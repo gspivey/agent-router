@@ -22,6 +22,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Lint SPA no-{@html} invariant (NFR-6.3)
+        run: npm --prefix client run lint:no-html
+
       - name: Typecheck
         id: typecheck
         env:

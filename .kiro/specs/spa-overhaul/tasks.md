@@ -216,26 +216,26 @@ sub-task's box only when its code and its tests are on the branch and green.
     375 px and 1280 px (Req 5.1, 5.6, 5.8; NFR-1.2, NFR-4.1).
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8; NFR-1.2, NFR-3.2_
 
-- [ ] 5. Core chat view — bubble renderer, all entry kinds (ROADMAP 75)
-  - [ ] 5.1 Add `ChatView.svelte`: fetch history via `api.getSession(id, 200)` (capturing
+- [x] 5. Core chat view — bubble renderer, all entry kinds (ROADMAP 75)
+  - [x] 5.1 Add `ChatView.svelte`: fetch history via `api.getSession(id, 200)` (capturing
     `entries`, `meta`, `first_event_id`, `last_event_id`), normalize each raw entry with
     `parseStreamEntry`, render in
     ascending `id` order; no SSE yet. Implement Svelte-native rendering from the `ParsedEntry`
     union — do NOT port `renderStreamEntry` from `web-ui.ts` (Req 6.1, 6.9).
-  - [ ] 5.2 Add `MessageBubble.svelte` (right-aligned; **plain-text content, no `{@html}` in v1**;
+  - [x] 5.2 Add `MessageBubble.svelte` (right-aligned; **plain-text content, no `{@html}` in v1**;
     `--agent-bubble-*` tokens) for `agent_chunk`/`agent_message`, with chunk reassembly by turn
     (Req 6.2, NFR-6.2; design: bubble reassembly, safe rendering boundary HIGH-D).
-  - [ ] 5.3 Add `SystemPill.svelte` (centered; badge color `green→--success`, `yellow→--warning`,
+  - [x] 5.3 Add `SystemPill.svelte` (centered; badge color `green→--success`, `yellow→--warning`,
     `red→--error`) for `system` (Req 6.3).
-  - [ ] 5.4 Add `ToolCallCard.svelte` (full-width collapsible; `tool_update` text appended by
+  - [x] 5.4 Add `ToolCallCard.svelte` (full-width collapsible; `tool_update` text appended by
     `toolCallId`; collapsed by default below 768 px) and `PermissionCard.svelte` as a READ-ONLY
     card showing the request title only — NO Accept/Decline or other action buttons (Req 6.4,
     6.5, 6.8).
-  - [ ] 5.5 Add `InternalPill.svelte` (minimized gray pill using `formatMetadataPill`, expandable)
+  - [x] 5.5 Add `InternalPill.svelte` (minimized gray pill using `formatMetadataPill`, expandable)
     and `UnknownPill.svelte` (shows `typeLabel` only, no payload) (Req 6.6, 6.7).
-  - [ ] 5.6 Constrain bubbles to `max-w-[85vw]` below 768 px; chat container `overflow-x: hidden`
+  - [x] 5.6 Constrain bubbles to `max-w-[85vw]` below 768 px; chat container `overflow-x: hidden`
     and code blocks `overflow-x: auto; max-width: 100%` (Req 6.8; HIGH-13).
-  - [ ] 5.7 Unit (vitest): each `ParsedEntry` kind renders its component from stubbed entries;
+  - [x] 5.7 Unit (vitest): each `ParsedEntry` kind renders its component from stubbed entries;
     `PermissionCard` renders no `<button>` action controls; agent content is rendered as
     plain text in v1 (no `{@html}` anywhere; the JSON pivot uses `textContent`). v1 XSS coverage
     targets the ACTUAL v1 render path — do NOT test `renderMarkdown` (it is v2-only and unwired in
@@ -244,11 +244,11 @@ sub-task's box only when its code and its tests are on the branch and green.
     `window.xss` is `undefined` (proves text interpolation, not HTML). The `{@html}` CI lint check
     (`grep -r '{@html' client/src/ && exit 1 || exit 0`) is enforced via the Task 5 definition of
     done below (Req 6.1–6.7; NFR-6).
-  - [ ] 5.8 Playwright (`test/browser/spa/chat-render.spec.ts`): every entry kind renders with its
+  - [x] 5.8 Playwright (`test/browser/spa/chat-render.spec.ts`): every entry kind renders with its
     component from a seeded history; permission card has no action buttons; bubbles `max-w-[85vw]`
     and tool cards collapsed at 375 px; a completed-session history load shows NO streaming cursor
     or tool spinners; screenshots at 375 px and 1280 px (Req 6.1–6.9, 7.2, 7.3; NFR-4.1).
-  - [ ] 5.9 **Task 5 definition of done — `{@html}` invariant (HIGH-2 / NFR-6.3):** add a CI lint
+  - [x] 5.9 **Task 5 definition of done — `{@html}` invariant (HIGH-2 / NFR-6.3):** add a CI lint
     check `grep -r '{@html' client/src/ && exit 1 || exit 0` that FAILS the build if any `{@html}`
     directive appears anywhere under `client/src/`. v1 renders all content as plain text so this
     already passes; the check makes "no `{@html}` in v1" an enforced invariant. This check is part

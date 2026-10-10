@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "lint:no-html": "if grep -rn '{@html' src/; then echo 'ERROR: {@html} directive is forbidden in the v1 SPA (NFR-6.3)'; exit 1; else echo 'no-html lint: no {@html} directives found'; exit 0; fi",
     "test": "vitest run",
     "test:watch": "vitest"
   },
