@@ -152,6 +152,22 @@ const MCP_TOOLS: McpToolDefinition[] = [
       required: ['path'],
     },
   },
+  {
+    name: 'report_outcome',
+    description:
+      'Report the structured outcome of this task attempt. Preferred over any free-text summary. Call this before the session ends.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        outcome: { type: 'string', description: 'One of: succeeded | failed | blocked' },
+        reason_code: { type: 'string', description: 'Optional closed reason-code enum value' },
+        reason: { type: 'string', description: 'Optional free-text reason for humans' },
+        blocked: { type: 'object', description: 'When outcome=blocked: { question, needs }' },
+        pr_url: { type: 'string', description: 'Optional: the PR URL if you opened a pull request' },
+      },
+      required: ['outcome'],
+    },
+  },
 ];
 
 /**
@@ -630,6 +646,27 @@ export function createMcpServer(ctx: McpContext): McpServer {
             op: 'register_worktree',
             session_id: sessionId,
             path: wtPath,
+          });
+          break;
+        }
+        case 'report_outcome': {
+          const outcome = toolArgs['outcome'];
+          if (typeof outcome !== 'string' || outcome.length === 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "outcome" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+          // Forward the full argument set, including pr_url (HIGH-5), to the daemon.
+          result = await sendToDaemon(daemonSocket, {
+            op: 'report_outcome',
+            session_id: sessionId,
+            outcome,
+            reason_code: toolArgs['reason_code'] ?? null,
+            reason: toolArgs['reason'] ?? null,
+            blocked: toolArgs['blocked'] ?? null,
+            pr_url: toolArgs['pr_url'] ?? null,
           });
           break;
         }
