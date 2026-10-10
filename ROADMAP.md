@@ -91,7 +91,7 @@ Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in 
 then implement task `8`. Depends on item 77.
 
 - Spec: `.kiro/specs/spa-overhaul/` · task `8`
-- [x] Complete · PR: #PRNUM
+- [x] Complete · PR: #138
 
 ### 77. SPA overhaul — JSON pivot toggle, polish, accessibility
 
