@@ -3,6 +3,12 @@ set -euo pipefail
 
 # install-mcp-config.sh — Add Agent Router MCP server entry to Kiro's MCP config.
 #
+# Legacy: As of the mcp-server-wiring feature, the daemon wires the MCP server
+# into every session automatically (per-session ACP mcpServers entry). This
+# script is only needed for environments that do NOT auto-wire. If the daemon
+# is running, prefer per-session wiring and remove any global "agent-router"
+# entry this script installs — the daemon warns at startup when it finds one.
+#
 # Usage:
 #   ./scripts/install-mcp-config.sh
 #

@@ -1,0 +1,9 @@
+{
+  "name": "mcp-wiring-load",
+  "steps": [
+    {
+      "trigger": "session/load",
+      "result": { "ok": true }
+    }
+  ]
+}

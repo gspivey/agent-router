@@ -773,10 +773,14 @@ export function createMcpServer(ctx: McpContext): McpServer {
 
 // --- Standalone entry point ---
 // When run directly, read AGENT_ROUTER_SESSION_ID and AGENT_ROUTER_SOCKET from env
-const isMainModule = process.argv[1] &&
-  (process.argv[1].endsWith('mcp-server.ts') || process.argv[1].endsWith('mcp-server.js'));
 
-if (isMainModule) {
+/**
+ * Start the MCP server from environment variables (`AGENT_ROUTER_SESSION_ID`,
+ * `AGENT_ROUTER_SOCKET`, and the optional `GITHUB_API_BASE_URL`). Called by the
+ * `agent-router-mcp` bin entry and by the `isMainModule` guard below. Exits the
+ * process non-zero if the required env vars are missing or the server errors.
+ */
+export function runMcpServerFromEnv(): void {
   const envSessionId = process.env['AGENT_ROUTER_SESSION_ID'];
   const envSocket = process.env['AGENT_ROUTER_SOCKET'];
 
@@ -802,4 +806,11 @@ if (isMainModule) {
     process.stderr.write(`MCP server error: ${msg}\n`);
     process.exit(1);
   });
+}
+
+const isMainModule = process.argv[1] &&
+  (process.argv[1].endsWith('mcp-server.ts') || process.argv[1].endsWith('mcp-server.js'));
+
+if (isMainModule) {
+  runMcpServerFromEnv();
 }

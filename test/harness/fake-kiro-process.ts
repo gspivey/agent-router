@@ -35,6 +35,9 @@ interface PeriodicConfig {
 interface ScenarioStep {
   trigger: string;
   notifications?: ACPNotification[];
+  /** JSON-RPC requests (with id) the fake agent SENDS to the daemon after this
+   *  step's trigger — e.g. a session/request_permission to exercise auto-approval. */
+  requests?: Array<{ method: string; params?: unknown }>;
   result?: unknown;
   exitCode?: number;
   delayMs?: number;
@@ -48,6 +51,22 @@ interface Scenario {
 
 function send(msg: unknown): void {
   process.stdout.write(JSON.stringify(msg) + '\n');
+}
+
+/**
+ * Append an arbitrary record to the FAKE_KIRO_RECORD_FILE (one JSON object per
+ * line) when the env var is set. Used by Tier 2 tests to assert what the daemon
+ * sent (e.g. the session/new mcpServers array) and what it wrote back (e.g. the
+ * auto-approval response).
+ */
+function record(entry: Record<string, unknown>): void {
+  const file = process.env['FAKE_KIRO_RECORD_FILE'];
+  if (!file) return;
+  try {
+    fs.appendFileSync(file, JSON.stringify(entry) + '\n');
+  } catch {
+    // best effort
+  }
 }
 
 function delay(ms: number): Promise<void> {
@@ -78,14 +97,28 @@ async function main(): Promise<void> {
 
   const rl = readline.createInterface({ input: process.stdin, terminal: false });
 
+  // Monotonic id for outgoing requests the fake agent sends to the daemon.
+  let outgoingId = 10_000;
+
   for await (const line of rl) {
     if (!line.trim()) continue;
-    let req: ACPRequest;
+    let parsed: Record<string, unknown>;
     try {
-      req = JSON.parse(line) as ACPRequest;
+      parsed = JSON.parse(line) as Record<string, unknown>;
     } catch {
       continue;
     }
+
+    // A line with an id but no method is a RESPONSE from the daemon (e.g. the
+    // auto-approval of a session/request_permission we sent). Record it so
+    // Tier 2 tests can assert the daemon approved the request, then continue.
+    if (parsed['id'] !== undefined && typeof parsed['method'] !== 'string') {
+      record({ kind: 'response', id: parsed['id'], result: parsed['result'] ?? null, error: parsed['error'] ?? null });
+      continue;
+    }
+
+    const req = parsed as unknown as ACPRequest;
+    record({ kind: 'request', method: req.method, params: req.params ?? null });
 
     // Find a matching step
     const step = scenario.steps.find((s) => s.trigger === req.method);
@@ -108,6 +141,10 @@ async function main(): Promise<void> {
     // Handle session/new — return a fake session ID
     if (req.method === 'session/new') {
       send({ jsonrpc: '2.0', id: req.id, result: { sessionId: 'fake-session-001' } } satisfies ACPResponse);
+      // Emit any outgoing requests this step defines (e.g. request_permission)
+      for (const out of step?.requests ?? []) {
+        send({ jsonrpc: '2.0', id: outgoingId++, method: out.method, params: out.params });
+      }
       continue;
     }
 
@@ -117,6 +154,11 @@ async function main(): Promise<void> {
         send(notification);
       }
       send({ jsonrpc: '2.0', id: req.id, result: step.result ?? { ok: true } } satisfies ACPResponse);
+
+      // Emit any outgoing requests this step defines
+      for (const out of step.requests ?? []) {
+        send({ jsonrpc: '2.0', id: outgoingId++, method: out.method, params: out.params });
+      }
 
       // Start periodic notification emission if configured
       if (step.periodic) {

@@ -4,7 +4,7 @@ import type { Logger } from './log.js';
 import type { SessionFiles, SessionPaths, PromptSource, StreamEntry, SessionMeta } from './session-files.js';
 import type { EventQueue } from './queue.js';
 import { createEventQueue } from './queue.js';
-import type { ACPClient, ACPNotification } from './acp.js';
+import type { ACPClient, ACPNotification, McpServerEntry } from './acp.js';
 import type { SessionTimeoutConfig } from './config.js';
 import { isCommentCommand, extractCommentIds } from './comment-tracker.js';
 import type { GitHubClient } from './github.js';
@@ -15,6 +15,45 @@ import type { WorktreeManager } from './worktree-manager.js';
 import type { TokenStore } from './token-store.js';
 import { isValidRepoString } from './token-store.js';
 import type { Reaper } from './reaper.js';
+
+// ---------------------------------------------------------------------------
+// MCP server entry construction — pure helper for ACP session wiring
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the ACP MCP server entry for a session, or `undefined` when no daemon
+ * socket is configured (graceful degradation — the session then runs without
+ * the daemon's MCP tools, preserving pre-feature behavior).
+ *
+ * Pure — no I/O, no `process.env` reads. The `.ts`/`.js` and loader-URL
+ * decisions live in `index.ts` (via `resolveMcpServerCommand`); this helper
+ * only forwards whatever `command`/`commandArgs`/`serverPath` it is given and
+ * assembles the `env` array. Callers pass any extra env variables to forward
+ * (e.g. `GITHUB_API_BASE_URL`) via `extraEnv`.
+ *
+ * The entry's `env` is an ARRAY of `{ name, value }` pairs (the ACP stdio
+ * shape), NOT a Record.
+ */
+export function buildMcpServerEntry(
+  sessionId: string,
+  daemonSocket: string | undefined,
+  serverPath: string,
+  command: string,
+  commandArgs: string[],
+  extraEnv?: Array<{ name: string; value: string }>,
+): McpServerEntry | undefined {
+  if (daemonSocket === undefined) return undefined;
+  return {
+    name: 'agent-router',
+    command,
+    args: [...commandArgs, serverPath],
+    env: [
+      { name: 'AGENT_ROUTER_SESSION_ID', value: sessionId },
+      { name: 'AGENT_ROUTER_SOCKET', value: daemonSocket },
+      ...(extraEnv ?? []),
+    ],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // read_repos parsing — pure functions for extracting read_repos from prompts
@@ -375,6 +414,17 @@ export function createSessionManager(deps: {
   reaper?: Reaper;
   /** Milliseconds to wait for verify() before treating as timed-out (default 30_000). */
   verifyDeadlineMs?: number;
+  /** Unix socket path the per-session MCP server uses to reach the daemon. */
+  daemonSocket?: string;
+  /**
+   * Resolved command/args/path for launching the per-session MCP server.
+   * When present together with `daemonSocket`, each session forwards an MCP
+   * server entry via ACP `session/new` / `session/load`. When either is
+   * absent, sessions run without MCP tools (pre-feature behavior).
+   */
+  mcpServerCommand?: { command: string; args: string[]; serverPath: string };
+  /** Extra env variables to forward to the MCP server (e.g. GITHUB_API_BASE_URL). */
+  extraEnv?: Array<{ name: string; value: string }>;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
@@ -385,12 +435,42 @@ export function createSessionManager(deps: {
   const credentialMode = deps.credentialMode ?? 'env';
   const reaper = deps.reaper;
   const verifyDeadlineMs = deps.verifyDeadlineMs ?? DEFAULT_VERIFY_DEADLINE_MS;
+  const daemonSocket = deps.daemonSocket;
+  const mcpServerCommand = deps.mcpServerCommand;
+  const extraEnv = deps.extraEnv;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
   const maxLifetimeMs = timeout.maxLifetimeMinutes * 60 * 1000;
   const gracePeriodMs = timeout.gracePeriodAfterMergeSeconds * 1000;
   const registry = createSessionRegistry();
+
+  // Log MCP wiring state once at construction (active vs degraded).
+  const mcpWiringActive = daemonSocket !== undefined && mcpServerCommand !== undefined;
+  log.info('MCP session wiring', {
+    active: mcpWiringActive,
+    reason: mcpWiringActive
+      ? 'daemonSocket and mcpServerCommand present'
+      : 'daemonSocket or mcpServerCommand absent — sessions run without MCP tools',
+  });
+
+  /**
+   * Build the per-session MCP server entry wrapped in the ACP array form
+   * (`[entry]`), or `undefined` when wiring is not configured. Threaded into
+   * `acp.newSessionWithPrompt` and `acp.loadSession`.
+   */
+  function mcpServersForSession(sessionId: string): McpServerEntry[] | undefined {
+    if (daemonSocket === undefined || mcpServerCommand === undefined) return undefined;
+    const entry = buildMcpServerEntry(
+      sessionId,
+      daemonSocket,
+      mcpServerCommand.serverPath,
+      mcpServerCommand.command,
+      mcpServerCommand.args,
+      extraEnv,
+    );
+    return entry ? [entry] : undefined;
+  }
 
   // Per-session mutable state consolidated into a single Map.
   // Replaces the prior 4 parallel Maps/Set (inactivityTimers, lifetimeTimers,
@@ -851,7 +931,11 @@ export function createSessionManager(deps: {
       // 4. Create ACP session and send initial prompt immediately
       //    Kiro exits if no prompt arrives shortly after session/new,
       //    so we pipeline both requests to prevent a gap.
-      const acpSessionId = await acp.newSessionWithPrompt(process.cwd(), originalPrompt);
+      const acpSessionId = await acp.newSessionWithPrompt(
+        process.cwd(),
+        originalPrompt,
+        mcpServersForSession(sessionId),
+      );
       sessionLog.info('ACP session created with prompt', { acpSessionId });
 
       // Persist kiro_session_id for session resumption across daemon restarts
@@ -1209,7 +1293,7 @@ export function createSessionManager(deps: {
         try {
           const acp = acpSpawner(sessionId, meta.repo);
           await acp.initialize();
-          await acp.loadSession(kiroSessionId);
+          await acp.loadSession(kiroSessionId, mcpServersForSession(sessionId));
 
           // Rebuild session handle
           const paths = sessionFiles.getSessionPaths(sessionId);
