@@ -49,6 +49,8 @@
   import ReconnectPill from './ReconnectPill.svelte';
   import Composer from './Composer.svelte';
   import DetailBar from './DetailBar.svelte';
+  import EntryShell from './EntryShell.svelte';
+  import HelpOverlay from './HelpOverlay.svelte';
 
   interface Props {
     sessionId: string;
@@ -68,6 +70,24 @@
   let ended = $state(false);
   // Auto-scroll affordance (Req 7.1 / HIGH-13).
   let newMessages = $state(false);
+  // Keyboard-shortcut help overlay (Req 8.5) — desktop (≥1024 px) only.
+  let helpOpen = $state(false);
+
+  /**
+   * Global `?` opens the keyboard-shortcut help overlay on desktop viewports
+   * (≥1024 px, Req 8.5). `J` is handled per-entry by `EntryShell` on the focused
+   * entry. Keys typed into the Composer input are ignored here.
+   */
+  function onWindowKeydown(event: KeyboardEvent): void {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) return;
+    const target = event.target as HTMLElement | null;
+    const tag = target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (event.key === '?') {
+      event.preventDefault();
+      helpOpen = true;
+    }
+  }
 
   let sse: SseHandle | null = null;
   let deregisterAbort: (() => void) | null = null;
@@ -80,7 +100,7 @@
   const rawEntries = $derived(events.map((e) => e.data as unknown as StreamEntry));
   const ids = $derived(events.map((e) => e.id));
   const parsed = $derived(rawEntries.map((e) => parseStreamEntry(e)));
-  const items = $derived<RenderItem[]>(buildRenderItems(parsed, ids));
+  const items = $derived<RenderItem[]>(buildRenderItems(parsed, ids, rawEntries));
 
   // Streaming-state derivations (pure, Req 7.2 / 7.3).
   const cursorVisible = $derived(shouldShowCursor(rawEntries, status));
@@ -242,6 +262,8 @@
   const sessionTitle = $derived(sessionId);
 </script>
 
+<svelte:window onkeydown={onWindowKeydown} />
+
 <section data-testid="chat-view" class="flex h-[100dvh] flex-col">
   <div class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2">
     <span class="min-w-0 flex-1 truncate text-sm text-[var(--text-muted)]">{sessionId}</span>
@@ -283,24 +305,26 @@
       <p data-testid="chat-empty" class="p-4 text-sm text-[var(--text-muted)]">No activity yet.</p>
     {:else}
       {#each items as item, i (item.key)}
-        {#if item.kind === 'bubble'}
-          <MessageBubble text={item.text} cursor={cursorVisible && i === lastBubbleIndex} />
-        {:else if item.kind === 'system'}
-          <SystemPill text={item.text} badge={item.badge} />
-        {:else if item.kind === 'tool_call'}
-          <ToolCallCard
-            title={item.title}
-            updates={item.updates}
-            collapsed={true}
-            spinner={shouldShowSpinner(item.toolCallId, finishedTools, status)}
-          />
-        {:else if item.kind === 'permission'}
-          <PermissionCard title={item.title} />
-        {:else if item.kind === 'internal'}
-          <InternalPill text={item.text} />
-        {:else}
-          <UnknownPill typeLabel={item.typeLabel} />
-        {/if}
+        <EntryShell json={item.json}>
+          {#if item.kind === 'bubble'}
+            <MessageBubble text={item.text} cursor={cursorVisible && i === lastBubbleIndex} />
+          {:else if item.kind === 'system'}
+            <SystemPill text={item.text} badge={item.badge} />
+          {:else if item.kind === 'tool_call'}
+            <ToolCallCard
+              title={item.title}
+              updates={item.updates}
+              collapsed={true}
+              spinner={shouldShowSpinner(item.toolCallId, finishedTools, status)}
+            />
+          {:else if item.kind === 'permission'}
+            <PermissionCard title={item.title} />
+          {:else if item.kind === 'internal'}
+            <InternalPill text={item.text} />
+          {:else}
+            <UnknownPill typeLabel={item.typeLabel} />
+          {/if}
+        </EntryShell>
       {/each}
     {/if}
   </div>
@@ -320,4 +344,8 @@
 
   <Composer onSend={sendPrompt} disabled={controlsDisabled} />
   <DetailBar title={sessionTitle} onInterrupt={interrupt} disabled={controlsDisabled} />
+
+  {#if helpOpen}
+    <HelpOverlay onClose={() => (helpOpen = false)} />
+  {/if}
 </section>

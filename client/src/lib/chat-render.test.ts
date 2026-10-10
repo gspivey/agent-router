@@ -122,4 +122,61 @@ describe('buildRenderItems', () => {
     const items = buildRenderItems(entries);
     expect(items[0]?.key).toBe('e0');
   });
+
+  // --- JSON pivot source (spa-overhaul Task 7 / ROADMAP 77; Req 8.2) ---
+
+  it('leaves json empty when no raws are supplied (back-compat)', () => {
+    const entries: ParsedEntry[] = [
+      { kind: 'system', subtype: 'session_started', text: 'Session started' },
+    ];
+    const items = buildRenderItems(entries, [1]);
+    expect(items[0]?.json).toBe('');
+  });
+
+  it('attaches the pretty-printed single raw entry as json (Req 8.2)', () => {
+    const parsed: ParsedEntry[] = [{ kind: 'system', subtype: 'session_started', text: 'Session started' }];
+    const raw = { ts: 't0', source: 'router', type: 'session_started' };
+    const items = buildRenderItems(parsed, [5], [raw]);
+    expect(items[0]?.json).toBe(JSON.stringify(raw, null, 2));
+  });
+
+  it('serializes a reassembled bubble as the array of its raw chunks (Req 8.2)', () => {
+    const parsed: ParsedEntry[] = [
+      { kind: 'agent_chunk', text: 'Hello ', streaming: true },
+      { kind: 'agent_chunk', text: 'there', streaming: true },
+    ];
+    const raws = [
+      { ts: 't1', source: 'agent', type: 'session/update', update: { sessionUpdate: 'agent_message_chunk', content: { text: 'Hello ' } } },
+      { ts: 't2', source: 'agent', type: 'session/update', update: { sessionUpdate: 'agent_message_chunk', content: { text: 'there' } } },
+    ];
+    const items = buildRenderItems(parsed, [1, 2], raws);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'bubble', text: 'Hello there' });
+    expect(items[0]?.json).toBe(JSON.stringify(raws, null, 2));
+  });
+
+  it('serializes a single-chunk bubble as the bare raw entry (not an array)', () => {
+    const parsed: ParsedEntry[] = [{ kind: 'agent_chunk', text: 'solo', streaming: true }];
+    const raw = { ts: 't', source: 'agent', type: 'session/update' };
+    const items = buildRenderItems(parsed, [1], [raw]);
+    expect(items[0]?.json).toBe(JSON.stringify(raw, null, 2));
+  });
+
+  it('gives every rendered kind a non-empty json when raws are supplied', () => {
+    const parsed: ParsedEntry[] = [
+      { kind: 'agent_message', text: 'done', streaming: false },
+      { kind: 'system', subtype: 'session_verified', text: 'Verified', badge: 'green' },
+      { kind: 'tool_call', toolCallId: 'tc', title: 'run' },
+      { kind: 'permission', title: 'approve' },
+      { kind: 'internal', subtype: '_kiro.dev/metadata', text: 'ctx' },
+      { kind: 'unknown', typeLabel: 'weird' },
+    ];
+    const raws = parsed.map((_, i) => ({ ts: `t${i}`, source: 'agent', type: `type${i}` }));
+    const items = buildRenderItems(parsed, [1, 2, 3, 4, 5, 6], raws);
+    for (const item of items) {
+      expect(item.json.length).toBeGreaterThan(0);
+      // The pivot content is valid, round-trippable JSON.
+      expect(() => JSON.parse(item.json)).not.toThrow();
+    }
+  });
 });

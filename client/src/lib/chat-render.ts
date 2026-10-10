@@ -23,15 +23,32 @@
 
 import type { ParsedEntry, SystemBadge } from './logic.js';
 
+/**
+ * The JSON-pivot source for a render item (spa-overhaul Task 7 / ROADMAP 77).
+ *
+ * `json` is the pretty-printed raw stream entry (or entries, for a reassembled
+ * bubble) that produced the item, ready for the `JsonToggle` `<pre>` view
+ * (Requirement 8.2). It is populated only when the caller passes `raws` to
+ * `buildRenderItems`; otherwise it is the empty string so historical callers and
+ * pure-logic tests that omit `raws` keep working unchanged. For a bubble built
+ * from several `agent_chunk` entries, `json` is the JSON array of all the raw
+ * entries that fold into that bubble; for every other kind it is the single raw
+ * entry object.
+ */
+interface JsonSource {
+  /** `JSON.stringify(rawEntry(s), null, 2)`, or '' when no raws were provided. */
+  json: string;
+}
+
 /** A reassembled agent bubble (one or more `agent_chunk`/`agent_message`). */
-export interface BubbleItem {
+export interface BubbleItem extends JsonSource {
   kind: 'bubble';
   key: string;
   text: string;
 }
 
 /** A centered system pill. */
-export interface SystemItem {
+export interface SystemItem extends JsonSource {
   kind: 'system';
   key: string;
   text: string;
@@ -39,7 +56,7 @@ export interface SystemItem {
 }
 
 /** A tool-call card with its folded `tool_update` body. */
-export interface ToolCallItem {
+export interface ToolCallItem extends JsonSource {
   kind: 'tool_call';
   key: string;
   toolCallId: string;
@@ -48,21 +65,21 @@ export interface ToolCallItem {
 }
 
 /** A read-only permission card. */
-export interface PermissionItem {
+export interface PermissionItem extends JsonSource {
   kind: 'permission';
   key: string;
   title: string;
 }
 
 /** A minimized internal metadata pill. */
-export interface InternalItem {
+export interface InternalItem extends JsonSource {
   kind: 'internal';
   key: string;
   text: string;
 }
 
 /** An unknown-type pill (type label only, no payload). */
-export interface UnknownItem {
+export interface UnknownItem extends JsonSource {
   kind: 'unknown';
   key: string;
   typeLabel: string;
@@ -76,38 +93,79 @@ export type RenderItem =
   | InternalItem
   | UnknownItem;
 
+/** Pretty-print a single raw entry (or '' when none is available). */
+function stringifyRaw(raw: unknown): string {
+  if (raw === undefined) return '';
+  try {
+    return JSON.stringify(raw, null, 2);
+  } catch {
+    return '';
+  }
+}
+
+/** Pretty-print the collected raw entries of a reassembled bubble. */
+function stringifyRaws(raws: unknown[]): string {
+  if (raws.length === 0) return '';
+  // A single-chunk bubble serializes as the bare entry; a multi-chunk bubble as
+  // the array of the raw entries that fold into it.
+  const value = raws.length === 1 ? raws[0] : raws;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Build the ordered render-item list from the parsed entries (ascending id).
  *
  * `ids[i]` is the SSE id of `entries[i]`; it is used only to build stable keys
  * so Svelte's keyed `{#each}` reconciles correctly. When `ids` is omitted the
  * array index is used as the key.
+ *
+ * `raws[i]` is the RAW stream entry that produced `entries[i]` (the SPA passes
+ * the untouched `StreamEntry` objects here). It feeds the per-item `json`
+ * field that the `JsonToggle` pivots to (Requirement 8.2). When `raws` is
+ * omitted, every item's `json` is '' and nothing else changes, so pure-logic
+ * tests that only care about the rendered shape stay unaffected.
  */
-export function buildRenderItems(entries: readonly ParsedEntry[], ids?: readonly number[]): RenderItem[] {
+export function buildRenderItems(
+  entries: readonly ParsedEntry[],
+  ids?: readonly number[],
+  raws?: readonly unknown[],
+): RenderItem[] {
   const items: RenderItem[] = [];
-  // The currently open agent-chunk bubble, if any.
+  // The currently open agent-chunk bubble, if any, plus the raw entries that
+  // have folded into it (so its JSON pivot shows every chunk).
   let openBubble: BubbleItem | null = null;
+  let openBubbleRaws: unknown[] = [];
   // Map from toolCallId → its card item so updates fold into the right card.
   const toolCards = new Map<string, ToolCallItem>();
   let syntheticToolSeq = 0;
 
   const keyAt = (i: number): string => `e${ids?.[i] ?? i}`;
+  const rawAt = (i: number): unknown => raws?.[i];
 
   const closeBubble = (): void => {
+    if (openBubble) openBubble.json = stringifyRaws(openBubbleRaws);
     openBubble = null;
+    openBubbleRaws = [];
   };
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     if (entry === undefined) continue;
     const key = keyAt(i);
+    const raw = rawAt(i);
 
     switch (entry.kind) {
       case 'agent_chunk': {
         if (openBubble) {
           openBubble.text += entry.text;
+          openBubbleRaws.push(raw);
         } else {
-          openBubble = { kind: 'bubble', key, text: entry.text };
+          openBubble = { kind: 'bubble', key, text: entry.text, json: '' };
+          openBubbleRaws = [raw];
           items.push(openBubble);
         }
         break;
@@ -115,12 +173,12 @@ export function buildRenderItems(entries: readonly ParsedEntry[], ids?: readonly
       case 'agent_message': {
         // A flat legacy message is its own bubble and does NOT join reassembly.
         closeBubble();
-        items.push({ kind: 'bubble', key, text: entry.text });
+        items.push({ kind: 'bubble', key, text: entry.text, json: stringifyRaw(raw) });
         break;
       }
       case 'system': {
         closeBubble();
-        const item: SystemItem = { kind: 'system', key, text: entry.text };
+        const item: SystemItem = { kind: 'system', key, text: entry.text, json: stringifyRaw(raw) };
         if (entry.badge !== undefined) item.badge = entry.badge;
         items.push(item);
         break;
@@ -135,6 +193,7 @@ export function buildRenderItems(entries: readonly ParsedEntry[], ids?: readonly
           toolCallId: id,
           title: entry.title,
           updates: '',
+          json: stringifyRaw(raw),
         };
         toolCards.set(id, card);
         items.push(card);
@@ -148,21 +207,24 @@ export function buildRenderItems(entries: readonly ParsedEntry[], ids?: readonly
       }
       case 'permission': {
         closeBubble();
-        items.push({ kind: 'permission', key, title: entry.title });
+        items.push({ kind: 'permission', key, title: entry.title, json: stringifyRaw(raw) });
         break;
       }
       case 'internal': {
         closeBubble();
-        items.push({ kind: 'internal', key, text: entry.text });
+        items.push({ kind: 'internal', key, text: entry.text, json: stringifyRaw(raw) });
         break;
       }
       case 'unknown': {
         closeBubble();
-        items.push({ kind: 'unknown', key, typeLabel: entry.typeLabel });
+        items.push({ kind: 'unknown', key, typeLabel: entry.typeLabel, json: stringifyRaw(raw) });
         break;
       }
     }
   }
+
+  // Finalize any bubble still open at end of stream.
+  closeBubble();
 
   return items;
 }
