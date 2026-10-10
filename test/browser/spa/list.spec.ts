@@ -76,7 +76,7 @@ test.describe('SPA session list', () => {
     await page.getByTestId('session-card').first().click();
 
     await expect(page).toHaveURL(new RegExp(`#/sessions/${sessionId}$`));
-    await expect(page.getByTestId('detail-placeholder')).toBeVisible();
+    await expect(page.getByTestId('chat-view')).toBeVisible();
   });
 
   test('has a single Sessions nav — no Repos/Config element or requests (Req 5.3, 5.8)', async ({
