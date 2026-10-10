@@ -55,16 +55,6 @@ then implement task `7`. Depends on item 76.
 
 ---
 
-### 76. SPA overhaul — live SSE streaming, streaming states, operator controls
-
-Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement task `6`. Depends on item 75.
-
-- Spec: `.kiro/specs/spa-overhaul/` · task `6`
-- [ ] Complete · PR: --
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -114,6 +104,14 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 76. SPA overhaul — live SSE streaming, streaming states, operator controls
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `6`. Depends on item 75.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `6`
+- [x] Complete · PR: #136
 
 ### 75. SPA overhaul — core chat view, bubble renderer, all entry kinds
 
