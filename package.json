@@ -14,7 +14,9 @@
     "test:watch": "vitest --project tier1",
     "test:integration": "vitest run --project tier3",
     "test:all": "vitest run",
-    "test:browser": "npx playwright test"
+    "test:browser": "npx playwright test",
+    "build:client": "npm --prefix client run build",
+    "dev:client": "npm --prefix client run dev"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

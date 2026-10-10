@@ -105,16 +105,6 @@ then implement task `2`. Depends on item 71.
 
 ---
 
-### 71. SPA overhaul — client build infrastructure + history/SSE seam field
-
-Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement task `1`. First item in the spa-overhaul sequence.
-
-- Spec: `.kiro/specs/spa-overhaul/` · task `1`
-- [ ] Complete · PR: --
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -164,6 +154,16 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 71. SPA overhaul — client build infrastructure + history/SSE seam field
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `1`. First item in the spa-overhaul sequence.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `1`
+- [x] Complete · PR: #131
+
+---
 
 ### 70. Task/attempt/outcome — ROADMAP intake adapter + final verification
 
