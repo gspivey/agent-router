@@ -55,16 +55,6 @@ then implement tasks `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`, `10.5`, `11.1
 
 ---
 
-### 68. Task/attempt/outcome — attempt runner, repo scheduler/breaker, agent outcome channel, transcript retention
-
-Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `4.1`, `4.2`, `4.3`, `5.1`, `5.2`, `5.3`, `5.4`, `5.5`, `6.1`, `6.2`, `6.3`, `7.1`, `7.2`, `7.3`, `8.1`, `8.2`, `8.3`. Depends on item 67.
-
-- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `4.1`, `4.2`, `4.3`, `5.1`, `5.2`, `5.3`, `5.4`, `5.5`, `6.1`, `6.2`, `6.3`, `7.1`, `7.2`, `7.3`, `8.1`, `8.2`, `8.3`
-- [ ] Complete
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -114,6 +104,16 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 68. Task/attempt/outcome — attempt runner, repo scheduler/breaker, agent outcome channel, transcript retention
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `4.1`, `4.2`, `4.3`, `5.1`, `5.2`, `5.3`, `5.4`, `5.5`, `6.1`, `6.2`, `6.3`, `7.1`, `7.2`, `7.3`, `8.1`, `8.2`, `8.3`. Depends on item 67.
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `4.1`, `4.2`, `4.3`, `5.1`, `5.2`, `5.3`, `5.4`, `5.5`, `6.1`, `6.2`, `6.3`, `7.1`, `7.2`, `7.3`, `8.1`, `8.2`, `8.3`
+- [x] Complete · PR: #126
+
+---
 
 ### 67. Task/attempt/outcome — ULID, types, DB tables, task service/state machine
 

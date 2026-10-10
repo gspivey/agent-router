@@ -32,7 +32,8 @@ export interface CliRequest {
     | 'get_session_project'
     | 'get_token'
     | 'tokens_status'
-    | 'register_worktree';
+    | 'register_worktree'
+    | 'report_outcome';
   [key: string]: unknown;
 }
 
@@ -42,6 +43,28 @@ export interface CliServer {
 }
 
 type OpHandler = (req: CliRequest) => Promise<Record<string, unknown>>;
+
+/**
+ * Payload routed to the active `AttemptRunner` when an agent calls the
+ * `report_outcome` MCP tool (Requirement 7.2a). The daemon wires a sink that
+ * resolves the session's running attempt and records the self-report. The
+ * `pr_url` field is forwarded end-to-end (HIGH-5).
+ */
+export interface AttemptOutcomePayload {
+  sessionId: string;
+  outcome: string;
+  reason_code: string | null;
+  reason: string | null;
+  blocked: unknown;
+  pr_url: string | null;
+}
+
+/**
+ * The sink returns `true` when the self-report was accepted (a running attempt
+ * matched and the outcome was in the agent-declarable enum), `false` otherwise
+ * (so the agent/daemon falls through to the file/mechanical path).
+ */
+export type AttemptOutcomeSink = (payload: AttemptOutcomePayload) => boolean;
 
 export function createCliServer(deps: {
   socketPath: string;
@@ -53,8 +76,9 @@ export function createCliServer(deps: {
   cronEntries?: CronEntry[];
   tokenStore?: TokenStore;
   agentRunsDir?: string;
+  attemptOutcomeSink?: AttemptOutcomeSink;
 }): CliServer {
-  const { socketPath, sessionMgr, sessionFiles, log, db, cronTasks, cronEntries, tokenStore, agentRunsDir } = deps;
+  const { socketPath, sessionMgr, sessionFiles, log, db, cronTasks, cronEntries, tokenStore, agentRunsDir, attemptOutcomeSink } = deps;
 
   let server: net.Server | null = null;
   const activeConnections = new Set<net.Socket>();
@@ -105,6 +129,32 @@ export function createCliServer(deps: {
       const source = typeof req['source'] === 'string' ? req['source'] : 'cli';
       await sessionMgr.injectPrompt(sessionId, prompt, source as 'cli');
       return { ok: true };
+    },
+
+    async report_outcome(req: CliRequest): Promise<Record<string, unknown>> {
+      const sessionId = req['session_id'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('Missing or empty "session_id" parameter');
+      }
+      const outcome = req['outcome'];
+      // Daemon-side validation against the agent-declarable enum (Requirement 7.2):
+      // reject daemon-only outcomes and fall through to the file/mechanical path.
+      if (outcome !== 'succeeded' && outcome !== 'failed' && outcome !== 'blocked') {
+        return { ok: false, accepted: false, error: 'outcome must be one of succeeded|failed|blocked' };
+      }
+      if (attemptOutcomeSink === undefined) {
+        // No attempt runner wired (e.g. the daemon is not running the task layer).
+        return { ok: false, accepted: false, error: 'report_outcome not available in this daemon' };
+      }
+      const accepted = attemptOutcomeSink({
+        sessionId,
+        outcome,
+        reason_code: typeof req['reason_code'] === 'string' ? req['reason_code'] : null,
+        reason: typeof req['reason'] === 'string' ? req['reason'] : null,
+        blocked: req['blocked'] ?? null,
+        pr_url: typeof req['pr_url'] === 'string' ? req['pr_url'] : null,
+      });
+      return { ok: accepted, accepted };
     },
 
     async terminate_session(req: CliRequest): Promise<Record<string, unknown>> {

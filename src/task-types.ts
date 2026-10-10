@@ -126,7 +126,8 @@ export interface TerminationIntent {
  */
 export interface AttemptEndState {
   outcome: AttemptOutcome;
-  reasonCode: ReasonCode;
+  /** `null` only for a natural `succeeded` end (Requirement 6.8). */
+  reasonCode: ReasonCode | null;
   failureClass: FailureClass | null;
   /**
    * Whether this end increments the repo's `consecutive_failures` (circuit
@@ -136,6 +137,8 @@ export interface AttemptEndState {
    * is `null`, a transient network fault that must not trip the breaker).
    */
   countsTowardBreaker?: boolean;
+  /** Free-text human reason (distinct from the closed `reasonCode`). */
+  reason?: string;
   blocked?: Blocked;
   artifacts?: Artifacts;
   usage?: Usage;
