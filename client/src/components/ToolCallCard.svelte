@@ -9,8 +9,13 @@
    *
    * Below 768 px the card renders collapsed by default (Requirement 6.8); the
    * operator expands it by activating the header. On wider viewports it starts
-   * expanded. The streaming spinner (Requirement 7.3) is NOT part of this
-   * historical-only task — it lands with live SSE in Task 6.
+   * expanded.
+   *
+   * When `spinner` is true (live streaming, Task 6 / Requirement 7.3) the header
+   * shows an in-progress spinner and suppresses the expand affordance — the card
+   * cannot be toggled while the tool call is still running. Once the session is
+   * inactive OR the tool call finishes (a `completed`/`failed` ACP status), the
+   * caller passes `spinner={false}` and the expand arrow returns.
    */
   import { untrack } from 'svelte';
 
@@ -20,9 +25,11 @@
     updates: string;
     /** Start collapsed (true on mobile). Defaults to false (expanded). */
     collapsed?: boolean;
+    /** Show the in-progress spinner and suppress expand (Requirement 7.3). */
+    spinner?: boolean;
   }
 
-  const { title, updates, collapsed = false }: Props = $props();
+  const { title, updates, collapsed = false, spinner = false }: Props = $props();
 
   // One-time initial expanded state: collapsed on mobile, expanded otherwise.
   // `collapsed` seeds local state exactly once (it is an initial default, not a
@@ -30,8 +37,12 @@
   let open = $state(untrack(() => !collapsed));
 
   function toggle(): void {
+    if (spinner) return; // no expand/collapse while the spinner is shown (7.3)
     open = !open;
   }
+
+  // While spinning, force the body closed and hide the expand affordance.
+  const showBody = $derived(!spinner && open && updates !== '');
 </script>
 
 <div
@@ -41,14 +52,18 @@
   <button
     type="button"
     data-testid="tool-call-header"
-    aria-expanded={open}
+    aria-expanded={spinner ? false : open}
     onclick={toggle}
     class="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--tool-card-accent)]"
   >
-    <span aria-hidden="true" class="text-xs">{open ? '▾' : '▸'}</span>
+    {#if spinner}
+      <span data-testid="tool-call-spinner" class="inline-block animate-spin text-xs" aria-hidden="true">◴</span>
+    {:else}
+      <span aria-hidden="true" class="text-xs">{open ? '▾' : '▸'}</span>
+    {/if}
     <span class="min-w-0 flex-1 truncate">{title}</span>
   </button>
-  {#if open && updates}
+  {#if showBody}
     <pre
       data-testid="tool-call-body"
       class="m-0 max-w-full overflow-x-auto whitespace-pre-wrap break-words border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)]"

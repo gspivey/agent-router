@@ -1,31 +1,54 @@
 <script lang="ts">
   /**
-   * Chat (detail) view — historical render only (spa-overhaul Task 5 / ROADMAP 75).
+   * Chat (detail) view — live SSE streaming, streaming states, operator controls
+   * (spa-overhaul Task 6 / ROADMAP 76; builds on the Task 5 historical renderer).
    *
-   * Fetches the session history via `api.getSession(id, 200)` (capturing
-   * `entries`, `meta`, `first_event_id`, `last_event_id`), normalizes each raw
-   * entry with `parseStreamEntry` from `@shared/logic`, folds it into the
-   * renderable item list (`buildRenderItems`), and renders each kind with its
-   * dedicated Svelte component in ascending event-`id` order (Requirement 6.1,
-   * 6.9). Rendering is Svelte-native from the `ParsedEntry` union — the DOM-
-   * mutation `renderStreamEntry` from `web-ui.ts` is deliberately NOT reused.
+   * Flow:
+   *  - Fetch history via `api.getSession(id, 200)` (`entries`, `meta`,
+   *    `first_event_id`, `last_event_id`); render skeleton bubbles while in
+   *    flight (Req 7.5).
+   *  - Derive each entry's SSE id as `first_event_id + i` (contiguous broker
+   *    ids, Req 10) and seed the merged entry map.
+   *  - For `meta.status === 'active'` sessions, open the SSE stream via
+   *    `connectStream`, seeding the first `Last-Event-ID` from `last_event_id`
+   *    (Req 7.1 / 4.3); append incoming entries merged by id (Req 4.4), show the
+   *    reconnect pill on `reconnecting` (Req 7.4), and close the stream on
+   *    `onDestroy`, on an `expired` fatal, and on `session_ended` (Req 4.6).
+   *  - Streaming states: the pulsing `▌` cursor on the active agent bubble while
+   *    a turn streams (Req 7.2), the in-progress spinner on unfinished tool-call
+   *    cards (Req 7.3) — both derived by the pure `streaming-state` helpers.
+   *  - Operator controls: an always-visible `Composer` (inject, Req 7.6) and the
+   *    `DetailBar` Interrupt control (Req 7.7). On `session_ended` the ended pill
+   *    is appended, cursor/spinners vanish, and both controls go inert (Req 7.8).
+   *  - Auto-scroll to the bottom on new entries unless the operator scrolled up
+   *    >100 px, in which case a "↓ New messages" badge appears (Req 7.1 / HIGH-13).
    *
-   * Live SSE streaming, the streaming cursor, tool spinners, the composer, and
-   * the interrupt control all land in Task 6; this task is historical-only, so a
-   * completed-session load shows no cursor and no spinners.
+   * Rendering stays Svelte-native from the `ParsedEntry` union — the DOM-mutation
+   * `renderStreamEntry` from `web-ui.ts` is deliberately NOT reused. No raw-HTML
+   * directive anywhere: all content is plain text (NFR-6).
    */
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { api, AuthError } from '../lib/api.js';
-  import { parseStreamEntry } from '../lib/logic.js';
+  import { auth, enterExpiredState, registerAbortHandler } from '../lib/stores.svelte.js';
+  import { parseStreamEntry, mergeEvents, type SSEEvent } from '../lib/logic.js';
   import { buildRenderItems, type RenderItem } from '../lib/chat-render.js';
-  import type { StreamEntry } from '../lib/types.js';
-  import { goToList } from '../routes/router.svelte.js';
+  import {
+    shouldShowCursor,
+    finishedToolCallIds,
+    shouldShowSpinner,
+  } from '../lib/streaming-state.js';
+  import { connectStream, type SseHandle } from '../lib/sse.js';
+  import type { SessionStatus, StreamEntry } from '../lib/types.js';
   import MessageBubble from './MessageBubble.svelte';
   import SystemPill from './SystemPill.svelte';
   import ToolCallCard from './ToolCallCard.svelte';
   import PermissionCard from './PermissionCard.svelte';
   import InternalPill from './InternalPill.svelte';
   import UnknownPill from './UnknownPill.svelte';
+  import SkeletonBubble from './SkeletonBubble.svelte';
+  import ReconnectPill from './ReconnectPill.svelte';
+  import Composer from './Composer.svelte';
+  import DetailBar from './DetailBar.svelte';
 
   interface Props {
     sessionId: string;
@@ -33,55 +56,217 @@
 
   const { sessionId }: Props = $props();
 
+  type Connection = 'live' | 'reconnecting';
+
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let items = $state<RenderItem[]>([]);
+  // Merged (id, data) entries, kept sorted ascending by id for exactly-once
+  // rendering across reconnects (Req 4.4, 6.9).
+  let events = $state<SSEEvent[]>([]);
+  let status = $state<SessionStatus>('active');
+  let connection = $state<Connection>('live');
+  let ended = $state(false);
+  // Auto-scroll affordance (Req 7.1 / HIGH-13).
+  let newMessages = $state(false);
+
+  let sse: SseHandle | null = null;
+  let deregisterAbort: (() => void) | null = null;
+  let logEl: HTMLDivElement | null = $state(null);
+  let highestId = 0;
+
+  // `SSEEvent.data` is typed as `string` in the shared logic, but the SSE client
+  // delivers already-parsed JSON objects. We store the raw entry object as data
+  // and re-cast on read; the id is what matters for dedup.
+  const rawEntries = $derived(events.map((e) => e.data as unknown as StreamEntry));
+  const ids = $derived(events.map((e) => e.id));
+  const parsed = $derived(rawEntries.map((e) => parseStreamEntry(e)));
+  const items = $derived<RenderItem[]>(buildRenderItems(parsed, ids));
+
+  // Streaming-state derivations (pure, Req 7.2 / 7.3).
+  const cursorVisible = $derived(shouldShowCursor(rawEntries, status));
+  const finishedTools = $derived(finishedToolCallIds(rawEntries));
+  // The index of the LAST agent bubble — the cursor attaches there only.
+  const lastBubbleIndex = $derived.by(() => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i]?.kind === 'bubble') return i;
+    }
+    return -1;
+  });
+
+  const controlsDisabled = $derived(ended || status !== 'active');
+
+  function mergeIncoming(incoming: SSEEvent[]): void {
+    events = mergeEvents(events, incoming);
+    for (const e of incoming) if (e.id > highestId) highestId = e.id;
+  }
+
+  function onNewEntry(): void {
+    void maybeAutoScroll();
+  }
+
+  async function maybeAutoScroll(): Promise<void> {
+    await tick();
+    const el = logEl;
+    if (el === null) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // Within 100px of the bottom → stick to the bottom (Req 7.1 / HIGH-13).
+    if (distanceFromBottom <= 100) {
+      el.scrollTop = el.scrollHeight;
+      newMessages = false;
+    } else {
+      newMessages = true;
+    }
+  }
+
+  function scrollToBottom(): void {
+    const el = logEl;
+    if (el === null) return;
+    el.scrollTop = el.scrollHeight;
+    newMessages = false;
+  }
+
+  function closeStream(): void {
+    sse?.close();
+    sse = null;
+    deregisterAbort?.();
+    deregisterAbort = null;
+  }
+
+  function openStream(firstEventId: number | null): void {
+    const token = auth.token;
+    if (token === null) return;
+    const handle = connectStream({
+      sessionId,
+      token,
+      firstEventId,
+      onEntry: (id, data) => {
+        mergeIncoming([{ id, data: data as unknown as string }]);
+        onNewEntry();
+      },
+      onEnded: () => {
+        // Append the ended system pill, hide cursor/spinners, disable controls.
+        ended = true;
+        status = 'completed';
+        connection = 'live';
+        mergeIncoming([
+          {
+            id: highestId + 1,
+            data: {
+              ts: new Date().toISOString(),
+              source: 'router',
+              type: 'session_ended',
+              reason: 'ended',
+            } as unknown as string,
+          },
+        ]);
+        onNewEntry();
+        closeStream();
+      },
+      onStatus: (s) => {
+        connection = s;
+      },
+      onFatal: (kind) => {
+        if (kind === 'expired') {
+          enterExpiredState();
+        } else {
+          // 404 "not found" / 410 "ended": stop streaming, treat as inactive.
+          ended = true;
+          status = kind === 'ended' ? 'completed' : status;
+        }
+        closeStream();
+      },
+    });
+    sse = handle;
+    // Register the handle so the global 401/403 lockout can abort it (Req 3.4).
+    deregisterAbort = registerAbortHandler(handle.close);
+  }
 
   async function load(): Promise<void> {
     loading = true;
     error = null;
+    ended = false;
     try {
       const detail = await api.getSession(sessionId, 200);
       const raw = detail.entries as StreamEntry[];
-      // Derive each entry's SSE id as first_event_id + i (contiguous broker
-      // ids, Requirement 10); fall back to the index when the slice is empty.
       const base = detail.first_event_id;
-      const ids = base !== null ? raw.map((_, i) => base + i) : raw.map((_, i) => i);
-      const parsed = raw.map((e) => parseStreamEntry(e));
-      items = buildRenderItems(parsed, ids);
+      // Contiguous broker ids: id of entry i is first_event_id + i (Req 10).
+      const seeded: SSEEvent[] =
+        base !== null
+          ? raw.map((e, i) => ({ id: base + i, data: e as unknown as string }))
+          : raw.map((e, i) => ({ id: i, data: e as unknown as string }));
+      events = mergeEvents([], seeded);
+      highestId = detail.last_event_id ?? (seeded.length > 0 ? seeded[seeded.length - 1]!.id : 0);
+      status = detail.meta.status;
+      loading = false;
+
+      // Only live sessions open a stream (Req 7.1); a completed/abandoned/failed
+      // history load stays static — no cursor, no spinners (Req 7.2, 7.3).
+      if (detail.meta.status === 'active') {
+        connection = 'live';
+        openStream(detail.last_event_id);
+      }
+      await maybeAutoScroll();
     } catch (err) {
+      loading = false;
       if (!(err instanceof AuthError)) {
         error = 'Could not load session.';
       }
-    } finally {
-      loading = false;
+    }
+  }
+
+  async function sendPrompt(prompt: string): Promise<void> {
+    await api.inject(sessionId, prompt);
+  }
+
+  async function interrupt(): Promise<void> {
+    await api.interrupt(sessionId);
+    // Re-fetch meta to reflect the updated status; do NOT assume the session
+    // ended (Req 7.7 / HIGH-6).
+    try {
+      const detail = await api.getSession(sessionId, 1);
+      status = detail.meta.status;
+      if (status !== 'active') ended = true;
+    } catch {
+      // Leave status as-is on a transient re-fetch failure.
     }
   }
 
   onMount(() => {
     void load();
   });
+
+  onDestroy(() => {
+    closeStream();
+  });
+
+  const sessionTitle = $derived(sessionId);
 </script>
 
-<section data-testid="chat-view" class="flex min-h-screen flex-col">
+<section data-testid="chat-view" class="flex h-[100dvh] flex-col">
   <div class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-    <button
-      type="button"
-      data-testid="back-to-list"
-      onclick={goToList}
-      class="min-h-[44px] rounded border border-[var(--border)] bg-[var(--surface)] px-4 text-sm text-[var(--text-primary)]"
-    >
-      ← Sessions
-    </button>
     <span class="min-w-0 flex-1 truncate text-sm text-[var(--text-muted)]">{sessionId}</span>
+    {#if connection === 'reconnecting' && !ended}
+      <span class="text-xs text-[var(--warning)]">reconnecting</span>
+    {/if}
   </div>
 
+  {#if connection === 'reconnecting' && !ended}
+    <ReconnectPill />
+  {/if}
+
   <div
+    bind:this={logEl}
     data-testid="chat-log"
-    class="flex flex-1 flex-col gap-0.5 overflow-x-hidden px-3 py-3"
+    role="log"
+    aria-live="polite"
+    class="relative flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-3"
   >
     {#if loading}
-      <p data-testid="chat-loading" class="p-4 text-sm text-[var(--text-muted)]">Loading session…</p>
+      <div data-testid="chat-skeletons">
+        <SkeletonBubble width="55%" />
+        <SkeletonBubble width="70%" />
+        <SkeletonBubble width="40%" />
+      </div>
     {:else if error}
       <div data-testid="chat-error" class="flex flex-col items-start gap-3 p-4">
         <p class="m-0 text-sm text-[var(--error)]">{error}</p>
@@ -97,13 +282,18 @@
     {:else if items.length === 0}
       <p data-testid="chat-empty" class="p-4 text-sm text-[var(--text-muted)]">No activity yet.</p>
     {:else}
-      {#each items as item (item.key)}
+      {#each items as item, i (item.key)}
         {#if item.kind === 'bubble'}
-          <MessageBubble text={item.text} />
+          <MessageBubble text={item.text} cursor={cursorVisible && i === lastBubbleIndex} />
         {:else if item.kind === 'system'}
           <SystemPill text={item.text} badge={item.badge} />
         {:else if item.kind === 'tool_call'}
-          <ToolCallCard title={item.title} updates={item.updates} collapsed={true} />
+          <ToolCallCard
+            title={item.title}
+            updates={item.updates}
+            collapsed={true}
+            spinner={shouldShowSpinner(item.toolCallId, finishedTools, status)}
+          />
         {:else if item.kind === 'permission'}
           <PermissionCard title={item.title} />
         {:else if item.kind === 'internal'}
@@ -114,4 +304,20 @@
       {/each}
     {/if}
   </div>
+
+  {#if newMessages}
+    <div class="pointer-events-none flex w-full justify-center">
+      <button
+        type="button"
+        data-testid="new-messages-badge"
+        onclick={scrollToBottom}
+        class="pointer-events-auto -mt-10 mb-2 min-h-[44px] rounded-full bg-[var(--agent-bubble-bg)] px-4 text-xs font-medium text-[var(--agent-bubble-text)]"
+      >
+        ↓ New messages
+      </button>
+    </div>
+  {/if}
+
+  <Composer onSend={sendPrompt} disabled={controlsDisabled} />
+  <DetailBar title={sessionTitle} onInterrupt={interrupt} disabled={controlsDisabled} />
 </section>
