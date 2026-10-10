@@ -85,16 +85,6 @@ then implement task `4`. Depends on item 73.
 
 ---
 
-### 73. SPA overhaul — auth flow, typed API client, SSE stream client
-
-Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement task `3`. Depends on item 71.
-
-- Spec: `.kiro/specs/spa-overhaul/` · task `3`
-- [ ] Complete · PR: --
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -144,6 +134,14 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 73. SPA overhaul — auth flow, typed API client, SSE stream client
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `3`. Depends on item 71.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `3`
+- [x] Complete · PR: #133
 
 ### 72. SPA overhaul — Hono SPA serving under /app, dev proxy wiring
 

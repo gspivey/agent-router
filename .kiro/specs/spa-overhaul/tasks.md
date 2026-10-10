@@ -149,27 +149,27 @@ sub-task's box only when its code and its tests are on the branch and green.
     NFR-4.1, NFR-4.2).
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8; NFR-2.1, NFR-4.1, NFR-4.2_
 
-- [ ] 3. Auth flow + typed API client + SSE stream client (ROADMAP 73)
-  - [ ] 3.1 Add `client/src/lib/logic.ts` re-exporting `@shared/logic`, and
+- [x] 3. Auth flow + typed API client + SSE stream client (ROADMAP 73)
+  - [x] 3.1 Add `client/src/lib/logic.ts` re-exporting `@shared/logic`, and
     `client/src/lib/types.ts` with CLIENT-OWNED DTOs mirroring the backend shapes
     (`SessionSummary`, `SessionListResponse`, `SessionMeta`, `StreamEntry`,
     `SessionDetailResponse` INCLUDING `first_event_id: number | null` and
     `last_event_id: number | null`). The client must NOT import types from `../src/` (only the
     `@shared/logic` alias is allowed) (Req 3.6, 10.1; NFR-2.2; HIGH-8).
-  - [ ] 3.2 Add `client/src/lib/stores.svelte.ts` with runes state (`auth` with
+  - [x] 3.2 Add `client/src/lib/stores.svelte.ts` with runes state (`auth` with
     `error: 'none'|'missing'|'expired'`, `sessionList`, `createChatState`) and token resolution in
     the exact precedence: (1) URL `?token` → write `localStorage['ar_token']` AND
     `window.__DAEMON_TOKEN`, strip via `history.replaceState`; (2) non-empty
     `window.__DAEMON_TOKEN` → persist to `localStorage` (overwrite stale); (3) stored
     `localStorage['ar_token']`; else `auth.error='missing'`. Add the lockout handler that enters
     the 'expired' state on 401/403 (Req 3.1, 3.2, 3.5, 3.7).
-  - [ ] 3.3 Add `client/src/lib/api.ts`: typed functions for the sessions-only endpoints
+  - [x] 3.3 Add `client/src/lib/api.ts`: typed functions for the sessions-only endpoints
     (`listSessions`, `getSession` returning `first_event_id`/`last_event_id`, `inject`,
     `interrupt`), each attaching
     `Authorization: Bearer <token>`; on 401 OR 403, clear `ar_token`, abort active SSE, enter the
     "Session expired — reload" state, and do not retry. Do NOT add repos/projects/config/kill
     functions (Req 3.3, 3.4, 3.6, 5.8).
-  - [ ] 3.4 Add `client/src/lib/sse.ts`: `fetch`-based stream reader using an `AbortController`
+  - [x] 3.4 Add `client/src/lib/sse.ts`: `fetch`-based stream reader using an `AbortController`
     that parses SSE frames (`event`/`id`/`data`, ignore `:` comment lines), seeds the first
     `Last-Event-ID` from the history `last_event_id` (omit the header when null), sends the highest
     seen id on reconnect via `trackLastEventId`, dedups via `mergeEvents`, reconnects on drop with
@@ -177,10 +177,10 @@ sub-task's box only when its code and its tests are on the branch and green.
     401|403 (expired lockout) / other non-200 (wait 5 s then backoff), applies a 60 s stall timer
     (reset by frames and `:heartbeat`) that aborts+reconnects, stops on `session_ended`, and
     reports `live`/`reconnecting` status. `close()` calls `controller.abort()` (Req 4.1–4.9).
-  - [ ] 3.5 Unit (vitest) — auth: token precedence resolution (URL > `__DAEMON_TOKEN` >
+  - [x] 3.5 Unit (vitest) — auth: token precedence resolution (URL > `__DAEMON_TOKEN` >
     localStorage, fresh overwrites stale); 401/403 lockout clears token and aborts SSE — all with
     no network (Req 3.1–3.5).
-  - [ ] 3.6 Unit (vitest) — SSE client against a STUBBED `fetch` (HIGH-7). Mock a `ReadableStream`
+  - [x] 3.6 Unit (vitest) — SSE client against a STUBBED `fetch` (HIGH-7). Mock a `ReadableStream`
     that emits SSE frames so the client is tested without a live server. Cover: SSE frame parser
     (`event`/`id`/`data`, ignore `:` comment lines); first-connect vs reconnect `Last-Event-ID`
     (seed from history `last_event_id`, omit when null; reconnect sends the highest seen id);
@@ -190,7 +190,7 @@ sub-task's box only when its code and its tests are on the branch and green.
       duplicate entries.
     - **Disconnect + reconnect** replays only the missing events (no re-render of events already
       received). (Req 4.1–4.9.)
-  - [ ] 3.7 Playwright (`test/browser/spa/auth.spec.ts`) — AUTH ONLY (SSE browser tests moved to
+  - [x] 3.7 Playwright (`test/browser/spa/auth.spec.ts`) — AUTH ONLY (SSE browser tests moved to
     Task 6.11 per HIGH-7): `?token` stripped from the URL bar; a fresh `?token` overwrites a stale
     stored token; API requests carry the bearer header; a stored-token second visit succeeds
     (200); a 401/403 shows the "expired" state and clears the token (Req 3.1–3.4, 3.7; NFR-4.1).
