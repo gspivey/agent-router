@@ -111,6 +111,10 @@ describe('E2E: webhook → wake → session loop', () => {
     shutdownDrainSeconds: 60,
     credentialMode: 'env' as const,
     reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
+    idleTimeoutSeconds: 900,
+    setupTimeoutSeconds: 120,
+    taskTranscript: { archiveGraceMinutes: 60, retentionDays: 90, sweepIntervalMinutes: 30 },
+    roadmap: { scanIntervalMinutes: 15 },
   };
 
   beforeEach(async () => {

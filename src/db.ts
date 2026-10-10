@@ -54,6 +54,12 @@ export interface Database {
   getAllCronStates(): CronState[];
   walCheckpoint(): void;
   shutdown(): Promise<void>;
+  /**
+   * The underlying `better-sqlite3` handle. Exposed so the task-attempt-outcome
+   * layer (`initTaskDatabase`) can share the same open connection (and its WAL
+   * mode) rather than opening a second handle to the same file.
+   */
+  raw(): BetterSqlite3.Database;
 }
 
 const SESSIONS_DDL = `
@@ -477,6 +483,10 @@ export function initDatabase(dbPath: string): Database {
       db.pragma('wal_checkpoint(TRUNCATE)');
       db.close();
       return Promise.resolve();
+    },
+
+    raw(): BetterSqlite3.Database {
+      return db;
     },
   };
 

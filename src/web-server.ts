@@ -11,6 +11,8 @@ import type { AgentRouterConfig } from './config.js';
 import { createAuthMiddleware, createWriteGuard } from './web-auth.js';
 import type { AuthConfig, AuthResult } from './web-auth.js';
 import { createWebRoutes } from './web-routes.js';
+import { createV1Routes } from './v1-routes.js';
+import type { V1RouteDeps } from './v1-routes.js';
 import { renderWebUI } from './web-ui.js';
 import { FatalError } from './errors.js';
 import * as fs from 'node:fs';
@@ -38,10 +40,17 @@ export interface WebAppDeps {
   credentialTokenStore?: import('./token-store.js').TokenStore;
   /** Database for cron state queries. Optional for backwards compat. */
   db?: import('./db.js').Database;
+  /**
+   * Task-attempt-outcome `/v1` API layer. When present, `/v1/*` is mounted with
+   * the same auth middleware and write guard as the control-plane API. Omitting
+   * it leaves `/v1` unmounted (backwards compat for callers/tests that do not
+   * run the task layer).
+   */
+  v1?: Omit<V1RouteDeps, 'log' | 'rootDir' | 'shuttingDown'>;
 }
 
 export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
-  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db } = deps;
+  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1 } = deps;
 
   const app = new Hono<WebEnv>();
 
@@ -113,10 +122,13 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   app.use('/repos/*', authMiddleware);
   app.use('/projects', authMiddleware);
   app.use('/config', authMiddleware);
+  app.use('/v1', authMiddleware);
+  app.use('/v1/*', authMiddleware);
 
   // --- Write guard for POST endpoints ---
   const writeGuard = createWriteGuard(config.allowedEmails);
   app.post('/sessions/*', writeGuard);
+  app.post('/v1/*', writeGuard);
 
   // --- Mount route handlers ---
   const routeDeps: Parameters<typeof createWebRoutes>[0] = {
@@ -127,6 +139,12 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   if (db !== undefined) routeDeps.db = db;
   const routes = createWebRoutes(routeDeps);
   app.route('/', routes);
+
+  // --- Mount the /v1 task-attempt-outcome API when wired ---
+  if (v1 !== undefined) {
+    const v1Routes = createV1Routes({ ...v1, log, rootDir, shuttingDown });
+    app.route('/v1', v1Routes);
+  }
 
   return app;
 }

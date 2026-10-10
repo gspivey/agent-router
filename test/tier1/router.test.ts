@@ -431,6 +431,7 @@ describe('evaluateWakePolicy', () => {
       getAllCronStates: () => [],
       walCheckpoint: () => undefined,
       shutdown: () => Promise.resolve(),
+      raw: (() => ({})) as unknown as Database['raw'],
       ...overrides,
     };
   }
@@ -448,6 +449,10 @@ describe('evaluateWakePolicy', () => {
     shutdownDrainSeconds: 60,
     credentialMode: 'env',
     reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
+    idleTimeoutSeconds: 900,
+    setupTimeoutSeconds: 120,
+    taskTranscript: { archiveGraceMinutes: 60, retentionDays: 90, sweepIntervalMinutes: 30 },
+    roadmap: { scanIntervalMinutes: 15 },
   };
 
   it('returns wake=true for check_run with trustTier=n/a', () => {
@@ -696,6 +701,7 @@ describe('evaluateWakePolicy — self-wake prevention', () => {
       getAllCronStates: () => [],
       walCheckpoint: () => undefined,
       shutdown: () => Promise.resolve(),
+      raw: (() => ({})) as unknown as Database['raw'],
       ...overrides,
     };
   }
@@ -713,6 +719,10 @@ describe('evaluateWakePolicy — self-wake prevention', () => {
     shutdownDrainSeconds: 60,
     credentialMode: 'env',
     reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
+    idleTimeoutSeconds: 900,
+    setupTimeoutSeconds: 120,
+    taskTranscript: { archiveGraceMinutes: 60, retentionDays: 90, sweepIntervalMinutes: 30 },
+    roadmap: { scanIntervalMinutes: 15 },
   };
 
   it('blocks wake when comment is self-authored (in outbound table)', () => {

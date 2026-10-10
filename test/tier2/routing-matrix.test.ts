@@ -72,6 +72,7 @@ function makeDb(state: DbState = {}): Database {
     getAllCronStates: vi.fn(() => []),
     walCheckpoint: vi.fn(),
     shutdown: vi.fn(() => Promise.resolve()),
+    raw: (() => ({})) as unknown as Database['raw'],
   };
 }
 
@@ -88,6 +89,10 @@ const config: AgentRouterConfig = {
   shutdownDrainSeconds: 60,
   credentialMode: 'env',
     reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: '/tmp/agent-runs', sweepIntervalMinutes: 15 },
+    idleTimeoutSeconds: 900,
+    setupTimeoutSeconds: 120,
+    taskTranscript: { archiveGraceMinutes: 60, retentionDays: 90, sweepIntervalMinutes: 30 },
+    roadmap: { scanIntervalMinutes: 15 },
 };
 
 const SESSION_FOR_PR: Session = {

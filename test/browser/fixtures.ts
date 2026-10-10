@@ -208,6 +208,10 @@ export const test = base.extend<ServerFixture & BrowserFixture>({
       shutdownDrainSeconds: 60,
       credentialMode: 'env' as const,
       reaper: { enabled: false, gracePeriodMinutes: 60, retentionDays: 30, agentRunsDir: rootDir, sweepIntervalMinutes: 60 },
+      idleTimeoutSeconds: 900,
+      setupTimeoutSeconds: 120,
+      taskTranscript: { archiveGraceMinutes: 60, retentionDays: 90, sweepIntervalMinutes: 30 },
+      roadmap: { scanIntervalMinutes: 15 },
     } as AgentRouterConfig;
 
     const app = createWebApp({

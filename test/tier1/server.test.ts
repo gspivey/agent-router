@@ -60,6 +60,7 @@ function makeDb(overrides: Partial<Database> = {}): Database {
     getAllCronStates: vi.fn(() => []),
     walCheckpoint: vi.fn(),
     shutdown: vi.fn(() => Promise.resolve()),
+    raw: (() => ({})) as unknown as Database['raw'],
     ...overrides,
   };
 }
