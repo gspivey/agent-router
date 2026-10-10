@@ -5,9 +5,16 @@ export default defineConfig({
     passWithNoTests: true,
     // Use vmThreads pool to share a single V8 isolate across workers,
     // significantly reducing per-worker memory overhead vs the default
-    // forks pool. Prevents OOM kills when running 140+ test files in
-    // parallel on the 16GB VM (observed: forks used 2-3 GB anon RSS per run).
+    // forks pool. Cap at 4 workers: on the 16GB VM with kirocrew + agent-router
+    // using ~2GB baseline, uncapped vmThreads (7 workers on 8 CPUs) still hit
+    // 3.5GB anon RSS and triggered OOM kills. 4 workers keeps peak below ~2GB
+    // while keeping the suite parallel. Increase if the VM gets more RAM.
     pool: 'vmThreads',
+    poolOptions: {
+      vmThreads: {
+        maxWorkers: 4,
+      },
+    },
     projects: [
       {
         test: {
