@@ -90,7 +90,7 @@ describe('ChatView — historical render', () => {
 
     const { getByTestId, queryByTestId } = render(ChatView, { sessionId: 's1' });
 
-    await waitFor(() => expect(queryByTestId('chat-loading')).toBeNull());
+    await waitFor(() => expect(queryByTestId('chat-skeletons')).toBeNull());
 
     // One reassembled agent bubble ("Hi there").
     expect(getByTestId('message-bubble').textContent).toContain('Hi there');
@@ -108,14 +108,14 @@ describe('ChatView — historical render', () => {
   it('renders an empty-state when there are no entries', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(detailResponse([], null));
     const { getByTestId, queryByTestId } = render(ChatView, { sessionId: 's1' });
-    await waitFor(() => expect(queryByTestId('chat-loading')).toBeNull());
+    await waitFor(() => expect(queryByTestId('chat-skeletons')).toBeNull());
     expect(getByTestId('chat-empty')).toBeTruthy();
   });
 
   it('surfaces a retriable error on a non-auth failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 500 }));
     const { getByTestId, queryByTestId } = render(ChatView, { sessionId: 's1' });
-    await waitFor(() => expect(queryByTestId('chat-loading')).toBeNull());
+    await waitFor(() => expect(queryByTestId('chat-skeletons')).toBeNull());
     expect(getByTestId('chat-error')).toBeTruthy();
     expect(getByTestId('chat-retry')).toBeTruthy();
   });
@@ -132,7 +132,7 @@ describe('ChatView — historical render', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(detailResponse(entries, 1));
 
     const { getByTestId, queryByTestId } = render(ChatView, { sessionId: 's1' });
-    await waitFor(() => expect(queryByTestId('chat-loading')).toBeNull());
+    await waitFor(() => expect(queryByTestId('chat-skeletons')).toBeNull());
 
     const log = getByTestId('chat-log');
     expect(log.querySelector('img')).toBeNull();

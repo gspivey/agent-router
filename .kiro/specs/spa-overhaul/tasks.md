@@ -255,42 +255,42 @@ sub-task's box only when its code and its tests are on the branch and green.
     of the Task 5 definition of done and shall run in CI (Req 6.2; NFR-6.2, NFR-6.3).
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9; NFR-2.2, NFR-3.2, NFR-6_
 
-- [ ] 6. Live SSE streaming + streaming states + operator controls (ROADMAP 76)
-  - [ ] 6.1 Wire `connectStream` from `src/lib/sse.ts` into `ChatView.svelte` for
+- [x] 6. Live SSE streaming + streaming states + operator controls (ROADMAP 76)
+  - [x] 6.1 Wire `connectStream` from `src/lib/sse.ts` into `ChatView.svelte` for
     `meta.status === 'active'` sessions, seeding the first connect from `last_event_id`; append
     incoming entries without reload, merged by `id`; call `close()` (abort) in `onDestroy`, on
     `expired`, and on `session_ended` (Req 7.1, 4.6).
-  - [ ] 6.2 Render the pulsing `▌` cursor on the active agent bubble ONLY when
+  - [x] 6.2 Render the pulsing `▌` cursor on the active agent bubble ONLY when
     `meta.status === 'active'` AND no turn-complete entry (a `router`-source `session_verified`,
     `session_ended`, or `prompt_injected`) has appeared after the highest-`id` agent-source
     `agent_message_chunk`. Clear the cursor per turn when such an entry arrives (Req 7.2; HIGH-5).
-  - [ ] 6.3 Render a spinner on an in-progress `ToolCallCard` ONLY when the session is active AND
+  - [x] 6.3 Render a spinner on an in-progress `ToolCallCard` ONLY when the session is active AND
     the tool call is not yet finished — i.e. it has no following `tool_call_update` for the same
     `toolCallId` whose ACP `status` is `'completed'` or `'failed'` (ACP has no `complete: boolean`
     field; use the `status` field, HIGH-C). Hide the spinner and show the expand arrow once the
     session is inactive OR a `'completed'`/`'failed'` status has arrived; suppress the expand
     affordance until then (Req 7.3).
-  - [ ] 6.4 Add `ReconnectPill.svelte` shown while `connection === 'reconnecting'` and removed on
+  - [x] 6.4 Add `ReconnectPill.svelte` shown while `connection === 'reconnecting'` and removed on
     `'live'` (Req 7.4).
-  - [ ] 6.5 Add `SkeletonBubble.svelte` shown while the history fetch is in flight, replaced on
+  - [x] 6.5 Add `SkeletonBubble.svelte` shown while the history fetch is in flight, replaced on
     resolve (Req 7.5).
-  - [ ] 6.6 Add `Composer.svelte` — ALWAYS visible, text input (font ≥16 px) + Send calling
+  - [x] 6.6 Add `Composer.svelte` — ALWAYS visible, text input (font ≥16 px) + Send calling
     `api.inject(id, prompt)`; on mobile/tablet a fixed bottom bar above the detail bar with
     `padding-bottom: env(safe-area-inset-bottom)` (Req 7.6, 8.7).
-  - [ ] 6.7 Add `DetailBar.svelte` (mobile/tablet chat bottom bar: back + title + Interrupt) and
+  - [x] 6.7 Add `DetailBar.svelte` (mobile/tablet chat bottom bar: back + title + Interrupt) and
     the Interrupt control (labeled "Interrupt", not "Kill") calling `api.interrupt(id)` behind a
     tap-confirmable dialog reading "Interrupt the current agent turn?" (no hover); after the call
     resolves, re-fetch `meta` via `api.getSession(id)` and do NOT assume the session ended; tap
     target ≥44×44 (Req 5.3, 7.7; HIGH-6).
-  - [ ] 6.8 Mobile chat layout: chat container `height: 100dvh`; auto-scroll to bottom on new SSE
+  - [x] 6.8 Mobile chat layout: chat container `height: 100dvh`; auto-scroll to bottom on new SSE
     entry UNLESS the user scrolled up >100 px, in which case show a tap-to-scroll "↓ New messages"
     badge (Req 7.1; HIGH-13).
-  - [ ] 6.9 On `session_ended`, append the ended system pill, hide cursor/spinners, and disable
+  - [x] 6.9 On `session_ended`, append the ended system pill, hide cursor/spinners, and disable
     (keep visible) the Composer Send and Interrupt controls (Req 7.8).
-  - [ ] 6.10 Unit (vitest): cursor shows only on active+incomplete and never on a non-active
+  - [x] 6.10 Unit (vitest): cursor shows only on active+incomplete and never on a non-active
     history load; spinner only on active+incomplete tool call; `session_ended` disables controls —
     all against a stubbed SSE sequence (Req 7.2, 7.3, 7.8).
-  - [ ] 6.11 Playwright (`test/browser/spa/sse-live.spec.ts`) — END-TO-END SSE against a REAL Hono
+  - [x] 6.11 Playwright (`test/browser/spa/sse-live.spec.ts`) — END-TO-END SSE against a REAL Hono
     server (the SSE browser tests moved here from Task 3 per HIGH-7). Assert the full stack: SSE
     connects with the correct first `Last-Event-ID` derived from the history `last_event_id` and
     receives a `log` frame; an agent action appends new bubbles without reload; dropping the stream
