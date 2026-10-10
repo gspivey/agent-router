@@ -35,6 +35,86 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 78. SPA overhaul — cutover: migrate / and /ui to the SPA, remove the monolith
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `8`. Depends on item 77.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `8`
+- [ ] Complete · PR: --
+
+---
+
+### 77. SPA overhaul — JSON pivot toggle, polish, accessibility
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `7`. Depends on item 76.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `7`
+- [ ] Complete · PR: --
+
+---
+
+### 76. SPA overhaul — live SSE streaming, streaming states, operator controls
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `6`. Depends on item 75.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `6`
+- [ ] Complete · PR: --
+
+---
+
+### 75. SPA overhaul — core chat view, bubble renderer, all entry kinds
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `5`. Depends on item 74.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `5`
+- [ ] Complete · PR: --
+
+---
+
+### 74. SPA overhaul — mobile-first session list view, single Sessions nav
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `4`. Depends on item 73.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `4`
+- [ ] Complete · PR: --
+
+---
+
+### 73. SPA overhaul — auth flow, typed API client, SSE stream client
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `3`. Depends on item 71.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `3`
+- [ ] Complete · PR: --
+
+---
+
+### 72. SPA overhaul — Hono SPA serving under /app, dev proxy wiring
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `2`. Depends on item 71.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `2`
+- [ ] Complete · PR: --
+
+---
+
+### 71. SPA overhaul — client build infrastructure + history/SSE seam field
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `1`. First item in the spa-overhaul sequence.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `1`
+- [ ] Complete · PR: --
+
+---
+
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
