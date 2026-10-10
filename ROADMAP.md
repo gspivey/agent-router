@@ -45,16 +45,6 @@ then implement tasks `12.1`, `12.2`, `12.3`, `12.4`, `13.1`. Depends on item 69.
 
 ---
 
-### 69. Task/attempt/outcome — /v1 REST + SSE API, restart recovery, daemon wiring
-
-Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`, `10.5`, `11.1`, `11.2`, `11.3`. Depends on item 68.
-
-- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`, `10.5`, `11.1`, `11.2`, `11.3`
-- [ ] Complete
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -104,6 +94,16 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 69. Task/attempt/outcome — /v1 REST + SSE API, restart recovery, daemon wiring
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`, `10.5`, `11.1`, `11.2`, `11.3`. Depends on item 68.
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `9.1`, `9.2`, `10.1`, `10.2`, `10.3`, `10.4`, `10.5`, `11.1`, `11.2`, `11.3`
+- [x] Complete · PR: #127
+
+---
 
 ### 68. Task/attempt/outcome — attempt runner, repo scheduler/breaker, agent outcome channel, transcript retention
 
