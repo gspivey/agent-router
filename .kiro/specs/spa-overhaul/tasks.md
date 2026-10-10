@@ -97,8 +97,8 @@ sub-task's box only when its code and its tests are on the branch and green.
     `npm run check` passes (Req 1.3; NFR-1.1).
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.9, 1.10, 10.1, 10.2, 10.4; NFR-1.1, NFR-2.1, NFR-2.3, NFR-3.1_
 
-- [ ] 2. Hono SPA serving under /app + dev proxy wiring (ROADMAP 72)
-  - [ ] 2.1 Add `src/web-spa.ts` exporting `isDevMode(nodeEnv)`, `embedTokenFor(c, deps)`, and
+- [x] 2. Hono SPA serving under /app + dev proxy wiring (ROADMAP 72)
+  - [x] 2.1 Add `src/web-spa.ts` exporting `isDevMode(nodeEnv)`, `embedTokenFor(c, deps)`, and
     `registerSpaRoutes(app, deps)` (`SpaServingDeps`: `log`, `clientDist` default `./client/dist`,
     `nodeEnv`, `token: string | null`, `bindPublic: boolean`, `hasProxyProof(c): boolean`).
     `embedTokenFor(c, deps)` returns `deps.token` ONLY when `!deps.bindPublic && !deps.hasProxyProof(c)`
@@ -107,20 +107,20 @@ sub-task's box only when its code and its tests are on the branch and green.
     all 4 combinations of `bindPublic` ∈ {true,false} × `hasProxyProof(c)` ∈ {true,false}:
     ONLY `{ bindPublic: false, hasProxyProof: false }` shall return the token; the other three
     combinations shall return `null`.
-  - [ ] 2.2 Prod branch, asset catch-all: register
+  - [x] 2.2 Prod branch, asset catch-all: register
     `app.use('/app/*', serveStatic({ root: './client/dist', rewriteRequestPath: (p) => p.replace(/^\/app/, '') }))`
     from `@hono/node-server/serve-static`, AFTER all API routes. The `rewriteRequestPath` strips
     the `/app` prefix so assets referenced under `/app/assets/*` (Vite `base: '/app/'`) resolve
     to `client/dist/assets/*` with the correct MIME. `index.html` is NOT served through this
     catch-all. Do NOT add any `/ui` SPA prefix (Req 2.1, 2.5, 2.8; design: Vite base + asset
     paths, CRITICAL-1).
-  - [ ] 2.3 Dev behavior (`NODE_ENV === 'development'`): the daemon does NOT serve/proxy `/app`
+  - [x] 2.3 Dev behavior (`NODE_ENV === 'development'`): the daemon does NOT serve/proxy `/app`
     (Vite owns it at `:5174` and proxies the API back); `registerSpaRoutes` is a no-op for `/app`
     in dev (Req 2.2).
-  - [ ] 2.4 Missing-build guard: when prod and `./client/dist/index.html` is absent, log a
+  - [x] 2.4 Missing-build guard: when prod and `./client/dist/index.html` is absent, log a
     warning naming the path and still register the `/app` route so the API and legacy UI keep
     serving (Req 2.6).
-  - [ ] 2.5 Shell handler + wiring. Register the bare-path shell routes
+  - [x] 2.5 Shell handler + wiring. Register the bare-path shell routes
     `app.get('/app', (c) => serveIndexWithOptionalToken(c))` and
     `app.get('/app/', (c) => serveIndexWithOptionalToken(c))` BEFORE the `/app/*` asset catch-all
     (2.2) so the shell wins for `/app` and `/app/`. `serveIndexWithOptionalToken` reads
@@ -138,7 +138,7 @@ sub-task's box only when its code and its tests are on the branch and green.
     the API prefixes (`/sessions/*`, `/repos/*`, `/projects`, `/config`) and does NOT cover
     `/app/*`, so static assets remain public (Req 2.3, 2.4, 2.7, 2.9; HIGH-1; design: token embed
     decision, CRITICAL-1).
-  - [ ] 2.6 Playwright (`test/browser/spa/serving.spec.ts`): `GET /app` and `GET /app/` return
+  - [x] 2.6 Playwright (`test/browser/spa/serving.spec.ts`): `GET /app` and `GET /app/` return
     200 + `text/html` from the dedicated shell handler; `GET /app/assets/index.js` returns a
     hashed asset with its correct MIME **and HTTP 200 without an `Authorization` header** (static
     assets are public); a shell served for a direct-loopback request (`bindPublic:false`,
