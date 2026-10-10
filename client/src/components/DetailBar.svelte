@@ -82,7 +82,8 @@
     role="dialog"
     aria-modal="true"
     aria-label="Interrupt confirmation"
-    class="fixed inset-0 z-20 flex items-center justify-center bg-black/50 px-4"
+    class="fixed inset-0 z-20 flex items-center justify-center px-4"
+    style="background: color-mix(in srgb, var(--bg) 60%, transparent);"
   >
     <div class="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
       <p class="m-0 mb-4 text-sm text-[var(--text-primary)]">Interrupt the current agent turn?</p>
