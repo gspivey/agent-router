@@ -1,11 +1,13 @@
 /**
- * SPA serving under `/app` (spa-overhaul Task 2 / ROADMAP 72).
+ * SPA serving under `/`, `/ui`, and `/app` (spa-overhaul Tasks 2 & 8 /
+ * ROADMAP 72 & 78).
  *
- * During the migration the Svelte 5 SPA built into `client/dist/` is mounted at
- * `/app` and `/app/*` while the legacy UI at `GET /` and `GET /ui` keeps serving
- * `renderWebUI` untouched. In production the daemon serves the compiled assets
- * with `serveStatic`; in development the Vite dev server owns `/app` (and proxies
- * the API back to the daemon), so this module is a no-op for `/app` in dev.
+ * The Svelte 5 SPA built into `client/dist/` is served by the daemon. After the
+ * cutover (Task 8) the shell is served at `GET /`, `GET /ui`, `GET /app`, and
+ * `GET /app/`; the legacy `renderWebUI` monolith (`src/web-ui.ts`) has been
+ * deleted. In production the daemon serves the compiled assets with
+ * `serveStatic`; in development the Vite dev server owns `/app` (and proxies the
+ * API back to the daemon), so this module is a no-op for `/app` in dev.
  *
  * The factory shape keeps the serving logic unit- and Playwright-testable and
  * keeps `createWebApp` readable. Auth is NOT applied here — the bearer-auth
@@ -34,8 +36,20 @@ export interface SpaServingDeps {
   clientDist?: string;
   /** Reads `process.env.NODE_ENV` by default; injectable for tests. */
   nodeEnv?: string;
-  /** The daemon bearer token to embed into index.html, or null when none is minted. */
+  /**
+   * The daemon bearer token to embed into index.html, or null when none is
+   * minted. Used as a fallback when `readToken` is not supplied; prefer
+   * `readToken` in long-lived servers so a rotated token is reflected on the
+   * next request (the shell routes are registered once, so a captured string
+   * would go stale after `tokenStore.rotate()`).
+   */
   token: string | null;
+  /**
+   * Live token accessor. When supplied, `embedTokenFor` reads the current token
+   * through this thunk on every request so token rotation is reflected without
+   * re-registering routes. Falls back to the static `token` field when absent.
+   */
+  readToken?: () => string | null;
   /** True when the daemon is bound to a public interface (`config.bindPublic`). */
   bindPublic: boolean;
   /** True when the request carries trusted-proxy proof (e.g. cloudflared headers). */
@@ -60,7 +74,8 @@ export function isDevMode(nodeEnv: string | undefined): boolean {
  * never delivered to a remote user.
  */
 export function embedTokenFor(c: ProofContext, deps: SpaServingDeps): string | null {
-  return !deps.bindPublic && !deps.hasProxyProof(c) ? deps.token : null;
+  if (deps.bindPublic || deps.hasProxyProof(c)) return null;
+  return deps.readToken ? deps.readToken() : deps.token;
 }
 
 /**
@@ -134,6 +149,15 @@ export function registerSpaRoutes<E extends Env>(app: Hono<E>, deps: SpaServingD
   // Bare-path shell routes FIRST so they win for /app and /app/.
   app.get('/app', serveIndexWithOptionalToken);
   app.get('/app/', serveIndexWithOptionalToken);
+
+  // Cutover (spa-overhaul Task 8 / ROADMAP 78): `/` and `/ui` now serve the SPA
+  // shell too, replacing the deleted `renderWebUI` monolith. These register
+  // AFTER `app.route('/', routes)` in web-server.ts, so an API-route match
+  // (`/sessions`, `/repos/*`, `/projects`, `/config`, `/v1/*`) always wins; a
+  // request only reaches these shell handlers when it did not match an API
+  // route. The optional token embed follows the same loopback-only rule.
+  app.get('/', serveIndexWithOptionalToken);
+  app.get('/ui', serveIndexWithOptionalToken);
 
   // Asset catch-all: strip the /app prefix so assets referenced under /app/assets/*
   // (Vite base '/app/') resolve to client/dist/assets/* with the correct MIME.

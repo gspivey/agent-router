@@ -35,16 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 78. SPA overhaul — cutover: migrate / and /ui to the SPA, remove the monolith
-
-Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement task `8`. Depends on item 77.
-
-- Spec: `.kiro/specs/spa-overhaul/` · task `8`
-- [ ] Complete · PR: --
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -94,6 +84,14 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 78. SPA overhaul — cutover: migrate / and /ui to the SPA, remove the monolith
+
+Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `8`. Depends on item 77.
+
+- Spec: `.kiro/specs/spa-overhaul/` · task `8`
+- [x] Complete · PR: #138
 
 ### 77. SPA overhaul — JSON pivot toggle, polish, accessibility
 

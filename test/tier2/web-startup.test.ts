@@ -4,7 +4,7 @@
  *
  * Properties tested:
  * - Web control plane responds on controlPort
- * - Unauthenticated GET / returns 200 (UI page)
+ * - Unauthenticated GET / returns 200 (SPA shell after the spa-overhaul cutover)
  * - Authenticated GET /sessions returns 200
  * - Daemon token works for bearer auth
  * - --bind-public config wires to 0.0.0.0
@@ -79,7 +79,18 @@ describe('Web server startup wiring (task 11.1)', () => {
     fs.rmSync(rootDir, { recursive: true, force: true });
   });
 
-  it('web server responds to GET / without auth (serves UI)', async () => {
+  it('web server responds to GET / without auth (serves the SPA shell after cutover)', async () => {
+    // After the spa-overhaul cutover (ROADMAP 78), GET / serves the Svelte SPA
+    // shell (client/dist/index.html) instead of the deleted renderWebUI monolith.
+    // Seed a shell fixture and point createWebApp at it so the test is
+    // deterministic without requiring a real `npm run build:client`.
+    const clientDist = path.join(rootDir, 'client-dist');
+    fs.mkdirSync(clientDist, { recursive: true });
+    fs.writeFileSync(
+      path.join(clientDist, 'index.html'),
+      '<!doctype html><html><head><!--__DAEMON_TOKEN__--></head><body><div id="app"></div></body></html>',
+    );
+
     const config = {
       port: 9999,
       controlPort,
@@ -95,13 +106,54 @@ describe('Web server startup wiring (task 11.1)', () => {
       rootDir,
       config,
       shuttingDown: () => false,
+      clientDist,
     });
     webServer = startWebServer(app, config, log);
 
     const res = await fetch(`http://127.0.0.1:${controlPort}/`);
     expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
     const html = await res.text();
-    expect(html).toContain('<!DOCTYPE html>');
+    // The SPA shell mount point is present and the sentinel was replaced.
+    expect(html).toContain('<div id="app"></div>');
+    expect(html).not.toContain('<!--__DAEMON_TOKEN__-->');
+    // A direct loopback bind (bindPublic:false, no proxy proof) embeds the token.
+    expect(html).toContain(`window.__DAEMON_TOKEN=${JSON.stringify(tokenStore.read())}`);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('web server serves the SPA shell at GET /ui after cutover', async () => {
+    const clientDist = path.join(rootDir, 'client-dist-ui');
+    fs.mkdirSync(clientDist, { recursive: true });
+    fs.writeFileSync(
+      path.join(clientDist, 'index.html'),
+      '<!doctype html><html><head><!--__DAEMON_TOKEN__--></head><body><div id="app"></div></body></html>',
+    );
+
+    const config = {
+      port: 9999,
+      controlPort,
+      bindPublic: false,
+    } as AgentRouterConfig;
+
+    const app = createWebApp({
+      sessionMgr: stubSessionMgr(),
+      sessionFiles,
+      sseBroker,
+      tokenStore,
+      log,
+      rootDir,
+      config,
+      shuttingDown: () => false,
+      clientDist,
+    });
+    webServer = startWebServer(app, config, log);
+
+    const res = await fetch(`http://127.0.0.1:${controlPort}/ui`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    const html = await res.text();
+    expect(html).toContain('<div id="app"></div>');
   });
 
   it('web server responds to GET /sessions with valid bearer token', async () => {
@@ -160,6 +212,15 @@ describe('Web server startup wiring (task 11.1)', () => {
   });
 
   it('web server embeds daemon token in HTML when bound to loopback', async () => {
+    // Seed a shell fixture so the test is deterministic without a real
+    // `npm run build:client` (same pattern as the GET / and GET /ui tests above).
+    const clientDist = path.join(rootDir, 'client-dist-token');
+    fs.mkdirSync(clientDist, { recursive: true });
+    fs.writeFileSync(
+      path.join(clientDist, 'index.html'),
+      '<!doctype html><html><head><!--__DAEMON_TOKEN__--></head><body><div id="app"></div></body></html>',
+    );
+
     const config = {
       port: 9999,
       controlPort,
@@ -175,6 +236,7 @@ describe('Web server startup wiring (task 11.1)', () => {
       rootDir,
       config,
       shuttingDown: () => false,
+      clientDist,
     });
     webServer = startWebServer(app, config, log);
 
@@ -185,6 +247,14 @@ describe('Web server startup wiring (task 11.1)', () => {
   });
 
   it('web server does NOT embed daemon token when bindPublic is true', async () => {
+    // Seed a shell fixture so the test is deterministic without a real build.
+    const clientDist = path.join(rootDir, 'client-dist-noembed');
+    fs.mkdirSync(clientDist, { recursive: true });
+    fs.writeFileSync(
+      path.join(clientDist, 'index.html'),
+      '<!doctype html><html><head><!--__DAEMON_TOKEN__--></head><body><div id="app"></div></body></html>',
+    );
+
     const config = {
       port: 9999,
       controlPort,
@@ -200,6 +270,7 @@ describe('Web server startup wiring (task 11.1)', () => {
       rootDir,
       config,
       shuttingDown: () => false,
+      clientDist,
     });
     webServer = startWebServer(app, config, log);
 

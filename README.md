@@ -268,8 +268,68 @@ src/
 ├── session-files.ts  # Session directory layout, atomic meta writes, NDJSON append
 ├── cli-server.ts     # Unix domain socket for CLI IPC
 ├── mcp-server.ts     # MCP server per session for agent-to-daemon tools
+├── web-server.ts     # Hono control plane: REST + SSE API, serves the SPA at / /ui /app
+├── web-spa.ts        # SPA static serving + token embed (client/dist)
 └── errors.ts         # FatalError, EventError, WakeError
 ```
+
+The operator dashboard is a Svelte 5 single-page app under `client/`, built by Vite
+into `client/dist/` and served by the daemon. See [Web dashboard (SPA)](#web-dashboard-spa).
+
+## Web dashboard (SPA)
+
+The operator dashboard is a Svelte 5 single-page application that lives in `client/`
+(its own `package.json`, Vite config, and TypeScript config, independent of the root
+project). It is built with Vite + Tailwind CSS and served by the daemon's control
+plane. The dashboard is mobile-first — the operator is expected to use it from a phone
+as well as a desktop.
+
+The daemon serves the SPA on `config.controlPort` at three paths — `GET /`, `GET /ui`,
+and `GET /app` — all returning the same compiled `client/dist/index.html` shell. Hashed
+assets referenced by the shell (`/app/assets/*`) are served publicly (no bearer token
+required); the daemon embeds the bearer token into the shell HTML only on a direct
+loopback bind (never on a public bind or behind a trusted proxy), and the SPA attaches
+it to subsequent API calls. Client-side routing is hash-based (`#/`, `#/sessions/:id`).
+
+### Build the client (production)
+
+```bash
+npm run build:client      # → client/dist/ (runs `npm --prefix client run build`)
+npm start                 # daemon serves client/dist/ at / , /ui , /app
+```
+
+`npm run build:client` must be run before starting the daemon in production (and in CI
+before the Playwright browser tests). If `client/dist/index.html` is missing, the daemon
+logs a warning and keeps serving the REST/SSE API — the SPA routes return 404 until the
+client is built.
+
+### Dev loop (`NODE_ENV=development` + Vite proxy)
+
+In development the Vite dev server owns the SPA and proxies API/SSE calls back to the
+daemon, so you get hot module reload without a rebuild:
+
+```bash
+# Terminal A — Vite dev server on :5174, serving the SPA at http://localhost:5174/app
+npm run dev:client
+
+# Terminal B — daemon in dev mode (does NOT serve /app; Vite does)
+CONTROL_PORT=<controlPort> NODE_ENV=development npm run dev
+```
+
+Open `http://localhost:5174/app`. Vite serves the SPA and proxies `/sessions` (incl. the
+SSE stream), `/repos`, `/projects`, and `/config` to the daemon at
+`http://localhost:${CONTROL_PORT}` (default `8787`). When `NODE_ENV === 'development'`
+the daemon's own `/app` serving is a no-op — Vite is the SPA origin in that mode.
+
+### Client checks
+
+```bash
+npm --prefix client run check    # svelte-check (type-check the SPA)
+npm --prefix client run test     # vitest unit tests (jsdom, no live network)
+```
+
+Browser end-to-end tests live under `test/browser/spa/` and run with Playwright
+(`npx playwright test`) against a real daemon with `client/dist/` built.
 
 ## Testing
 

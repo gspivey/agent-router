@@ -7,7 +7,7 @@
  *    Authorization header (static assets are public).
  *  - The direct-loopback shell (bindPublic:false, no proxy proof — the fixture's
  *    config) embeds window.__DAEMON_TOKEN AND carries Cache-Control: no-store.
- *  - GET / and GET /ui still return the legacy UI (migration: untouched).
+ *  - GET / and GET /ui serve the SPA shell after the cutover (ROADMAP 78).
  *  - An API route (GET /sessions) is handled by the daemon, not the SPA route.
  *
  * Requires `client/dist/` to exist; CI runs `npm run build:client` before the
@@ -62,18 +62,24 @@ test.describe('SPA serving under /app', () => {
     expect(cssRes.headers()['content-type']).toContain('css');
   });
 
-  test('GET / and GET /ui still return the legacy UI during migration', async ({ page, baseUrl }) => {
+  test('GET / and GET /ui serve the SPA shell after cutover', async ({ page, baseUrl }) => {
+    // Cutover (spa-overhaul Task 8 / ROADMAP 78): `/` and `/ui` now return the
+    // SPA shell (client/dist/index.html), not the deleted renderWebUI monolith.
     const rootRes = await page.request.get(`${baseUrl}/`);
     expect(rootRes.status()).toBe(200);
+    expect(rootRes.headers()['content-type']).toContain('text/html');
     const rootBody = await rootRes.text();
-    // The legacy server-rendered UI inlines these functions; the SPA shell does not.
-    expect(rootBody).toContain('parseHashRoute');
-    expect(rootBody).toContain('<!DOCTYPE html>');
+    // The SPA shell mounts into <div id="app"> and references hashed /app assets.
+    expect(rootBody).toContain('<div id="app">');
+    expect(rootBody).toMatch(/\/app\/assets\/[\w.-]+\.js/);
+    // The legacy server-rendered UI is gone (no inlined parseHashRoute source).
+    expect(rootBody).not.toContain('function parseHashRoute');
 
     const uiRes = await page.request.get(`${baseUrl}/ui`);
     expect(uiRes.status()).toBe(200);
+    expect(uiRes.headers()['content-type']).toContain('text/html');
     const uiBody = await uiRes.text();
-    expect(uiBody).toContain('parseHashRoute');
+    expect(uiBody).toContain('<div id="app">');
   });
 
   test('GET /sessions is handled by the daemon API, not the SPA route', async ({ page, baseUrl, token }) => {
