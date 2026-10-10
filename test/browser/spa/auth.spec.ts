@@ -43,8 +43,9 @@ async function stripEmbeddedToken(page: import('@playwright/test').Page, baseUrl
 test.describe('SPA auth flow', () => {
   test('?token is captured, persisted, and stripped from the URL bar (Req 3.1)', async ({ page, baseUrl, token }) => {
     await page.goto(`${baseUrl}/app?token=${token}#/`);
-    // The authed state renders once the probe runs with the resolved token.
-    await expect(page.getByTestId('authed')).toBeVisible();
+    // The authed app shell renders once the token resolves (the auth-error
+    // state only renders when the token is missing or expired).
+    await expect(page.getByTestId('app-shell')).toBeVisible();
 
     // ?token removed from the address bar; hash preserved.
     expect(page.url()).not.toContain('token=');
@@ -59,7 +60,7 @@ test.describe('SPA auth flow', () => {
     await page.addInitScript(() => localStorage.setItem('ar_token', 'STALE-TOKEN'));
 
     await page.goto(`${baseUrl}/app?token=${token}`);
-    await expect(page.getByTestId('authed')).toBeVisible();
+    await expect(page.getByTestId('app-shell')).toBeVisible();
 
     const stored = await page.evaluate(() => localStorage.getItem('ar_token'));
     expect(stored).toBe(token);
@@ -76,7 +77,8 @@ test.describe('SPA auth flow', () => {
     });
 
     await page.goto(`${baseUrl}/app?token=${token}`);
-    await expect(page.getByTestId('authed')).toHaveAttribute('data-probe', 'ok');
+    // The session list only renders after the authed GET /sessions resolves.
+    await expect(page.getByTestId('session-list')).toBeVisible();
 
     expect(authHeaders.length).toBeGreaterThan(0);
     expect(authHeaders[0]).toBe(`Bearer ${token}`);
@@ -89,9 +91,10 @@ test.describe('SPA auth flow', () => {
 
     await page.goto(`${baseUrl}/app`);
 
-    const authed = page.getByTestId('authed');
-    await expect(authed).toBeVisible();
-    await expect(authed).toHaveAttribute('data-probe', 'ok');
+    // A successful authed GET /sessions with the stored token renders the shell
+    // and the session list rather than the auth-error state.
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await expect(page.getByTestId('session-list')).toBeVisible();
   });
 
   test('no token available renders the auth-error (missing) state (Req 3.5)', async ({ page, baseUrl }) => {

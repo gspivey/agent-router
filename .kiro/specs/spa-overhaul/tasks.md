@@ -197,21 +197,21 @@ sub-task's box only when its code and its tests are on the branch and green.
     Do NOT put end-to-end SSE assertions here; those run against a real Hono server in Task 6.11.
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9; NFR-2.2_
 
-- [ ] 4. Mobile-first session list view + single Sessions nav (ROADMAP 74)
-  - [ ] 4.1 Add `client/src/routes/router.svelte.ts` using `parseHashRoute` for `#/` (list) and
+- [x] 4. Mobile-first session list view + single Sessions nav (ROADMAP 74)
+  - [x] 4.1 Add `client/src/routes/router.svelte.ts` using `parseHashRoute` for `#/` (list) and
     `#/sessions/<id>` (chat), and render the matching view from `App.svelte`. Define ONLY these
     two routes — no `#/repos`, `#/config`, or `#/projects` (design: routing; Req 5.8).
-  - [ ] 4.2 Add `SessionList.svelte` + `SessionCard.svelte`: populate from a single
+  - [x] 4.2 Add `SessionList.svelte` + `SessionCard.svelte`: populate from a single
     `api.listSessions()` call; each card shows status badge (color via `statusToBadge`), repo
     name, created timestamp, and `waiting_for` when present; cards ≥72 px tall, full-width below
     768 px (Req 5.1, 5.2, 5.5; NFR-1.2).
-  - [ ] 4.3 Add `Header.svelte` (simple header with the Sessions title, shown at all tiers; no
+  - [x] 4.3 Add `Header.svelte` (simple header with the Sessions title, shown at all tiers; no
     tab bar, no Repos/Config). There is NO multi-tab bottom/top navigator (Req 5.3, 5.4, 5.8).
-  - [ ] 4.4 Activating a card navigates to `#/sessions/:id`; all list/nav interactive elements
+  - [x] 4.4 Activating a card navigates to `#/sessions/:id`; all list/nav interactive elements
     present ≥44×44 tap targets (Req 5.6, 5.7).
-  - [ ] 4.5 Unit (vitest): list renders from one stubbed `listSessions` response; badge colors
+  - [x] 4.5 Unit (vitest): list renders from one stubbed `listSessions` response; badge colors
     map via `statusToBadge`; no Repos/Config element exists in the DOM (Req 5.1, 5.2, 5.8).
-  - [ ] 4.6 Playwright (`test/browser/spa/list.spec.ts`): list → detail navigation via hash;
+  - [x] 4.6 Playwright (`test/browser/spa/list.spec.ts`): list → detail navigation via hash;
     exactly one `GET /sessions` request on load; no Repos/Config nav present; screenshots at
     375 px and 1280 px (Req 5.1, 5.6, 5.8; NFR-1.2, NFR-4.1).
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8; NFR-1.2, NFR-3.2_
