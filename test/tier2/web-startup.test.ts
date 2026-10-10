@@ -212,6 +212,15 @@ describe('Web server startup wiring (task 11.1)', () => {
   });
 
   it('web server embeds daemon token in HTML when bound to loopback', async () => {
+    // Seed a shell fixture so the test is deterministic without a real
+    // `npm run build:client` (same pattern as the GET / and GET /ui tests above).
+    const clientDist = path.join(rootDir, 'client-dist-token');
+    fs.mkdirSync(clientDist, { recursive: true });
+    fs.writeFileSync(
+      path.join(clientDist, 'index.html'),
+      '<!doctype html><html><head><!--__DAEMON_TOKEN__--></head><body><div id="app"></div></body></html>',
+    );
+
     const config = {
       port: 9999,
       controlPort,
@@ -227,6 +236,7 @@ describe('Web server startup wiring (task 11.1)', () => {
       rootDir,
       config,
       shuttingDown: () => false,
+      clientDist,
     });
     webServer = startWebServer(app, config, log);
 
@@ -237,6 +247,14 @@ describe('Web server startup wiring (task 11.1)', () => {
   });
 
   it('web server does NOT embed daemon token when bindPublic is true', async () => {
+    // Seed a shell fixture so the test is deterministic without a real build.
+    const clientDist = path.join(rootDir, 'client-dist-noembed');
+    fs.mkdirSync(clientDist, { recursive: true });
+    fs.writeFileSync(
+      path.join(clientDist, 'index.html'),
+      '<!doctype html><html><head><!--__DAEMON_TOKEN__--></head><body><div id="app"></div></body></html>',
+    );
+
     const config = {
       port: 9999,
       controlPort,
@@ -252,6 +270,7 @@ describe('Web server startup wiring (task 11.1)', () => {
       rootDir,
       config,
       shuttingDown: () => false,
+      clientDist,
     });
     webServer = startWebServer(app, config, log);
 
