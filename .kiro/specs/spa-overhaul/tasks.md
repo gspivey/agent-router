@@ -321,17 +321,17 @@ sub-task's box only when its code and its tests are on the branch and green.
     375 px and 1280 px (Req 8.1, 8.2, 8.4, 8.6; NFR-4.1).
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7; NFR-3.1_
 
-- [ ] 8. Cutover: migrate / and /ui to the SPA, remove the monolith (ROADMAP 78)
-  - [ ] 8.1 Rewire `GET /` and `GET /ui` to serve `client/dist/index.html` (with the optional
+- [x] 8. Cutover: migrate / and /ui to the SPA, remove the monolith (ROADMAP 78)
+  - [x] 8.1 Rewire `GET /` and `GET /ui` to serve `client/dist/index.html` (with the optional
     token sentinel embed), delete `src/web-ui.ts`, and remove the `renderWebUI` import and all
     `renderWebUI` references from `src/web-server.ts` (Req 9.1).
-  - [ ] 8.2 Remove or update tests asserting against the legacy server-rendered HTML string so
+  - [x] 8.2 Remove or update tests asserting against the legacy server-rendered HTML string so
     `npm run typecheck` and `npm test` both exit 0 (Req 9.2).
-  - [ ] 8.3 Confirm `GET /`, `GET /ui`, and `GET /app` all return the SPA (200) after the cutover
+  - [x] 8.3 Confirm `GET /`, `GET /ui`, and `GET /app` all return the SPA (200) after the cutover
     (Req 9.5).
-  - [ ] 8.4 Playwright (`test/browser/spa/smoke.spec.ts`): full flow (session list → open a
+  - [x] 8.4 Playwright (`test/browser/spa/smoke.spec.ts`): full flow (session list → open a
     session → chat renders) at 375 px and 1280 px (Req 9.3; NFR-4.1).
-  - [ ] 8.5 Update `README.md` to document `build:client`, `dev:client`, the `/app` mount during
+  - [x] 8.5 Update `README.md` to document `build:client`, `dev:client`, the `/app` mount during
     migration, and the `NODE_ENV=development` Vite proxy workflow (Req 9.4).
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 

@@ -13,7 +13,6 @@ import type { AuthConfig, AuthResult } from './web-auth.js';
 import { createWebRoutes } from './web-routes.js';
 import { createV1Routes } from './v1-routes.js';
 import type { V1RouteDeps } from './v1-routes.js';
-import { renderWebUI } from './web-ui.js';
 import { registerSpaRoutes } from './web-spa.js';
 import type { Context } from 'hono';
 import { FatalError } from './errors.js';
@@ -49,10 +48,16 @@ export interface WebAppDeps {
    * run the task layer).
    */
   v1?: Omit<V1RouteDeps, 'log' | 'rootDir' | 'shuttingDown'>;
+  /**
+   * Repo-relative root of the built SPA client (`client/dist`). Defaults to
+   * `./client/dist`. Injectable so tests can point the SPA shell handler at a
+   * seeded fixture directory without requiring a real client build.
+   */
+  clientDist?: string;
 }
 
 export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
-  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1 } = deps;
+  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1, clientDist } = deps;
 
   const app = new Hono<WebEnv>();
 
@@ -66,22 +71,6 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
       secret,
     };
   }
-
-  // --- Unauthenticated routes (UI) ---
-  app.get('/', (c) => {
-    const hasProxyProof = config.trustedProxy
-      ? c.req.header(config.trustedProxy.proofHeader) !== undefined
-      : false;
-    const embedToken = !config.bindPublic && !hasProxyProof;
-    return c.html(renderWebUI({ embedToken, token: tokenStore.read() }));
-  });
-  app.get('/ui', (c) => {
-    const hasProxyProof = config.trustedProxy
-      ? c.req.header(config.trustedProxy.proofHeader) !== undefined
-      : false;
-    const embedToken = !config.bindPublic && !hasProxyProof;
-    return c.html(renderWebUI({ embedToken, token: tokenStore.read() }));
-  });
 
   // --- Body limit for POST (applied before other middleware) ---
   app.post(
@@ -148,16 +137,19 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
     app.route('/v1', v1Routes);
   }
 
-  // --- SPA serving under /app (registered LAST so API routes win) ---
-  // During migration the legacy `/` and `/ui` handlers above are untouched; the
-  // SPA is reachable only under /app and /app/*. Auth stays scoped to the API
-  // prefixes, so /app/* assets remain publicly fetchable.
+  // --- SPA serving (registered LAST so API routes win) ---
+  // Cutover (spa-overhaul Task 8 / ROADMAP 78): the SPA shell is served at `/`,
+  // `/ui`, `/app`, and `/app/`; the legacy `renderWebUI` monolith is gone. These
+  // register after `app.route('/', routes)` so an API-route match always wins.
+  // Auth stays scoped to the API prefixes, so `/app/*` assets remain publicly
+  // fetchable.
   const hasProxyProof = (c: Context): boolean =>
     config.trustedProxy ? c.req.header(config.trustedProxy.proofHeader) !== undefined : false;
   registerSpaRoutes(app, {
     log,
-    clientDist: './client/dist',
+    clientDist: clientDist ?? './client/dist',
     token: tokenStore.read(),
+    readToken: () => tokenStore.read(),
     bindPublic: config.bindPublic,
     hasProxyProof,
   });

@@ -1,12 +1,16 @@
 /**
  * Tier 2 test: Token-embedding security (tasks 14.7, 14.9)
  *
- * Properties tested:
- * - GET / embeds daemon token in HTML when bound to loopback (Req 7.2)
+ * Properties tested (now via the SPA shell after the spa-overhaul cutover):
+ * - GET / embeds daemon token in the SPA shell when bound to loopback (Req 7.2)
  * - GET / does NOT embed daemon token when bindPublic: true (Req 7.3)
  * - GET /ui follows same embedding rules as GET /
  * - Token is not present in HTML when proxy proof header is sent (Req 7.3)
  * - After token rotation (daemon restart), old token → 401 (Req 2.5)
+ *
+ * The SPA shell injects the token via `JSON.stringify` into the
+ * `<!--__DAEMON_TOKEN__-->` sentinel, i.e. `window.__DAEMON_TOKEN="<token>"`
+ * (double-quoted, no spaces) — distinct from the legacy renderWebUI format.
  *
  * Validates: Requirements 2.5, 7.2, 7.3
  */
@@ -27,6 +31,14 @@ import { createWebApp, startWebServer } from '../../src/web-server.js';
 import type { SessionManager } from '../../src/session-mgr.js';
 import type { AgentRouterConfig } from '../../src/config.js';
 import type { ServerType } from '@hono/node-server';
+
+/** The SPA shell injects the token exactly as `window.__DAEMON_TOKEN=<json>`. */
+function embeddedTokenScript(token: string): string {
+  return `window.__DAEMON_TOKEN=${JSON.stringify(token)}`;
+}
+
+const SHELL_HTML =
+  '<!doctype html><html><head><!--__DAEMON_TOKEN__--></head><body><div id="app"></div></body></html>';
 
 function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -62,6 +74,7 @@ describe('Token-embedding security (task 14.7)', () => {
   let sseBroker: SSEBroker;
   let webServer: ServerType;
   let controlPort: number;
+  let clientDist: string;
 
   beforeEach(async () => {
     rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-token-embed-tier2-'));
@@ -70,6 +83,11 @@ describe('Token-embedding security (task 14.7)', () => {
     tokenStore = createDaemonTokenStore({ rootDir, log });
     sseBroker = createSSEBroker({ sessionFiles, rootDir, log });
     controlPort = await getFreePort();
+    // Seed a SPA shell fixture so the cutover `/` + `/ui` shell handler serves it
+    // deterministically without requiring a real `npm run build:client`.
+    clientDist = path.join(rootDir, 'client-dist');
+    fs.mkdirSync(clientDist, { recursive: true });
+    fs.writeFileSync(path.join(clientDist, 'index.html'), SHELL_HTML);
   });
 
   afterEach(() => {
@@ -97,6 +115,7 @@ describe('Token-embedding security (task 14.7)', () => {
       rootDir,
       config,
       shuttingDown: () => false,
+      clientDist,
     });
     webServer = startWebServer(app, config, log);
   }
@@ -109,7 +128,7 @@ describe('Token-embedding security (task 14.7)', () => {
       const res = await fetch(`http://127.0.0.1:${controlPort}/`);
       expect(res.status).toBe(200);
       const html = await res.text();
-      expect(html).toContain(`window.__DAEMON_TOKEN = '${token}'`);
+      expect(html).toContain(embeddedTokenScript(token));
     });
 
     it('GET /ui contains daemon token in HTML', async () => {
@@ -119,7 +138,7 @@ describe('Token-embedding security (task 14.7)', () => {
       const res = await fetch(`http://127.0.0.1:${controlPort}/ui`);
       expect(res.status).toBe(200);
       const html = await res.text();
-      expect(html).toContain(`window.__DAEMON_TOKEN = '${token}'`);
+      expect(html).toContain(embeddedTokenScript(token));
     });
   });
 
@@ -172,6 +191,7 @@ describe('Token-embedding security (task 14.7)', () => {
         rootDir,
         config,
         shuttingDown: () => false,
+        clientDist,
       });
       webServer = startWebServer(app, config, log);
 
@@ -211,6 +231,7 @@ describe('Token-embedding security (task 14.7)', () => {
         rootDir,
         config,
         shuttingDown: () => false,
+        clientDist,
       });
       webServer = startWebServer(app, config, log);
 
@@ -220,7 +241,7 @@ describe('Token-embedding security (task 14.7)', () => {
       const res = await fetch(`http://127.0.0.1:${controlPort}/`);
       expect(res.status).toBe(200);
       const html = await res.text();
-      expect(html).toContain(`window.__DAEMON_TOKEN = '${token}'`);
+      expect(html).toContain(embeddedTokenScript(token));
     });
   });
 
@@ -262,7 +283,7 @@ describe('Token-embedding security (task 14.7)', () => {
       // Before rotation: HTML embeds the original token
       const res1 = await fetch(`http://127.0.0.1:${controlPort}/`);
       const html1 = await res1.text();
-      expect(html1).toContain(`window.__DAEMON_TOKEN = '${oldToken}'`);
+      expect(html1).toContain(embeddedTokenScript(oldToken));
 
       // Rotate
       tokenStore.rotate();
@@ -271,7 +292,7 @@ describe('Token-embedding security (task 14.7)', () => {
       // After rotation: HTML embeds the new token
       const res2 = await fetch(`http://127.0.0.1:${controlPort}/`);
       const html2 = await res2.text();
-      expect(html2).toContain(`window.__DAEMON_TOKEN = '${newToken}'`);
+      expect(html2).toContain(embeddedTokenScript(newToken));
       expect(html2).not.toContain(oldToken);
     });
   });
