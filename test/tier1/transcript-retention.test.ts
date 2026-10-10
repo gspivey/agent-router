@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import fc from 'fast-check';
+import * as zlib from 'node:zlib';
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -13,6 +14,8 @@ import {
   readTranscriptBuffer,
   isArchivedRef,
 } from '../../src/transcript-retention.js';
+
+const hasZstd = typeof (zlib as unknown as { zstdCompressSync?: unknown }).zstdCompressSync === 'function';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -70,7 +73,7 @@ describe('isArchivedRef', () => {
 });
 
 describe('archive / read / delete round-trip', () => {
-  it('compresses, removes the raw file, and reads back decompressed', async () => {
+  it.skipIf(!hasZstd)('compresses, removes the raw file, and reads back decompressed', async () => {
     const dir = tmp();
     const raw = join(dir, 'stream.log');
     const body = 'line one\nline two\n{"event":"x"}\n';
