@@ -65,16 +65,6 @@ then implement tasks `4.1`, `4.2`, `4.3`, `5.1`, `5.2`, `5.3`, `5.4`, `5.5`, `6.
 
 ---
 
-### 67. Task/attempt/outcome — ULID, types, DB tables, task service/state machine
-
-Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `1.1`, `1.2`, `1.3`, `1.4`, `2.1`, `2.2`, `2.3`, `2.4`, `2.5`, `3.1`, `3.2`, `3.3`.
-
-- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `1.1`, `1.2`, `1.3`, `1.4`, `2.1`, `2.2`, `2.3`, `2.4`, `2.5`, `3.1`, `3.2`, `3.3`
-- [ ] Complete
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -124,6 +114,16 @@ then implement task `4.1b`.
 - [x] Complete · PR: #110
 
 Items move here after they merge to `development`.
+
+### 67. Task/attempt/outcome — ULID, types, DB tables, task service/state machine
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1.1`, `1.2`, `1.3`, `1.4`, `2.1`, `2.2`, `2.3`, `2.4`, `2.5`, `3.1`, `3.2`, `3.3`.
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `1.1`, `1.2`, `1.3`, `1.4`, `2.1`, `2.2`, `2.3`, `2.4`, `2.5`, `3.1`, `3.2`, `3.3`
+- [x] Complete · PR: #125
+
+---
 
 ### 66. Session stream chat — Tier 2 browser tests and regression verification
 
