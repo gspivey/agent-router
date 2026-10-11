@@ -165,3 +165,58 @@ export interface RepoPageResponse {
   readonly offset: number;
   readonly limit: number;
 }
+
+/**
+ * A row in the Config view "Token Health" table, mirrors `TokenHealthEntry`
+ * from `src/token-store.ts` (spa-operator-restoration ROADMAP 82, Task C-1).
+ */
+export interface TokenHealthEntry {
+  readonly project: string;
+  readonly tokenName: string;
+  readonly isSet: boolean;
+  /** ISO 8601 string, or null when no expiry is configured. */
+  readonly expiry: string | null;
+  readonly health: 'green' | 'red' | 'unknown';
+}
+
+/**
+ * A row in the Config view "Cron Schedules" table, mirrors `CronScheduleEntry`
+ * from `src/cron-state.ts` (spa-operator-restoration ROADMAP 82, Task C-1).
+ */
+export interface CronScheduleEntry {
+  readonly name: string;
+  readonly repo: string;
+  readonly schedule: string;
+  /** ISO 8601 string, or null when paused or the next fire is unknown. */
+  readonly nextFireTime: string | null;
+  readonly paused: boolean;
+}
+
+/**
+ * The `GET /config` response shape, mirrors the body assembled by the
+ * `/config` handler in `src/web-routes.ts`. Secret values are never exposed;
+ * `repos[].webhookSecretName` is the sentinel `"[configured]"` when a per-repo
+ * webhook secret is set (spa-operator-restoration ROADMAP 82, Task C-1).
+ */
+export interface ConfigResponse {
+  sessionTimeouts: {
+    inactivityMinutes: number;
+    maxLifetimeMinutes: number;
+    gracePeriodAfterMergeSeconds: number;
+  };
+  rateLimits: {
+    perPRSeconds: number;
+  };
+  crons: CronScheduleEntry[];
+  tokens: TokenHealthEntry[];
+  repos: Array<{ name: string; webhookSecretName: string }>;
+}
+
+/**
+ * `POST /crons/:name/pause` and `POST /crons/:name/resume` success body
+ * (HTTP 200). Added by the spa-operator-restoration spec (ROADMAP item 82,
+ * task C-1) to let the operator pause/resume a repo's cron from the Config view.
+ */
+export interface CronToggleResponse {
+  ok: true;
+}
