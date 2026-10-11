@@ -528,6 +528,8 @@ Implement exactly as designed (see design.md ToolCallCard section).
 
 **Approximate scope:** 300–400 lines of implementation + tests.
 
+**Status:** ✅ Complete (ROADMAP item 82, PR #147) — tasks C-1, C-2 done.
+
 ### Task C-1: Add Config and Cron Toggle API functions
 
 **File:** `client/src/lib/api.ts`
