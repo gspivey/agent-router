@@ -43,8 +43,14 @@ describe('router — hash routing (Req 5.6, 5.8)', () => {
     expect(route.current.view).toBe('list');
   });
 
-  it('treats #/config as the list view — no Config route (Req 5.8)', () => {
+  it('maps #/config to the config view', () => {
     location.hash = '#/config';
+    syncRoute();
+    expect(route.current.view).toBe('config');
+  });
+
+  it('treats #/config/ (trailing slash) as the list view', () => {
+    location.hash = '#/config/';
     syncRoute();
     expect(route.current.view).toBe('list');
   });

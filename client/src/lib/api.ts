@@ -1,14 +1,14 @@
 /**
- * Typed REST client for the SPA — sessions endpoints ONLY (Requirement 3.6).
+ * Typed REST client for the SPA.
  *
  * Each function attaches `Authorization: Bearer <token>` (Requirement 3.3) and
  * returns typed response data. On HTTP 401 or 403 the client clears the stored
  * token, aborts active SSE streams, enters the "Session expired" lockout
  * (Requirement 3.4), and throws `AuthError('expired')` — it does NOT retry.
  *
- * There are intentionally NO functions for `/repos/*`, `/projects`, `/config`,
- * or `/sessions/:id/kill`: those views are out of scope and the kill action is
- * served by `/sessions/:id/interrupt` (Requirement 3.6, 5.8).
+ * The repo-grouped session list endpoints (`GET /repos/sessions`,
+ * `GET /repos/:repo/sessions`) were added by the spa-operator-restoration spec
+ * (ROADMAP item 80) to restore the operator session list.
  */
 
 import { auth, enterExpiredState } from './stores.svelte.js';
@@ -16,6 +16,8 @@ import type {
   InjectResponse,
   InterruptResponse,
   ListSessionsQuery,
+  RepoPageResponse,
+  RepoSessionsResponse,
   SessionDetailResponse,
   SessionListResponse,
 } from './types.js';
@@ -114,5 +116,25 @@ export const api = {
       method: 'POST',
     });
     return readJson<InterruptResponse>(res);
+  },
+
+  /** `GET /repos/sessions` — sessions grouped by repo (spa-operator-restoration A-2). */
+  async listRepoSessions(): Promise<RepoSessionsResponse> {
+    const res = await authedFetch('/repos/sessions');
+    return readJson<RepoSessionsResponse>(res);
+  },
+
+  /**
+   * `GET /repos/:repo/sessions?limit=N&offset=N` — a page of terminal sessions
+   * for a single repo (spa-operator-restoration A-2).
+   */
+  async listRepoPagedSessions(
+    repo: string,
+    limit: number,
+    offset: number,
+  ): Promise<RepoPageResponse> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    const res = await authedFetch(`/repos/${encodeURIComponent(repo)}/sessions?${params}`);
+    return readJson<RepoPageResponse>(res);
   },
 };

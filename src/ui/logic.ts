@@ -21,7 +21,11 @@ export interface HashRouteDetail {
   sessionId: string;
 }
 
-export type HashRoute = HashRouteList | HashRouteDetail;
+export interface HashRouteConfig {
+  view: 'config';
+}
+
+export type HashRoute = HashRouteList | HashRouteDetail | HashRouteConfig;
 
 /**
  * Merge SSE events into an existing list, deduplicating by id.
@@ -88,6 +92,7 @@ export function deriveWaitingFor(lastEntryType: string | undefined): string | un
  * Parse a hash-based route string.
  * `#/` or empty → list view
  * `#/sessions/<id>` → detail view
+ * `#/config` → config view
  * Anything else → list view
  */
 export function parseHashRoute(hash: string): HashRoute {
@@ -96,7 +101,41 @@ export function parseHashRoute(hash: string): HashRoute {
   if (match?.[1]) {
     return { view: 'detail', sessionId: match[1] };
   }
+  if (trimmed === '/config') {
+    return { view: 'config' };
+  }
   return { view: 'list' };
+}
+
+// ---------------------------------------------------------------------------
+// Formatting helpers (session list metadata)
+// ---------------------------------------------------------------------------
+
+/**
+ * Format a duration in seconds as `"Xm"` (under 60 minutes) or `"Xh Ym"`
+ * (60 minutes or more). Minutes are rounded. A whole number of hours drops the
+ * minutes component (`"1h"`). Non-positive inputs return the empty string.
+ *
+ * Examples:
+ * - `formatDuration(0)` → `""`
+ * - `formatDuration(780)` → `"13m"`
+ * - `formatDuration(3600)` → `"1h"`
+ * - `formatDuration(3900)` → `"1h 5m"`
+ */
+export function formatDuration(seconds: number): string {
+  if (seconds <= 0) return '';
+  const totalMinutes = Math.round(seconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+/**
+ * Build a GitHub PR URL from a `"owner/name"` repo string and a PR number.
+ */
+export function prUrl(repo: string, prNumber: number): string {
+  return `https://github.com/${repo}/pull/${prNumber}`;
 }
 
 // ---------------------------------------------------------------------------

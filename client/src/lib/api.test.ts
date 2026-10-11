@@ -72,6 +72,47 @@ describe('api — bearer header (Req 3.3)', () => {
   });
 });
 
+describe('api — repo-grouped sessions (spa-operator-restoration A-2)', () => {
+  it('listRepoSessions GETs /repos/sessions and returns the envelope', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(jsonResponse({ repos: [] }));
+
+    const res = await api.listRepoSessions();
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe('/repos/sessions');
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer tok');
+    expect(res).toEqual({ repos: [] });
+    fetchSpy.mockRestore();
+  });
+
+  it('listRepoSessions enters the expired lockout on 401', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 401 }));
+
+    await expect(api.listRepoSessions()).rejects.toMatchObject({ kind: 'expired' });
+    expect(auth.error).toBe('expired');
+    fetchSpy.mockRestore();
+  });
+
+  it('listRepoPagedSessions encodes the repo and sets limit/offset params', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(jsonResponse({ sessions: [], total: 0, offset: 10, limit: 5 }));
+
+    const res = await api.listRepoPagedSessions('owner/repo', 5, 10);
+
+    const url = String(fetchSpy.mock.calls[0]?.[0]);
+    expect(url).toContain(encodeURIComponent('owner/repo'));
+    expect(url).toContain('limit=5');
+    expect(url).toContain('offset=10');
+    expect(res.offset).toBe(10);
+    fetchSpy.mockRestore();
+  });
+});
+
 describe('api — auth failures (Req 3.4, 3.5)', () => {
   it('throws AuthError("missing") and makes no request when there is no token', async () => {
     auth.token = null;

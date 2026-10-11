@@ -119,7 +119,7 @@ Read `.kiro/specs/spa-operator-restoration/requirements.md`, `design.md`, and `t
 then implement tasks `A-1`, `A-2`, `A-3`, `A-4`, `A-5`, `A-6`, `A-7`, `A-8`, `A-9`.
 
 - Spec: `.kiro/specs/spa-operator-restoration/` · tasks `A-1`–`A-9`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #145
 
 ---
 

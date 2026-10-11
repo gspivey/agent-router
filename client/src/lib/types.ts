@@ -112,3 +112,47 @@ export interface ListSessionsQuery {
   offset?: number;
   repo?: string;
 }
+
+/**
+ * Cron summary for a repo group header, mirrors `RepoGroupCron` from
+ * `src/web-routes.ts`.
+ */
+export interface RepoGroupCron {
+  readonly name: string;
+  readonly schedule: string;
+  readonly paused: boolean;
+  /** ISO 8601 string, or null when the next fire time is unknown. */
+  readonly next_fire: string | null;
+}
+
+/**
+ * A repo-grouped section of the session list, mirrors `RepoGroup` from
+ * `src/web-routes.ts`. The `repo` field is always `"owner/name"` (never null);
+ * null-repo router sessions are not included in the grouped response.
+ */
+export interface RepoGroup {
+  readonly repo: string;
+  readonly active_sessions: SessionSummary[];
+  readonly terminal_sessions: SessionSummary[];
+  readonly terminal_total: number;
+  readonly cron: RepoGroupCron | null;
+  readonly open_pr_count: number;
+  readonly closed_pr_count: number;
+}
+
+/** The `GET /repos/sessions` response envelope. */
+export interface RepoSessionsResponse {
+  readonly repos: RepoGroup[];
+}
+
+/**
+ * The `GET /repos/:repo/sessions?limit=N&offset=N` paginated envelope. Mirrors
+ * the `SessionListResponse` shape but returns only terminal sessions for a
+ * single repo; `total` equals the repo's `terminal_total`.
+ */
+export interface RepoPageResponse {
+  readonly sessions: SessionSummary[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+}
