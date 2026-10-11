@@ -1006,3 +1006,43 @@ is the foundation item — small, self-contained, and proves the self-build loop
 
 - Spec: `BACKLOG.md § P2.10`
 - [x] Complete · PR: #36
+
+### 83. Agent process isolation — setup script, user, proxy, iptables, rootDir hardening
+
+Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
+full, then implement tasks `83.1`, `83.2`, `83.3`, `83.4`.
+
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `83.1–83.4`
+- [ ] Complete · PR: --
+
+---
+
+### 84. Agent process isolation — config, agent socket, spawn change, cap-token, worktree base
+
+Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
+full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7`, `84.8`.
+Depends on item 83 (user, socket dir, worktree dir must exist).
+
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.8`
+- [ ] Complete · PR: --
+
+---
+
+### 85. Agent process isolation — MCP changes (remove git_credential, github_forward relay, push_branch)
+
+Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
+full, then implement tasks `85.1`, `85.2`, `85.3`, `85.4`, `85.5`, `85.6`. Depends on item 84
+(agent socket and cap_token in place).
+
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `85.1–85.6`
+- [ ] Complete · PR: --
+
+---
+
+### 86. Agent process isolation — startup checks, ClaudeCodeAdapter block, Tier 2 tests, docs
+
+Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
+full, then implement tasks `86.1`, `86.2`, `86.3`, `86.4`. Depends on items 83, 84, 85.
+
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `86.1–86.4`
+- [ ] Complete · PR: --
