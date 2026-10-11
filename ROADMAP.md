@@ -93,6 +93,36 @@ then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `7b`, `8`, `9`, `9b`, `1
 - Spec: `.kiro/specs/mcp-server-wiring/` · tasks `1`–`11` (including `9b`)
 - [x] Complete · PR: #142
 
+### 82. SPA operator restoration — Config view
+
+Read `.kiro/specs/spa-operator-restoration/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `C-1`, `C-2`. Depends on items 80 and 81.
+
+- Spec: `.kiro/specs/spa-operator-restoration/` · tasks `C-1`, `C-2`
+- [ ] Complete · PR: --
+
+---
+
+### 81. SPA operator restoration — Session detail: metadata panel, internals toggle, tool truncation, Kill
+
+Read `.kiro/specs/spa-operator-restoration/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `B-1`, `B-2`, `B-3`, `B-4`, `B-5`, `B-6`, `B-7`, `B-8`. Depends on item 80.
+
+- Spec: `.kiro/specs/spa-operator-restoration/` · tasks `B-1`–`B-8`
+- [ ] Complete · PR: --
+
+---
+
+### 80. SPA operator restoration — Session list: metadata fields, repo grouping, Config route stub
+
+Read `.kiro/specs/spa-operator-restoration/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `A-1`, `A-2`, `A-3`, `A-4`, `A-5`, `A-6`, `A-7`, `A-8`, `A-9`.
+
+- Spec: `.kiro/specs/spa-operator-restoration/` · tasks `A-1`–`A-9`
+- [ ] Complete · PR: --
+
+---
+
 ### 78. SPA overhaul — cutover: migrate / and /ui to the SPA, remove the monolith
 
 Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
