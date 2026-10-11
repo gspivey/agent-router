@@ -324,6 +324,8 @@ create `ConfigView.svelte` as a placeholder:
 
 **Approximate scope:** 300–400 lines of implementation + tests.
 
+**Status:** ✅ Complete (ROADMAP item 81, PR #146) — tasks B-1 through B-8 done.
+
 ### Task B-1: Add Kill API function
 
 **File:** `client/src/lib/api.ts`
