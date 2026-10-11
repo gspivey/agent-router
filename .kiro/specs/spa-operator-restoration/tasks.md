@@ -11,6 +11,8 @@ Each item is independently mergeable and leaves the SPA in a working state.
 
 **Approximate scope:** 300–400 lines of implementation + tests.
 
+**Status:** ✅ Complete (ROADMAP item 80, PR #145) — tasks A-1 through A-9 done.
+
 ### Task A-1: Add types for grouped-session API responses
 
 **File:** `client/src/lib/types.ts`
