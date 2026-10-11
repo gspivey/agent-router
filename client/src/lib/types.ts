@@ -104,6 +104,15 @@ export interface InterruptResponse {
   ok: true;
 }
 
+/**
+ * `POST /sessions/:id/kill` success body (HTTP 200). Added by the
+ * spa-operator-restoration spec (ROADMAP item 81, task B-1) to let the operator
+ * terminate an active agent session from the detail view.
+ */
+export interface KillResponse {
+  ok: true;
+}
+
 /** Query parameters accepted by `GET /sessions`. */
 export interface ListSessionsQuery {
   status?: SessionStatus;

@@ -15,20 +15,32 @@
    * visible but inert. Every tap target is ≥44×44 CSS px.
    */
   import { goToList } from '../routes/router.svelte.js';
+  import { api } from '../lib/api.js';
+  import type { SessionStatus } from '../lib/types.js';
+  import KillConfirmDialog from './KillConfirmDialog.svelte';
 
   interface Props {
     /** The session title shown between the back and Interrupt controls. */
     title: string;
+    /** The session id this bar acts on (for the Kill action). */
+    sessionId: string;
+    /** The session status — the Kill button renders only when `'active'`. */
+    status: SessionStatus;
     /** Called when the operator confirms the interrupt. */
     onInterrupt: () => Promise<void>;
     /** When true the Interrupt control is visible but inert (session ended). */
     disabled?: boolean;
   }
 
-  const { title, onInterrupt, disabled = false }: Props = $props();
+  const { title, sessionId, status, onInterrupt, disabled = false }: Props = $props();
 
   let confirming = $state(false);
   let interrupting = $state(false);
+
+  // Kill action state (spa-operator-restoration B-3 / FR-6).
+  let showKillConfirm = $state(false);
+  let killing = $state(false);
+  let killError = $state<string | null>(null);
 
   function openConfirm(): void {
     if (disabled || interrupting) return;
@@ -48,6 +60,31 @@
       interrupting = false;
     }
   }
+
+  function openKillConfirm(): void {
+    if (killing) return;
+    // Clear any prior error on a fresh Kill attempt (FR-6.2e).
+    killError = null;
+    showKillConfirm = true;
+  }
+
+  function cancelKill(): void {
+    showKillConfirm = false;
+  }
+
+  async function doKill(): Promise<void> {
+    showKillConfirm = false;
+    killing = true;
+    killError = null;
+    try {
+      await api.kill(sessionId);
+      // The SSE stream delivers `session_ended`; no optimistic update (FR-6.2d).
+    } catch {
+      killError = 'Failed to kill session.';
+    } finally {
+      killing = false;
+    }
+  }
 </script>
 
 <nav
@@ -65,6 +102,18 @@
     ←
   </button>
   <span class="min-w-0 flex-1 truncate text-sm text-[var(--text-muted)]">{title}</span>
+  {#if status === 'active'}
+    <button
+      type="button"
+      data-testid="kill-button"
+      onclick={openKillConfirm}
+      disabled={killing}
+      aria-label="Kill session"
+      class="min-h-[44px] min-w-[44px] rounded bg-[var(--error)] px-3 text-sm font-medium text-white disabled:opacity-50"
+    >
+      Kill
+    </button>
+  {/if}
   <button
     type="button"
     data-testid="interrupt-button"
@@ -75,6 +124,20 @@
     Interrupt
   </button>
 </nav>
+
+{#if killError}
+  <p
+    data-testid="kill-error"
+    role="alert"
+    class="border-t border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--error)]"
+  >
+    {killError}
+  </p>
+{/if}
+
+{#if showKillConfirm}
+  <KillConfirmDialog onConfirm={doKill} onCancel={cancelKill} />
+{/if}
 
 {#if confirming}
   <div

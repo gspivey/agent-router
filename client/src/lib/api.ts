@@ -15,6 +15,7 @@ import { auth, enterExpiredState } from './stores.svelte.js';
 import type {
   InjectResponse,
   InterruptResponse,
+  KillResponse,
   ListSessionsQuery,
   RepoPageResponse,
   RepoSessionsResponse,
@@ -116,6 +117,19 @@ export const api = {
       method: 'POST',
     });
     return readJson<InterruptResponse>(res);
+  },
+
+  /**
+   * `POST /sessions/:id/kill` — terminate the agent process immediately
+   * (HTTP 200). Added by the spa-operator-restoration spec (ROADMAP item 81,
+   * task B-1). The `session_ended` SSE event delivers the terminal state; this
+   * call does not optimistically update the UI.
+   */
+  async kill(id: string): Promise<KillResponse> {
+    const res = await authedFetch(`/sessions/${encodeURIComponent(id)}/kill`, {
+      method: 'POST',
+    });
+    return readJson<KillResponse>(res);
   },
 
   /** `GET /repos/sessions` — sessions grouped by repo (spa-operator-restoration A-2). */
