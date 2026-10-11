@@ -38,6 +38,15 @@ import type { ParsedEntry, SystemBadge } from './logic.js';
 interface JsonSource {
   /** `JSON.stringify(rawEntry(s), null, 2)`, or '' when no raws were provided. */
   json: string;
+  /**
+   * The raw `StreamEntry.source` string of the entry that produced this item
+   * (spa-operator-restoration Task B-7 / ROADMAP 81). Used by `ChatView` to
+   * filter Kiro-internal entries (`source` starting with `_kiro.dev/`) when the
+   * "Show internals" toggle is OFF (FR-4.1). Undefined when no `raws` were
+   * provided or the raw entry has no string `source`. For a reassembled bubble
+   * it is the `source` of the first folded chunk.
+   */
+  rawSource?: string;
 }
 
 /** A reassembled agent bubble (one or more `agent_chunk`/`agent_message`). */
@@ -103,6 +112,18 @@ function stringifyRaw(raw: unknown): string {
   }
 }
 
+/**
+ * Extract the `source` string from a raw stream entry, or undefined when the
+ * entry is missing or has no string `source` (spa-operator-restoration B-7).
+ */
+function rawSourceOf(raw: unknown): string | undefined {
+  if (raw !== null && typeof raw === 'object' && 'source' in raw) {
+    const src = (raw as { source: unknown }).source;
+    if (typeof src === 'string') return src;
+  }
+  return undefined;
+}
+
 /** Pretty-print the collected raw entries of a reassembled bubble. */
 function stringifyRaws(raws: unknown[]): string {
   if (raws.length === 0) return '';
@@ -157,6 +178,7 @@ export function buildRenderItems(
     if (entry === undefined) continue;
     const key = keyAt(i);
     const raw = rawAt(i);
+    const src = rawSourceOf(raw);
 
     switch (entry.kind) {
       case 'agent_chunk': {
@@ -165,6 +187,7 @@ export function buildRenderItems(
           openBubbleRaws.push(raw);
         } else {
           openBubble = { kind: 'bubble', key, text: entry.text, json: '' };
+          if (src !== undefined) openBubble.rawSource = src;
           openBubbleRaws = [raw];
           items.push(openBubble);
         }
@@ -173,12 +196,13 @@ export function buildRenderItems(
       case 'agent_message': {
         // A flat legacy message is its own bubble and does NOT join reassembly.
         closeBubble();
-        items.push({ kind: 'bubble', key, text: entry.text, json: stringifyRaw(raw) });
+        items.push({ kind: 'bubble', key, text: entry.text, json: stringifyRaw(raw), ...(src !== undefined ? { rawSource: src } : {}) });
         break;
       }
       case 'system': {
         closeBubble();
         const item: SystemItem = { kind: 'system', key, text: entry.text, json: stringifyRaw(raw) };
+        if (src !== undefined) item.rawSource = src;
         if (entry.badge !== undefined) item.badge = entry.badge;
         items.push(item);
         break;
@@ -195,6 +219,7 @@ export function buildRenderItems(
           updates: '',
           json: stringifyRaw(raw),
         };
+        if (src !== undefined) card.rawSource = src;
         toolCards.set(id, card);
         items.push(card);
         break;
@@ -207,17 +232,17 @@ export function buildRenderItems(
       }
       case 'permission': {
         closeBubble();
-        items.push({ kind: 'permission', key, title: entry.title, json: stringifyRaw(raw) });
+        items.push({ kind: 'permission', key, title: entry.title, json: stringifyRaw(raw), ...(src !== undefined ? { rawSource: src } : {}) });
         break;
       }
       case 'internal': {
         closeBubble();
-        items.push({ kind: 'internal', key, text: entry.text, json: stringifyRaw(raw) });
+        items.push({ kind: 'internal', key, text: entry.text, json: stringifyRaw(raw), ...(src !== undefined ? { rawSource: src } : {}) });
         break;
       }
       case 'unknown': {
         closeBubble();
-        items.push({ kind: 'unknown', key, typeLabel: entry.typeLabel, json: stringifyRaw(raw) });
+        items.push({ kind: 'unknown', key, typeLabel: entry.typeLabel, json: stringifyRaw(raw), ...(src !== undefined ? { rawSource: src } : {}) });
         break;
       }
     }

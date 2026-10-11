@@ -72,6 +72,53 @@ describe('api — bearer header (Req 3.3)', () => {
   });
 });
 
+describe('api — kill (spa-operator-restoration B-1)', () => {
+  it('kill POSTs /sessions/:id/kill and returns {ok:true}', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
+
+    const res = await api.kill('s1');
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe('/sessions/s1/kill');
+    expect((fetchSpy.mock.calls[0]?.[1] as RequestInit).method).toBe('POST');
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer tok');
+    expect(res).toEqual({ ok: true });
+    fetchSpy.mockRestore();
+  });
+
+  it('kill encodes the session id', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
+
+    await api.kill('a/b c');
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe(`/sessions/${encodeURIComponent('a/b c')}/kill`);
+    fetchSpy.mockRestore();
+  });
+
+  it('kill throws ApiError(409) when the session is not active', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 409 }));
+
+    await expect(api.kill('s1')).rejects.toMatchObject({ status: 409 });
+    await expect(api.kill('s1')).rejects.toBeInstanceOf(ApiError);
+    fetchSpy.mockRestore();
+  });
+
+  it('kill throws ApiError(404) for an unknown session', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
+
+    await expect(api.kill('s1')).rejects.toMatchObject({ status: 404 });
+    fetchSpy.mockRestore();
+  });
+
+  it('kill enters the expired lockout on 401', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
+
+    await expect(api.kill('s1')).rejects.toMatchObject({ kind: 'expired' });
+    expect(auth.error).toBe('expired');
+    fetchSpy.mockRestore();
+  });
+});
+
 describe('api — repo-grouped sessions (spa-operator-restoration A-2)', () => {
   it('listRepoSessions GETs /repos/sessions and returns the envelope', async () => {
     const fetchSpy = vi

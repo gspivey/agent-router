@@ -179,4 +179,44 @@ describe('buildRenderItems', () => {
       expect(() => JSON.parse(item.json)).not.toThrow();
     }
   });
+
+  // --- rawSource passthrough (spa-operator-restoration Task B-7 / ROADMAP 81) ---
+
+  it('passes through the raw StreamEntry.source as rawSource (B-7)', () => {
+    const parsed: ParsedEntry[] = [
+      { kind: 'internal', subtype: '_kiro.dev/metadata', text: 'ctx' },
+    ];
+    const raws = [{ ts: 't', source: '_kiro.dev/metadata', type: 'session/update' }];
+    const items = buildRenderItems(parsed, [1], raws);
+    expect(items[0]?.rawSource).toBe('_kiro.dev/metadata');
+  });
+
+  it('passes through a normal agent source as rawSource', () => {
+    const parsed: ParsedEntry[] = [{ kind: 'agent_message', text: 'hi', streaming: false }];
+    const raws = [{ ts: 't', source: 'agent', type: 'session/update' }];
+    const items = buildRenderItems(parsed, [1], raws);
+    expect(items[0]?.rawSource).toBe('agent');
+  });
+
+  it('leaves rawSource undefined when no raws are supplied', () => {
+    const parsed: ParsedEntry[] = [
+      { kind: 'internal', subtype: '_kiro.dev/metadata', text: 'ctx' },
+    ];
+    const items = buildRenderItems(parsed, [1]);
+    expect(items[0]?.rawSource).toBeUndefined();
+  });
+
+  it('takes rawSource from the first chunk of a reassembled bubble', () => {
+    const parsed: ParsedEntry[] = [
+      { kind: 'agent_chunk', text: 'a', streaming: true },
+      { kind: 'agent_chunk', text: 'b', streaming: true },
+    ];
+    const raws = [
+      { ts: 't1', source: 'agent', type: 'session/update' },
+      { ts: 't2', source: 'agent', type: 'session/update' },
+    ];
+    const items = buildRenderItems(parsed, [1, 2], raws);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.rawSource).toBe('agent');
+  });
 });

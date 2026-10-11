@@ -31,10 +31,28 @@
 
   const { title, updates, collapsed = false, spinner = false }: Props = $props();
 
+  /** Output longer than this many lines is initially truncated (FR-5.1). */
+  const TRUNCATE_LINES = 20;
+
   // One-time initial expanded state: collapsed on mobile, expanded otherwise.
   // `collapsed` seeds local state exactly once (it is an initial default, not a
   // reactive binding), so read it untracked.
   let open = $state(untrack(() => !collapsed));
+
+  // Output truncation (spa-operator-restoration B-8 / FR-5). Expand-only: once
+  // expanded there is no collapse affordance (AC-5.1d). Local per-card state.
+  let outputExpanded = $state(false);
+
+  const lines = $derived(updates.split('\n'));
+  const isTruncated = $derived(lines.length > TRUNCATE_LINES);
+
+  const visibleOutput = $derived(
+    isTruncated && !outputExpanded ? lines.slice(0, TRUNCATE_LINES).join('\n') : updates,
+  );
+
+  const hiddenCount = $derived(
+    isTruncated && !outputExpanded ? lines.length - TRUNCATE_LINES : 0,
+  );
 
   function toggle(): void {
     if (spinner) return; // no expand/collapse while the spinner is shown (7.3)
@@ -67,6 +85,16 @@
     <pre
       data-testid="tool-call-body"
       class="m-0 max-w-full overflow-x-auto whitespace-pre-wrap break-words border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)]"
-      style="overflow-wrap: anywhere;">{updates}</pre>
+      style="overflow-wrap: anywhere;">{visibleOutput}</pre>
+    {#if hiddenCount > 0}
+      <button
+        type="button"
+        data-testid="tool-call-show-more"
+        onclick={() => (outputExpanded = true)}
+        class="min-h-[44px] w-full border-t border-[var(--border)] px-3 py-2 text-left text-xs font-medium text-[var(--tool-card-accent)]"
+      >
+        Show {hiddenCount} more lines
+      </button>
+    {/if}
   {/if}
 </div>

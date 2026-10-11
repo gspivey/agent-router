@@ -109,7 +109,7 @@ Read `.kiro/specs/spa-operator-restoration/requirements.md`, `design.md`, and `t
 then implement tasks `B-1`, `B-2`, `B-3`, `B-4`, `B-5`, `B-6`, `B-7`, `B-8`. Depends on item 80.
 
 - Spec: `.kiro/specs/spa-operator-restoration/` · tasks `B-1`–`B-8`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #146
 
 ---
 

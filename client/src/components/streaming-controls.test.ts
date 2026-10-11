@@ -83,17 +83,29 @@ describe('Composer (Req 7.6, 7.8)', () => {
 
 describe('DetailBar + Interrupt (Req 7.7)', () => {
   it('renders back, title, and an "Interrupt" (not "Kill") button', () => {
-    const { getByTestId } = render(DetailBar, { title: 'sess-1', onInterrupt: vi.fn() });
+    const { getByTestId, queryByTestId } = render(DetailBar, {
+      title: 'sess-1',
+      sessionId: 'sess-1',
+      status: 'completed',
+      onInterrupt: vi.fn(),
+    });
     expect(getByTestId('detail-back')).toBeTruthy();
     expect(getByTestId('detail-bar').textContent).toContain('sess-1');
     const btn = getByTestId('interrupt-button');
     expect(btn.textContent).toContain('Interrupt');
     expect(btn.textContent).not.toContain('Kill');
+    // A non-active session shows no Kill button (FR-6.1).
+    expect(queryByTestId('kill-button')).toBeNull();
   });
 
   it('shows the confirmation dialog and only calls onInterrupt on confirm', async () => {
     const onInterrupt = vi.fn().mockResolvedValue(undefined);
-    const { getByTestId, queryByTestId } = render(DetailBar, { title: 's', onInterrupt });
+    const { getByTestId, queryByTestId } = render(DetailBar, {
+      title: 's',
+      sessionId: 's',
+      status: 'active',
+      onInterrupt,
+    });
     // No dialog initially.
     expect(queryByTestId('interrupt-confirm')).toBeNull();
     await fireEvent.click(getByTestId('interrupt-button'));
@@ -109,7 +121,12 @@ describe('DetailBar + Interrupt (Req 7.7)', () => {
 
   it('cancel dismisses the dialog without calling onInterrupt', async () => {
     const onInterrupt = vi.fn().mockResolvedValue(undefined);
-    const { getByTestId, queryByTestId } = render(DetailBar, { title: 's', onInterrupt });
+    const { getByTestId, queryByTestId } = render(DetailBar, {
+      title: 's',
+      sessionId: 's',
+      status: 'active',
+      onInterrupt,
+    });
     await fireEvent.click(getByTestId('interrupt-button'));
     await fireEvent.click(getByTestId('interrupt-cancel'));
     expect(queryByTestId('interrupt-confirm')).toBeNull();
@@ -120,6 +137,8 @@ describe('DetailBar + Interrupt (Req 7.7)', () => {
     const onInterrupt = vi.fn().mockResolvedValue(undefined);
     const { getByTestId, queryByTestId } = render(DetailBar, {
       title: 's',
+      sessionId: 's',
+      status: 'active',
       onInterrupt,
       disabled: true,
     });

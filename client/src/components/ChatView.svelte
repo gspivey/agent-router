@@ -38,7 +38,7 @@
     shouldShowSpinner,
   } from '../lib/streaming-state.js';
   import { connectStream, type SseHandle } from '../lib/sse.js';
-  import type { SessionStatus, StreamEntry } from '../lib/types.js';
+  import type { SessionStatus, StreamEntry, SessionMeta } from '../lib/types.js';
   import MessageBubble from './MessageBubble.svelte';
   import SystemPill from './SystemPill.svelte';
   import ToolCallCard from './ToolCallCard.svelte';
@@ -49,6 +49,7 @@
   import ReconnectPill from './ReconnectPill.svelte';
   import Composer from './Composer.svelte';
   import DetailBar from './DetailBar.svelte';
+  import SessionMetaPanel from './SessionMeta.svelte';
   import EntryShell from './EntryShell.svelte';
   import HelpOverlay from './HelpOverlay.svelte';
 
@@ -62,6 +63,13 @@
 
   let loading = $state(true);
   let error = $state<string | null>(null);
+  // The session metadata loaded from `api.getSession`, for the metadata panel
+  // (spa-operator-restoration B-6). Null until the first successful load.
+  let meta = $state<SessionMeta | null>(null);
+  // "Show internals" toggle (B-7 / FR-4). Persisted under `ar-show-internals`.
+  let showInternals = $state(
+    typeof localStorage !== 'undefined' && localStorage.getItem('ar-show-internals') === '1',
+  );
   // Merged (id, data) entries, kept sorted ascending by id for exactly-once
   // rendering across reconnects (Req 4.4, 6.9).
   let events = $state<SSEEvent[]>([]);
@@ -102,13 +110,19 @@
   const parsed = $derived(rawEntries.map((e) => parseStreamEntry(e)));
   const items = $derived<RenderItem[]>(buildRenderItems(parsed, ids, rawEntries));
 
+  // "Show internals" filter (B-7 / FR-4.1): when OFF, drop entries whose raw
+  // `source` begins with `_kiro.dev/`. The toggle flips this live with no reload.
+  const visibleItems = $derived<RenderItem[]>(
+    showInternals ? items : items.filter((item) => !item.rawSource?.startsWith('_kiro.dev/')),
+  );
+
   // Streaming-state derivations (pure, Req 7.2 / 7.3).
   const cursorVisible = $derived(shouldShowCursor(rawEntries, status));
   const finishedTools = $derived(finishedToolCallIds(rawEntries));
   // The index of the LAST agent bubble — the cursor attaches there only.
   const lastBubbleIndex = $derived.by(() => {
-    for (let i = items.length - 1; i >= 0; i--) {
-      if (items[i]?.kind === 'bubble') return i;
+    for (let i = visibleItems.length - 1; i >= 0; i--) {
+      if (visibleItems[i]?.kind === 'bubble') return i;
     }
     return -1;
   });
@@ -217,6 +231,7 @@
       events = mergeEvents([], seeded);
       highestId = detail.last_event_id ?? (seeded.length > 0 ? seeded[seeded.length - 1]!.id : 0);
       status = detail.meta.status;
+      meta = detail.meta;
       loading = false;
 
       // Only live sessions open a stream (Req 7.1); a completed/abandoned/failed
@@ -267,10 +282,29 @@
 <section data-testid="chat-view" class="flex h-[100dvh] flex-col">
   <div class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2">
     <span class="min-w-0 flex-1 truncate text-sm text-[var(--text-muted)]">{sessionId}</span>
+    <label
+      class="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-[var(--text-muted)]"
+    >
+      <input
+        type="checkbox"
+        data-testid="show-internals-toggle"
+        bind:checked={showInternals}
+        onchange={() => {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('ar-show-internals', showInternals ? '1' : '');
+          }
+        }}
+      />
+      Show internals
+    </label>
     {#if connection === 'reconnecting' && !ended}
       <span class="text-xs text-[var(--warning)]">reconnecting</span>
     {/if}
   </div>
+
+  {#if meta !== null}
+    <SessionMetaPanel {meta} />
+  {/if}
 
   {#if connection === 'reconnecting' && !ended}
     <ReconnectPill />
@@ -301,10 +335,10 @@
           Retry
         </button>
       </div>
-    {:else if items.length === 0}
+    {:else if visibleItems.length === 0}
       <p data-testid="chat-empty" class="p-4 text-sm text-[var(--text-muted)]">No activity yet.</p>
     {:else}
-      {#each items as item, i (item.key)}
+      {#each visibleItems as item, i (item.key)}
         <EntryShell json={item.json}>
           {#if item.kind === 'bubble'}
             <MessageBubble text={item.text} cursor={cursorVisible && i === lastBubbleIndex} />
@@ -343,7 +377,13 @@
   {/if}
 
   <Composer onSend={sendPrompt} disabled={controlsDisabled} />
-  <DetailBar title={sessionTitle} onInterrupt={interrupt} disabled={controlsDisabled} />
+  <DetailBar
+    title={sessionTitle}
+    sessionId={sessionId}
+    status={status}
+    onInterrupt={interrupt}
+    disabled={controlsDisabled}
+  />
 
   {#if helpOpen}
     <HelpOverlay onClose={() => (helpOpen = false)} />
