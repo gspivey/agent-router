@@ -160,6 +160,112 @@ describe('api — repo-grouped sessions (spa-operator-restoration A-2)', () => {
   });
 });
 
+describe('api — config + cron toggle (spa-operator-restoration C-1)', () => {
+  function sampleConfig() {
+    return {
+      sessionTimeouts: {
+        inactivityMinutes: 60,
+        maxLifetimeMinutes: 1440,
+        gracePeriodAfterMergeSeconds: 30,
+      },
+      rateLimits: { perPRSeconds: 300 },
+      crons: [
+        {
+          name: 'dpdk-cycle',
+          repo: 'gspivey/dpdk-stdlib-rust',
+          schedule: '*/30 * * * *',
+          nextFireTime: '2026-10-11T03:00:00Z',
+          paused: false,
+        },
+      ],
+      tokens: [
+        {
+          project: 'edit-director',
+          tokenName: 'GITHUB_TOKEN_EDIT',
+          isSet: true,
+          expiry: '2026-12-01T00:00:00Z',
+          health: 'green',
+        },
+      ],
+      repos: [{ name: 'gspivey/agent-router', webhookSecretName: '[configured]' }],
+    };
+  }
+
+  it('getConfig GETs /config and returns the config envelope', async () => {
+    const body = sampleConfig();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(body));
+
+    const res = await api.getConfig();
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe('/config');
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer tok');
+    expect(res).toEqual(body);
+    fetchSpy.mockRestore();
+  });
+
+  it('getConfig enters the expired lockout on 401', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 401 }));
+
+    await expect(api.getConfig()).rejects.toMatchObject({ kind: 'expired' });
+    expect(auth.error).toBe('expired');
+    fetchSpy.mockRestore();
+  });
+
+  it('pauseCron POSTs /crons/:name/pause and returns {ok:true}', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
+
+    const res = await api.pauseCron('my-cron');
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe('/crons/my-cron/pause');
+    expect((fetchSpy.mock.calls[0]?.[1] as RequestInit).method).toBe('POST');
+    expect(res).toEqual({ ok: true });
+    fetchSpy.mockRestore();
+  });
+
+  it('resumeCron POSTs /crons/:name/resume and returns {ok:true}', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
+
+    const res = await api.resumeCron('my-cron');
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe('/crons/my-cron/resume');
+    expect((fetchSpy.mock.calls[0]?.[1] as RequestInit).method).toBe('POST');
+    expect(res).toEqual({ ok: true });
+    fetchSpy.mockRestore();
+  });
+
+  it('pauseCron encodes the cron name', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
+
+    await api.pauseCron('a/b c');
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe(`/crons/${encodeURIComponent('a/b c')}/pause`);
+    fetchSpy.mockRestore();
+  });
+
+  it('resumeCron enters the expired lockout on 403', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 403 }));
+
+    await expect(api.resumeCron('my-cron')).rejects.toMatchObject({ kind: 'expired' });
+    expect(auth.error).toBe('expired');
+    fetchSpy.mockRestore();
+  });
+
+  it('pauseCron throws ApiError on a non-auth failure (500)', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 500 }));
+
+    await expect(api.pauseCron('my-cron')).rejects.toBeInstanceOf(ApiError);
+    expect(auth.error).toBe('none');
+    fetchSpy.mockRestore();
+  });
+});
+
 describe('api — auth failures (Req 3.4, 3.5)', () => {
   it('throws AuthError("missing") and makes no request when there is no token', async () => {
     auth.token = null;

@@ -13,6 +13,8 @@
 
 import { auth, enterExpiredState } from './stores.svelte.js';
 import type {
+  ConfigResponse,
+  CronToggleResponse,
   InjectResponse,
   InterruptResponse,
   KillResponse,
@@ -150,5 +152,37 @@ export const api = {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     const res = await authedFetch(`/repos/${encodeURIComponent(repo)}/sessions?${params}`);
     return readJson<RepoPageResponse>(res);
+  },
+
+  /**
+   * `GET /config` — the operator configuration snapshot (session timeouts,
+   * rate limits, cron schedules, token health, repositories). Added by the
+   * spa-operator-restoration spec (ROADMAP item 82, task C-1).
+   */
+  async getConfig(): Promise<ConfigResponse> {
+    const res = await authedFetch('/config');
+    return readJson<ConfigResponse>(res);
+  },
+
+  /**
+   * `POST /crons/:name/pause` — pause a repo's scheduled cron
+   * (spa-operator-restoration ROADMAP 82, task C-1).
+   */
+  async pauseCron(name: string): Promise<CronToggleResponse> {
+    const res = await authedFetch(`/crons/${encodeURIComponent(name)}/pause`, {
+      method: 'POST',
+    });
+    return readJson<CronToggleResponse>(res);
+  },
+
+  /**
+   * `POST /crons/:name/resume` — resume a paused cron
+   * (spa-operator-restoration ROADMAP 82, task C-1).
+   */
+  async resumeCron(name: string): Promise<CronToggleResponse> {
+    const res = await authedFetch(`/crons/${encodeURIComponent(name)}/resume`, {
+      method: 'POST',
+    });
+    return readJson<CronToggleResponse>(res);
   },
 };
