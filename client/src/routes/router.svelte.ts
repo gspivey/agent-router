@@ -3,13 +3,11 @@
  *
  * There is NO external routing library (HIGH-4): routing is hand-rolled on top
  * of the native `hashchange` event plus `parseHashRoute()` from the shared logic
- * module. Only two routes exist (Requirement 5.8):
+ * module. Three routes exist:
  *
  *   - `#/` or empty       → the session list view
  *   - `#/sessions/<id>`   → the chat (detail) view
- *
- * There are deliberately NO `#/repos`, `#/config`, or `#/projects` routes; the
- * SPA has a single navigation destination (Sessions).
+ *   - `#/config`          → the operator config view (spa-operator-restoration)
  *
  * The route is exposed as a Svelte 5 rune so `App.svelte` re-renders the matching
  * view whenever the hash changes. `startRouter()` wires the `hashchange`
@@ -48,4 +46,9 @@ export function goToList(): void {
 /** Navigate to a session's chat/detail view (`#/sessions/<id>`). */
 export function goToSession(sessionId: string): void {
   location.hash = `#/sessions/${sessionId}`;
+}
+
+/** Navigate to the config view (`#/config`). */
+export function goToConfig(): void {
+  location.hash = '#/config';
 }

@@ -27,3 +27,16 @@ body {
     Arial, sans-serif;
   font-size: 14px;
 }
+
+/* Pulsing indicator for repo groups with active sessions (FR-2.2e). */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 1;
+  }
+}

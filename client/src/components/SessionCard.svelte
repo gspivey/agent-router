@@ -9,7 +9,7 @@
    * navigates to the chat route (Requirement 5.6). Its tap target is well above
    * 44×44 CSS pixels (Requirement 5.7).
    */
-  import { statusToBadge, type BadgeColor } from '../lib/logic.js';
+  import { statusToBadge, formatDuration, prUrl, type BadgeColor } from '../lib/logic.js';
   import type { SessionSummary } from '../lib/types.js';
   import { goToSession } from '../routes/router.svelte.js';
 
@@ -30,6 +30,21 @@
   const badge = $derived(statusToBadge(session.status));
   const badgeColor = $derived(BADGE_COLOR_VAR[badge]);
 
+  /** First 8 chars of the session UUID (FR-1.1). */
+  const shortId = $derived(session.session_id.slice(0, 8));
+
+  /** Termination pill shown only for ended sessions with a reason (FR-1.3). */
+  const showTermination = $derived(
+    session.termination_reason !== null && session.status !== 'active',
+  );
+
+  /** Duration shown only for ended sessions with a completed_at (FR-1.4). */
+  const durationLabel = $derived(
+    session.status !== 'active' && session.completed_at !== null
+      ? formatDuration(session.completed_at - session.created_at)
+      : '',
+  );
+
   /** Format a unix-seconds timestamp into a short, locale-aware label. */
   function formatCreated(createdAt: number): string {
     const d = new Date(createdAt * 1000);
@@ -42,41 +57,79 @@
   }
 </script>
 
-<button
-  type="button"
-  data-testid="session-card"
-  data-session-id={session.session_id}
-  data-status={session.status}
-  onclick={open}
-  class="flex min-h-[72px] w-full items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left"
+<div
+  data-testid="session-card-wrapper"
+  class="flex flex-col border-b border-[var(--border)] bg-[var(--surface)]"
 >
-  <span
-    data-testid="status-badge"
-    data-badge={badge}
-    class="inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-medium"
-    style="color: {badgeColor}; border: 1px solid {badgeColor};"
+  <button
+    type="button"
+    data-testid="session-card"
+    data-session-id={session.session_id}
+    data-status={session.status}
+    onclick={open}
+    class="flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left"
   >
     <span
-      aria-hidden="true"
-      class="inline-block h-2 w-2 rounded-full"
-      style="background: {badgeColor};"
-    ></span>
-    {session.status}
-  </span>
-
-  <span class="flex min-w-0 flex-1 flex-col">
-    <span class="truncate text-sm font-medium text-[var(--text-primary)]">
-      {session.repo ?? 'no repo'}
-    </span>
-    <span class="text-xs text-[var(--text-muted)]">{formatCreated(session.created_at)}</span>
-  </span>
-
-  {#if session.waiting_for}
-    <span
-      data-testid="waiting-for"
-      class="shrink-0 rounded-full bg-[var(--system-pill-bg)] px-2 py-1 text-xs text-[var(--system-pill-text)]"
+      data-testid="status-badge"
+      data-badge={badge}
+      class="inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-medium"
+      style="color: {badgeColor}; border: 1px solid {badgeColor};"
     >
-      {session.waiting_for}
+      <span
+        aria-hidden="true"
+        class="inline-block h-2 w-2 rounded-full"
+        style="background: {badgeColor};"
+      ></span>
+      {session.status}
+    </span>
+
+    <span class="flex min-w-0 flex-1 flex-col">
+      <span class="truncate text-sm font-medium text-[var(--text-primary)]">
+        {session.repo ?? 'no repo'}
+      </span>
+      <span class="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+        <span data-testid="short-id" class="font-mono">{shortId}</span>
+        <span>{formatCreated(session.created_at)}</span>
+      </span>
+    </span>
+
+    <span class="flex shrink-0 flex-col items-end gap-1">
+      {#if session.waiting_for}
+        <span
+          data-testid="waiting-for"
+          class="rounded-full bg-[var(--system-pill-bg)] px-2 py-1 text-xs text-[var(--system-pill-text)]"
+        >
+          {session.waiting_for}
+        </span>
+      {/if}
+      {#if showTermination}
+        <span
+          data-testid="termination-reason"
+          class="inline-block rounded-full bg-[var(--system-pill-bg)] px-2 py-0.5 text-xs text-[var(--text-muted)]"
+        >
+          {session.termination_reason}
+        </span>
+      {/if}
+      {#if durationLabel !== ''}
+        <span data-testid="session-duration" class="text-xs text-[var(--text-muted)]">
+          {durationLabel}
+        </span>
+      {/if}
+    </span>
+  </button>
+
+  {#if session.prs.length > 0}
+    <span data-testid="pr-links" class="flex flex-wrap gap-1 px-4 pb-2 text-xs">
+      {#each session.prs as pr, i (pr.repo + '#' + pr.pr_number)}
+        {#if i > 0}<span aria-hidden="true">,&nbsp;</span>{/if}
+        <a
+          data-testid="pr-link"
+          href={prUrl(pr.repo, pr.pr_number)}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-[var(--tool-card-accent)]"
+        >PR #{pr.pr_number}</a>
+      {/each}
     </span>
   {/if}
-</button>
+</div>

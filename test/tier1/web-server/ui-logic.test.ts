@@ -80,7 +80,9 @@ describe('ui/logic', () => {
       fc.assert(
         fc.property(fc.string(), (hash) => {
           const result = parseHashRoute(hash);
-          expect(result.view === 'list' || result.view === 'detail').toBe(true);
+          expect(
+            result.view === 'list' || result.view === 'detail' || result.view === 'config',
+          ).toBe(true);
           if (result.view === 'detail') {
             expect(result.sessionId.length).toBeGreaterThan(0);
           }
@@ -106,6 +108,14 @@ describe('ui/logic', () => {
       expect(parseHashRoute('')).toEqual({ view: 'list' });
       expect(parseHashRoute('#/')).toEqual({ view: 'list' });
       expect(parseHashRoute('#')).toEqual({ view: 'list' });
+    });
+
+    it('parses #/config as the config view', () => {
+      expect(parseHashRoute('#/config')).toEqual({ view: 'config' });
+    });
+
+    it('treats #/config/ (trailing slash) as the list view', () => {
+      expect(parseHashRoute('#/config/')).toEqual({ view: 'list' });
     });
   });
 

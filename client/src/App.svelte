@@ -17,6 +17,7 @@
   import { route, startRouter } from './routes/router.svelte.js';
   import Header from './components/Header.svelte';
   import SessionList from './components/SessionList.svelte';
+  import ConfigView from './components/ConfigView.svelte';
   import ChatView from './components/ChatView.svelte';
 
   // The token is resolved in `main.ts` before mount, so children that fetch on
@@ -49,6 +50,8 @@
     <Header />
     {#if route.current.view === 'list'}
       <SessionList />
+    {:else if route.current.view === 'config'}
+      <ConfigView />
     {:else}
       <ChatView sessionId={route.current.sessionId} />
     {/if}

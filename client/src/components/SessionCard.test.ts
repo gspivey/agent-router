@@ -79,3 +79,99 @@ describe('SessionCard', () => {
     expect(location.hash).toBe('#/sessions/go-here');
   });
 });
+
+describe('SessionCard — metadata fields (spa-operator-restoration A-4)', () => {
+  beforeEach(() => {
+    history.replaceState({}, '', '/app');
+    location.hash = '';
+  });
+  afterEach(cleanup);
+
+  it('renders the short id (first 8 chars of the UUID) in a monospace element (FR-1.1)', () => {
+    const { getByTestId } = render(SessionCard, {
+      session: makeSession({ session_id: 'abc12345-xxxx-xxxx-xxxx-xxxxxxxxxxxx' }),
+    });
+    const el = getByTestId('short-id');
+    expect(el.textContent).toBe('abc12345');
+    expect(el.className).toContain('font-mono');
+  });
+
+  it('renders a PR link with the GitHub PR URL (FR-1.2)', () => {
+    const { getByTestId } = render(SessionCard, {
+      session: makeSession({
+        prs: [{ repo: 'o/r', pr_number: 5, registered_at: 1 }],
+      }),
+    });
+    const link = getByTestId('pr-link');
+    expect(link.getAttribute('href')).toBe('https://github.com/o/r/pull/5');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(link.textContent).toContain('PR #5');
+  });
+
+  it('renders multiple PR links when there are multiple PRs (FR-1.2)', () => {
+    const { getAllByTestId } = render(SessionCard, {
+      session: makeSession({
+        prs: [
+          { repo: 'o/r', pr_number: 1, registered_at: 1 },
+          { repo: 'o/r', pr_number: 2, registered_at: 2 },
+        ],
+      }),
+    });
+    const links = getAllByTestId('pr-link');
+    expect(links).toHaveLength(2);
+  });
+
+  it('renders no PR links when prs is empty (FR-1.2)', () => {
+    const { queryByTestId } = render(SessionCard, { session: makeSession({ prs: [] }) });
+    expect(queryByTestId('pr-links')).toBeNull();
+  });
+
+  it('renders the termination reason pill for an ended session (FR-1.3)', () => {
+    const { getByTestId } = render(SessionCard, {
+      session: makeSession({ status: 'completed', termination_reason: 'merged', completed_at: null }),
+    });
+    expect(getByTestId('termination-reason').textContent).toContain('merged');
+  });
+
+  it('does NOT render the termination pill when the session is active (FR-1.3)', () => {
+    const { queryByTestId } = render(SessionCard, {
+      session: makeSession({ status: 'active', termination_reason: 'merged' }),
+    });
+    expect(queryByTestId('termination-reason')).toBeNull();
+  });
+
+  it('does NOT render the termination pill when there is no reason (FR-1.3)', () => {
+    const { queryByTestId } = render(SessionCard, {
+      session: makeSession({ status: 'completed', termination_reason: null }),
+    });
+    expect(queryByTestId('termination-reason')).toBeNull();
+  });
+
+  it('renders the duration for an ended session (FR-1.4)', () => {
+    const { getByTestId } = render(SessionCard, {
+      session: makeSession({
+        status: 'completed',
+        created_at: 1000,
+        completed_at: 1000 + 780,
+      }),
+    });
+    expect(getByTestId('session-duration').textContent).toContain('13m');
+  });
+
+  it('does NOT render the duration for an active session (FR-1.4)', () => {
+    const { queryByTestId } = render(SessionCard, {
+      session: makeSession({ status: 'active', completed_at: null }),
+    });
+    expect(queryByTestId('session-duration')).toBeNull();
+  });
+
+  it('places PR links OUTSIDE the <button> element (valid HTML)', () => {
+    const { getByTestId } = render(SessionCard, {
+      session: makeSession({ prs: [{ repo: 'o/r', pr_number: 7, registered_at: 1 }] }),
+    });
+    const button = getByTestId('session-card');
+    const link = getByTestId('pr-link');
+    expect(button.contains(link)).toBe(false);
+  });
+});
