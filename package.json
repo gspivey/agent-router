@@ -18,7 +18,7 @@
     "test:browser": "npx playwright test",
     "build:client": "npm --prefix client run build",
     "dev:client": "npm --prefix client run dev",
-    "prepare": "[ -d client ] && npm --prefix client install --prefer-offline && npm --prefix client run build || true"
+    "prepare": "[ ! -d client ] || { npm --prefix client ci --include=dev && npm --prefix client run build; }"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

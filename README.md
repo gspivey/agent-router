@@ -298,15 +298,24 @@ it to subsequent API calls. Client-side routing is hash-based (`#/`, `#/sessions
 
 ### Build the client (production)
 
+The client is built automatically by the `prepare` lifecycle hook whenever you run
+`npm install` or `npm ci` in the repo root. The full production deploy sequence is:
+
 ```bash
-npm run build:client      # → client/dist/ (runs `npm --prefix client run build`)
-npm start                 # daemon serves client/dist/ at / , /ui , /app
+git pull
+npm install           # installs deps AND builds client/dist/ via prepare
+sudo systemctl restart agent-router
 ```
 
-`npm run build:client` must be run before starting the daemon in production (and in CI
-before the Playwright browser tests). If `client/dist/index.html` is missing, the daemon
-logs a warning and keeps serving the REST/SSE API — the SPA routes return 404 until the
-client is built.
+To rebuild the client without reinstalling root deps:
+
+```bash
+npm run build:client  # → client/dist/ (runs `npm --prefix client run build`)
+```
+
+`npm run build:client` must be run before the Playwright browser tests in CI.
+If `client/dist/index.html` is missing, the daemon logs a warning and keeps serving
+the REST/SSE API — the SPA routes return 404 until the client is built.
 
 ### Dev loop (`NODE_ENV=development` + Vite proxy)
 
