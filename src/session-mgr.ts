@@ -1,4 +1,6 @@
 import * as crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { Database } from './db.js';
 import type { Logger } from './log.js';
 import type { SessionFiles, SessionPaths, PromptSource, StreamEntry, SessionMeta } from './session-files.js';
@@ -15,6 +17,8 @@ import type { WorktreeManager } from './worktree-manager.js';
 import type { TokenStore } from './token-store.js';
 import { isValidRepoString } from './token-store.js';
 import type { Reaper } from './reaper.js';
+
+const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
 // MCP server entry construction — pure helper for ACP session wiring
@@ -303,6 +307,20 @@ export interface SessionManager {
   getActiveSession(sessionId: string): SessionHandle | null;
   resumeSessions(): Promise<{ resumed: number; terminated: number }>;
   shutdown(): Promise<void>;
+
+  // --- Agent process isolation (FR-4) ---
+  /** Store the per-session capability token presented on the agent socket. */
+  setCapToken(sessionId: string, token: string): void;
+  /** Constant-time cap-token validation. Empty tokens are rejected. */
+  validateCapToken(sessionId: string, token: string): boolean;
+  /** The bound repo for a session, or undefined. */
+  getSessionRepo(sessionId: string): string | undefined;
+  /** The read-scoped repos for a session (never undefined — empty when none). */
+  getSessionReadRepos(sessionId: string): string[];
+  /** The recorded worktree path for a session, or undefined. */
+  getWorktreePath(sessionId: string): string | undefined;
+  /** Count of currently-active sessions launched under useWorkerUid (pkill guard). */
+  getActiveWorkerSessionCount(): number;
 }
 
 /** Default session timeout configuration. */
@@ -314,6 +332,62 @@ const DEFAULT_SESSION_TIMEOUT: SessionTimeoutConfig = {
 
 /** Default deadline (ms) for the verify() call inside the inactivity watchdog. */
 export const DEFAULT_VERIFY_DEADLINE_MS = 30_000;
+
+// ---------------------------------------------------------------------------
+// Agent process isolation — pure guards (FR-4.6 / FR-4.7)
+// ---------------------------------------------------------------------------
+
+/** Minimal shape of an active session for the concurrent-project guard. */
+export interface ActiveSessionInfo {
+  sessionId: string;
+  repo?: string | undefined;
+}
+
+/**
+ * Per-session agent-isolation parameters threaded from the session manager to
+ * the acpSpawner lambda (which forwards them to the adapter's `spawn`).
+ */
+export interface IsolationSpawnInfo {
+  useWorkerUid: boolean;
+  capToken: string;
+  agentSocketPath: string;
+}
+
+/**
+ * Refuse concurrent sessions for a *different* project when `useWorkerUid` is
+ * on (FR-4.6). All sessions share the `agentworker` uid, so one agent could
+ * read another's cap token from `/proc`; cross-project concurrency is the
+ * attack surface closed here. No-op when `useWorkerUid` is false or `newRepo`
+ * is undefined. Throws (does not return) on conflict. The `force` flag on
+ * CLI `new_session` must NOT bypass this check — it is enforced in
+ * `createSession`, below the force check.
+ */
+export function checkConcurrentProjectConflict(
+  newRepo: string | undefined,
+  activeSessions: ActiveSessionInfo[],
+  useWorkerUid: boolean,
+): void {
+  if (useWorkerUid !== true || newRepo === undefined) return;
+  const lower = newRepo.toLowerCase();
+  const conflict = activeSessions.find(
+    (s) => s.repo !== undefined && s.repo.toLowerCase() !== lower,
+  );
+  if (conflict !== undefined) {
+    throw new Error(
+      `Cannot spawn concurrent sessions for different projects in useWorkerUid mode — stop ${conflict.sessionId} first`,
+    );
+  }
+}
+
+/**
+ * The pkill guard decision (FR-4.7): reap stray `agentworker` processes only
+ * when NO worker sessions remain active. FR-4.6 permits concurrent
+ * same-project sessions, so a blanket uid kill while siblings run would
+ * SIGKILL their kiro processes.
+ */
+export function shouldReapWorkerProcesses(remainingWorkerSessions: number): boolean {
+  return remainingWorkerSessions <= 0;
+}
 
 // ---------------------------------------------------------------------------
 // Session Registry — in-memory Map<sessionId, SessionHandle>
@@ -382,7 +456,7 @@ function translateNotification(notification: ACPNotification): StreamEntry {
 export function createSessionManager(deps: {
   db: Database;
   sessionFiles: SessionFiles;
-  acpSpawner: (sessionId: string, repo?: string) => ACPClient;
+  acpSpawner: (sessionId: string, repo?: string, isolation?: IsolationSpawnInfo) => ACPClient;
   log: Logger;
   sessionTimeout?: SessionTimeoutConfig;
   /** Seconds to wait for busy sessions during shutdown (default 60). */
@@ -425,6 +499,17 @@ export function createSessionManager(deps: {
   mcpServerCommand?: { command: string; args: string[]; serverPath: string };
   /** Extra env variables to forward to the MCP server (e.g. GITHUB_API_BASE_URL). */
   extraEnv?: Array<{ name: string; value: string }>;
+  /**
+   * Agent process isolation (FR-4.6/FR-4.7). When true, createSession and
+   * resumeSessions refuse concurrent cross-project sessions, and the last
+   * worker session's cleanup reaps stray `agentworker` processes.
+   */
+  useWorkerUid?: boolean;
+  /**
+   * Agent-only socket path forwarded to the per-session MCP server env
+   * (AGENT_ROUTER_AGENT_SOCK) and to the adapter when useWorkerUid is on.
+   */
+  agentSocketPath?: string;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
@@ -438,6 +523,8 @@ export function createSessionManager(deps: {
   const daemonSocket = deps.daemonSocket;
   const mcpServerCommand = deps.mcpServerCommand;
   const extraEnv = deps.extraEnv;
+  const useWorkerUid = deps.useWorkerUid ?? false;
+  const agentSocketPath = deps.agentSocketPath;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
@@ -459,15 +546,26 @@ export function createSessionManager(deps: {
    * (`[entry]`), or `undefined` when wiring is not configured. Threaded into
    * `acp.newSessionWithPrompt` and `acp.loadSession`.
    */
-  function mcpServersForSession(sessionId: string): McpServerEntry[] | undefined {
+  function mcpServersForSession(sessionId: string, capToken: string): McpServerEntry[] | undefined {
     if (daemonSocket === undefined || mcpServerCommand === undefined) return undefined;
+    // Thread the agent socket (shared) + per-session cap token into the MCP
+    // server env so the per-session MCP relay can authenticate to the agent
+    // socket (agent process isolation, FR-4.5).
+    const isolationEnv: Array<{ name: string; value: string }> = [];
+    if (agentSocketPath !== undefined) {
+      isolationEnv.push({ name: 'AGENT_ROUTER_AGENT_SOCK', value: agentSocketPath });
+    }
+    if (capToken.length > 0) {
+      isolationEnv.push({ name: 'AGENT_ROUTER_CAP_TOKEN', value: capToken });
+    }
+    const mergedExtraEnv = [...(extraEnv ?? []), ...isolationEnv];
     const entry = buildMcpServerEntry(
       sessionId,
       daemonSocket,
       mcpServerCommand.serverPath,
       mcpServerCommand.command,
       mcpServerCommand.args,
-      extraEnv,
+      mergedExtraEnv,
     );
     return entry ? [entry] : undefined;
   }
@@ -476,6 +574,54 @@ export function createSessionManager(deps: {
   // Replaces the prior 4 parallel Maps/Set (inactivityTimers, lifetimeTimers,
   // graceTimers, completionFlags).
   const sessionStates = new Map<string, SessionState>();
+
+  // --- Agent process isolation (FR-4) state ---
+  // Per-session capability token for the agent socket.
+  const capTokens = new Map<string, string>();
+  // Session ids currently running under useWorkerUid (for the pkill guard).
+  const workerSessions = new Set<string>();
+
+  /**
+   * Refuse concurrent sessions for a *different* project when useWorkerUid is
+   * on (FR-4.6). Delegates to the exported pure guard against the live
+   * registry. The `force` flag must not bypass this.
+   */
+  function guardConcurrentProjectConflict(newRepo: string | undefined): void {
+    checkConcurrentProjectConflict(
+      newRepo,
+      registry.list().map((h) => ({ sessionId: h.sessionId, repo: h.repo })),
+      useWorkerUid,
+    );
+  }
+
+  /**
+   * Reap stray `agentworker` processes after the LAST active worker session
+   * ends (FR-4.7). The guard is load-bearing: FR-4.6 permits concurrent
+   * same-project sessions, and a blanket uid kill would SIGKILL siblings.
+   * Called only after the ending session has left the worker set.
+   */
+  function maybeReapWorkerProcesses(): void {
+    if (useWorkerUid !== true) return;
+    if (!shouldReapWorkerProcesses(workerSessions.size)) return; // siblings active — never kill
+    execFileAsync('/usr/bin/sudo', ['-n', '/usr/bin/pkill', '-KILL', '-u', 'agentworker']).catch(
+      () => {
+        // non-zero exit is expected when there are no processes to kill
+      },
+    );
+  }
+
+  /**
+   * Tear down per-session isolation state on any terminal transition: forget
+   * the cap token, drop worker-session membership, then (if this was the last
+   * worker session) reap stray `agentworker` processes. Idempotent.
+   */
+  function cleanupIsolationState(sessionId: string): void {
+    capTokens.delete(sessionId);
+    if (workerSessions.delete(sessionId)) {
+      maybeReapWorkerProcesses();
+    }
+  }
+
 
   /** Get or create a SessionState entry for the given session. */
   function getOrCreateState(sessionId: string): SessionState {
@@ -526,6 +672,9 @@ export function createSessionManager(deps: {
       // Best effort — meta may already have been updated or session might be terminal
     }
     reaper?.onSessionTerminal(sessionId);
+    // Agent process isolation (FR-4.7): forget cap token, drop worker-session
+    // membership, and reap stray agentworker processes if this was the last one.
+    cleanupIsolationState(sessionId);
   }
 
   /** Clear all timers for a session. */
@@ -852,6 +1001,10 @@ export function createSessionManager(deps: {
 
   const manager: SessionManager = {
     async createSession(originalPrompt: string, repo?: string, readRepos?: string[]): Promise<SessionHandle> {
+      // Agent process isolation (FR-4.6): refuse concurrent cross-project
+      // sessions when useWorkerUid is on. The `force` flag does NOT bypass this.
+      guardConcurrentProjectConflict(repo);
+
       const sessionId = crypto.randomUUID();
       const sessionLog = log.child({ sessionId });
 
@@ -922,7 +1075,15 @@ export function createSessionManager(deps: {
 
       // 2. Spawn ACP client. Pass the bound repo so the spawner can inject the
       //    repo-specific GitHub token as GITHUB_TOKEN into the child env.
-      const acp = acpSpawner(sessionId, repo);
+      //    Always generate a per-session capability token for the agent socket
+      //    (available in both modes; agent process isolation FR-4.4/FR-4.5).
+      const capToken = crypto.randomUUID().replace(/-/g, '');
+      capTokens.set(sessionId, capToken);
+      const acp = acpSpawner(sessionId, repo, {
+        useWorkerUid,
+        capToken,
+        agentSocketPath: agentSocketPath ?? '',
+      });
 
       // 3. Initialize ACP handshake
       await acp.initialize();
@@ -934,7 +1095,7 @@ export function createSessionManager(deps: {
       const acpSessionId = await acp.newSessionWithPrompt(
         process.cwd(),
         originalPrompt,
-        mcpServersForSession(sessionId),
+        mcpServersForSession(sessionId, capToken),
       );
       sessionLog.info('ACP session created with prompt', { acpSessionId });
 
@@ -962,6 +1123,11 @@ export function createSessionManager(deps: {
 
       // 6. Insert into registry
       registry.add(handle);
+
+      // Track worker sessions for the pkill guard (FR-4.7).
+      if (useWorkerUid) {
+        workerSessions.add(sessionId);
+      }
 
       // 7. Append session_started stream entry
       sessionFiles.appendStream(sessionId, {
@@ -1252,6 +1418,53 @@ export function createSessionManager(deps: {
       return registry.get(sessionId) ?? null;
     },
 
+    // --- Agent process isolation (FR-4) ---
+
+    setCapToken(sessionId: string, token: string): void {
+      capTokens.set(sessionId, token);
+    },
+
+    validateCapToken(sessionId: string, token: string): boolean {
+      const stored = capTokens.get(sessionId);
+      if (stored === undefined || stored.length === 0) return false;
+      if (typeof token !== 'string' || token.length === 0) return false;
+      const a = Buffer.from(stored);
+      const b = Buffer.from(token);
+      if (a.length !== b.length) return false;
+      return crypto.timingSafeEqual(a, b);
+    },
+
+    getSessionRepo(sessionId: string): string | undefined {
+      const handle = registry.get(sessionId);
+      if (handle !== undefined) return handle.repo ?? undefined;
+      // Fall back to on-disk meta for sessions not in the live registry.
+      try {
+        return sessionFiles.readMeta(sessionId).repo ?? undefined;
+      } catch {
+        return undefined;
+      }
+    },
+
+    getSessionReadRepos(sessionId: string): string[] {
+      try {
+        return sessionFiles.readMeta(sessionId).bound_project_read_repos ?? [];
+      } catch {
+        return [];
+      }
+    },
+
+    getWorktreePath(sessionId: string): string | undefined {
+      try {
+        return sessionFiles.readMeta(sessionId).worktree_path ?? undefined;
+      } catch {
+        return undefined;
+      }
+    },
+
+    getActiveWorkerSessionCount(): number {
+      return workerSessions.size;
+    },
+
     hasActiveSessionForRepo(repo: string): boolean {
       return registry.list().some((h) => h.repo === repo);
     },
@@ -1291,9 +1504,17 @@ export function createSessionManager(deps: {
 
         // Attempt to resume via session/load
         try {
-          const acp = acpSpawner(sessionId, meta.repo);
+          // FR-4.6: refuse to resume into a cross-project concurrent session.
+          guardConcurrentProjectConflict(meta.repo);
+          const capToken = crypto.randomUUID().replace(/-/g, '');
+          capTokens.set(sessionId, capToken);
+          const acp = acpSpawner(sessionId, meta.repo, {
+            useWorkerUid,
+            capToken,
+            agentSocketPath: agentSocketPath ?? '',
+          });
           await acp.initialize();
-          await acp.loadSession(kiroSessionId, mcpServersForSession(sessionId));
+          await acp.loadSession(kiroSessionId, mcpServersForSession(sessionId, capToken));
 
           // Rebuild session handle
           const paths = sessionFiles.getSessionPaths(sessionId);
@@ -1314,6 +1535,9 @@ export function createSessionManager(deps: {
           };
 
           registry.add(handle);
+          if (useWorkerUid) {
+            workerSessions.add(sessionId);
+          }
           startNotificationConsumer(sessionId, acp);
           monitorSubprocessExit(sessionId, acp);
           resetInactivityTimer(sessionId, acp);
@@ -1389,6 +1613,7 @@ export function createSessionManager(deps: {
         const { sessionId } = handle;
         registry.remove(sessionId);
         sessionStates.delete(sessionId);
+        cleanupIsolationState(sessionId);
         removeSessionWorktree(sessionId);
 
         // Emit session_ended BEFORE writing terminal meta
@@ -1465,6 +1690,7 @@ export function createSessionManager(deps: {
         const { sessionId } = handle;
         registry.remove(sessionId);
         sessionStates.delete(sessionId);
+        cleanupIsolationState(sessionId);
         removeSessionWorktree(sessionId);
 
         // Check if the session already reached terminal state during drain

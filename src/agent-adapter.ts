@@ -40,6 +40,23 @@ export interface SpawnOpts {
   sessionId: string;
   /** Optional additional environment variables for the child process. */
   env?: Record<string, string>;
+  /**
+   * When true, launch the agent as the unprivileged `agentworker` user via
+   * sudo and withhold GITHUB_TOKEN from the child env (agent process
+   * isolation, FR-2.2). Default false — unchanged behavior.
+   */
+  useWorkerUid?: boolean;
+  /**
+   * Per-session capability token the MCP server presents to the agent socket.
+   * Forwarded to the child as AGENT_ROUTER_CAP_TOKEN when `useWorkerUid` is
+   * true.
+   */
+  capToken?: string;
+  /**
+   * Agent-only socket path, forwarded to the child as AGENT_ROUTER_AGENT_SOCK
+   * when `useWorkerUid` is true.
+   */
+  agentSocketPath?: string;
 }
 
 export interface AgentAdapter {

@@ -46,7 +46,9 @@ import { createCheckWatchdog } from './check-watchdog.js';
 import type { CheckWatchdog } from './check-watchdog.js';
 import { shouldNotify, sendSessionEndNotification } from './notify.js';
 import { startTokenExpiryChecker } from './token-expiry.js';
-import { createWorktreeManager } from './worktree-manager.js';
+import { createWorktreeManager, canonicalClonePath } from './worktree-manager.js';
+import { createAgentServer } from './agent-server.js';
+import type { AgentServer } from './agent-server.js';
 import { buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from './acp.js';
 import { resolveMcpServerCommand } from './mcp-resolver.js';
 import { warnOnConflictingMcpConfig } from './mcp-config-check.js';
@@ -308,6 +310,7 @@ interface DaemonState {
   webServer: ServerType | null;
   sseBroker: SSEBroker | null;
   cliServer: CliServer | null;
+  agentServer: AgentServer | null;
   globalQueue: EventQueue | null;
   pendingWakeSweeper: PendingWakeSweeper | null;
   checkWatchdog: CheckWatchdog | null;
@@ -402,6 +405,12 @@ function installShutdownHandlers(state: DaemonState): void {
       if (state.cliServer) {
         await state.cliServer.shutdown();
         state.log.info('CLI server stopped');
+      }
+
+      // 4b. Close agent server socket
+      if (state.agentServer) {
+        await state.agentServer.shutdown();
+        state.log.info('Agent server stopped');
       }
 
       // 5. Wait up to 30s for in-flight events on the global queue
@@ -643,8 +652,21 @@ async function main(): Promise<void> {
     }
   }
 
-  const worktreeManager = createWorktreeManager({ rootDir, log });
-  log.info('Worktree manager initialized', { rootDir });
+  const worktreeManager = createWorktreeManager({
+    rootDir,
+    log,
+    ...(config.worktreeBase !== undefined ? { worktreeBase: config.worktreeBase } : {}),
+    useWorkerUid: config.useWorkerUid ?? false,
+  });
+  log.info('Worktree manager initialized', { rootDir, useWorkerUid: config.useWorkerUid ?? false });
+
+  // Agent process isolation (FR-2 / FR-7): startup log of the mode.
+  log.info('Process isolation config', { useWorkerUid: config.useWorkerUid ?? false });
+
+  // Resolve the agent-only socket path. When the isolation substrate was never
+  // installed (useWorkerUid false), fall back to <rootDir>/agent.sock so the
+  // agent server still starts (NFR-4.3).
+  const agentSocketPath = config.agentSocketPath ?? path.join(rootDir, 'agent.sock');
 
   // ---- MCP per-session wiring resolution (must precede createSessionManager) ----
   // The daemon socket path is computed once here (before the session manager)
@@ -695,7 +717,9 @@ async function main(): Promise<void> {
     daemonSocket: socketPath,
     ...(mcpServerCommand !== undefined ? { mcpServerCommand } : {}),
     extraEnv: mcpExtraEnv,
-    acpSpawner: (sessionId: string, repo?: string) => {
+    useWorkerUid: config.useWorkerUid ?? false,
+    agentSocketPath,
+    acpSpawner: (sessionId: string, repo?: string, isolation?: import('./session-mgr.js').IsolationSpawnInfo) => {
       const tokenEnv = resolveSessionTokenEnv(repo, tokenResolver);
       if (repo !== undefined && tokenEnv['GITHUB_TOKEN'] === undefined) {
         log.warn('No GitHub token resolved for session repo; child inherits daemon env', { repo });
@@ -715,8 +739,22 @@ async function main(): Promise<void> {
         ? [...DEFAULT_CHILD_ENV_ALLOWLIST, ...configHolder.current.childEnvAllowlist]
         : undefined;
       const env = buildChildEnv(process.env as Record<string, string | undefined>, overrides, allowlist);
+      const useWorker = isolation?.useWorkerUid ?? false;
+      // Agent process isolation (FR-3.3): withhold GITHUB_TOKEN from the child
+      // when running under the agentworker uid. The adapter also strips it, but
+      // removing it here keeps it out of buildChildEnv's output entirely.
+      if (useWorker && env['GITHUB_TOKEN'] !== undefined) {
+        log.warn('useWorkerUid: removing GITHUB_TOKEN from agent child env', { repo });
+        delete env['GITHUB_TOKEN'];
+      }
       const adapterForRepo = repo ? (adapterMapHolder.current.get(repo) ?? adapter) : adapter;
-      return adapterForRepo.spawn({ sessionId, env });
+      return adapterForRepo.spawn({
+        sessionId,
+        env,
+        useWorkerUid: useWorker,
+        ...(isolation?.capToken !== undefined ? { capToken: isolation.capToken } : {}),
+        agentSocketPath: isolation?.agentSocketPath ?? agentSocketPath,
+      });
     },
     log,
     sessionTimeout: config.sessionTimeout,
@@ -733,6 +771,28 @@ async function main(): Promise<void> {
     ...(reaper !== undefined ? { reaper } : {}),
   });
   log.info('Session manager initialized');
+
+  // ---- Agent-only socket (agent process isolation, FR-4) ----
+  // Always start the agent server (both modes): the per-session MCP relay uses
+  // it in either mode; useWorkerUid only changes the uid the agent runs as.
+  const agentServer: AgentServer = createAgentServer({
+    socketPath: agentSocketPath,
+    sessionMgr,
+    github,
+    tokenResolver: (o, r) => tokenResolver(o, r),
+    log,
+    db,
+    sessionFiles,
+    worktreeBase: config.worktreeBase ?? path.join(rootDir, 'worktrees'),
+    bareClonePathFor: (repo: string) => {
+      const slash = repo.indexOf('/');
+      if (slash < 1 || slash === repo.length - 1) return undefined;
+      return canonicalClonePath(rootDir, repo.slice(0, slash), repo.slice(slash + 1));
+    },
+    ...(config.githubForwardAllowList !== undefined ? { allowList: config.githubForwardAllowList } : {}),
+  });
+  await agentServer.start();
+  log.info('Agent server initialized', { socketPath: agentSocketPath });
 
   // Start the reaper now that session manager is ready
   if (reaper !== undefined) {
@@ -940,6 +1000,7 @@ async function main(): Promise<void> {
     webServer,
     sseBroker,
     cliServer,
+    agentServer,
     globalQueue,
     pendingWakeSweeper,
     checkWatchdog,

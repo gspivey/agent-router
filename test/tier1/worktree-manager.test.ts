@@ -12,9 +12,9 @@ describe('canonicalClonePath', () => {
 });
 
 describe('worktreePath', () => {
-  it('constructs path from rootDir and sessionId', () => {
+  it('joins the worktree base and sessionId', () => {
     const sid = 'abc-123-def';
-    expect(worktreePath('/home/user/.agent-router', sid))
-      .toBe('/home/user/.agent-router/worktrees/abc-123-def');
+    expect(worktreePath('/srv/agent-router/worktrees', sid))
+      .toBe('/srv/agent-router/worktrees/abc-123-def');
   });
 });

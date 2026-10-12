@@ -20,6 +20,14 @@ export interface TrustedProxyConfig {
   proofSecret: string;
 }
 
+/** One entry in the `github_forward` allowlist (agent process isolation). */
+export interface GithubForwardAllowEntry {
+  /** HTTP methods this entry permits (e.g. ["GET"], ["POST"]). */
+  methods: string[];
+  /** Path pattern this entry permits (e.g. "/repos/{o}/{r}/pulls"). */
+  pathPattern: string;
+}
+
 export interface AgentRouterConfig {
   port: number;
   webhookSecret: string;
@@ -70,6 +78,29 @@ export interface AgentRouterConfig {
   taskTranscript: TaskTranscriptConfig;
   /** ROADMAP intake-adapter scan cadence. */
   roadmap: RoadmapConfig;
+  /**
+   * Agent process isolation (opt-in, Linux-only). When true, agent
+   * subprocesses are launched as the unprivileged `agentworker` user via sudo
+   * and the daemon withholds `GITHUB_TOKEN` from the child env. Default false.
+   */
+  useWorkerUid?: boolean;
+  /**
+   * Base directory for per-session standalone clones used by the isolation
+   * substrate. Default `/srv/agent-router/worktrees`.
+   */
+  worktreeBase?: string;
+  /**
+   * Unix socket path for the agent-only socket. Default
+   * `/run/agent-router/agent.sock`. Falls back to `<rootDir>/agent.sock` when
+   * the isolation substrate was never installed (NFR-4.3) — resolved by the
+   * caller.
+   */
+  agentSocketPath?: string;
+  /**
+   * Optional override of the `github_forward` allowlist. When absent the
+   * agent server uses its built-in default allowlist (FR-5.4).
+   */
+  githubForwardAllowList?: GithubForwardAllowEntry[];
 }
 
 /** Per-repo circuit-breaker configuration (task-attempt-outcome Requirement 12.4/12.7/12.11). */
@@ -575,6 +606,66 @@ export function validateConfig(config: unknown): AgentRouterConfig {
   }
   const roadmap: RoadmapConfig = { scanIntervalMinutes };
 
+  // useWorkerUid (optional, default false) — agent process isolation (FR-1, FR-2)
+  let useWorkerUid: boolean | undefined;
+  if (config['useWorkerUid'] !== undefined) {
+    const val = config['useWorkerUid'];
+    if (typeof val !== 'boolean') {
+      throw new FatalError(`Invalid "useWorkerUid": must be a boolean, got ${JSON.stringify(val)}`);
+    }
+    useWorkerUid = val;
+  }
+
+  // worktreeBase (optional) — base dir for per-session clones (FR-3.4)
+  let worktreeBase: string | undefined;
+  if (config['worktreeBase'] !== undefined) {
+    const val = config['worktreeBase'];
+    if (typeof val !== 'string' || val.length === 0) {
+      throw new FatalError('Invalid "worktreeBase": must be a non-empty string');
+    }
+    worktreeBase = val;
+  }
+
+  // agentSocketPath (optional) — agent-only socket path (FR-4.2)
+  let agentSocketPath: string | undefined;
+  if (config['agentSocketPath'] !== undefined) {
+    const val = config['agentSocketPath'];
+    if (typeof val !== 'string' || val.length === 0) {
+      throw new FatalError('Invalid "agentSocketPath": must be a non-empty string');
+    }
+    agentSocketPath = val;
+  }
+
+  // githubForwardAllowList (optional) — override of the github_forward allowlist (FR-5.4)
+  let githubForwardAllowList: GithubForwardAllowEntry[] | undefined;
+  if (config['githubForwardAllowList'] !== undefined) {
+    const raw = config['githubForwardAllowList'];
+    if (!Array.isArray(raw)) {
+      throw new FatalError('Invalid "githubForwardAllowList": must be an array');
+    }
+    githubForwardAllowList = [];
+    for (let i = 0; i < raw.length; i++) {
+      const entry = raw[i] as unknown;
+      if (!isRecord(entry)) {
+        throw new FatalError(`Invalid "githubForwardAllowList[${i}]": must be an object`);
+      }
+      const methods = entry['methods'];
+      if (!Array.isArray(methods) || methods.length === 0) {
+        throw new FatalError(`Invalid "githubForwardAllowList[${i}].methods": must be a non-empty array`);
+      }
+      for (let j = 0; j < methods.length; j++) {
+        if (typeof methods[j] !== 'string' || (methods[j] as string).length === 0) {
+          throw new FatalError(`Invalid "githubForwardAllowList[${i}].methods[${j}]": must be a non-empty string`);
+        }
+      }
+      const pathPattern = entry['pathPattern'];
+      if (typeof pathPattern !== 'string' || pathPattern.length === 0) {
+        throw new FatalError(`Invalid "githubForwardAllowList[${i}].pathPattern": must be a non-empty string`);
+      }
+      githubForwardAllowList.push({ methods: methods as string[], pathPattern });
+    }
+  }
+
   // Build set of known "owner/name" for cron repo matching
   const repoKeys = new Set(repos.map(r => `${r.owner}/${r.name}`));
 
@@ -751,6 +842,18 @@ export function validateConfig(config: unknown): AgentRouterConfig {
   }
   if (projects !== undefined) {
     result.projects = projects;
+  }
+  if (useWorkerUid !== undefined) {
+    result.useWorkerUid = useWorkerUid;
+  }
+  if (worktreeBase !== undefined) {
+    result.worktreeBase = worktreeBase;
+  }
+  if (agentSocketPath !== undefined) {
+    result.agentSocketPath = agentSocketPath;
+  }
+  if (githubForwardAllowList !== undefined) {
+    result.githubForwardAllowList = githubForwardAllowList;
   }
   return result;
 }
