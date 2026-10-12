@@ -166,6 +166,102 @@ Alerts fire on daemon startup and every 24 hours. If `notifyOnSessionEnd` is con
 3. Update `tokenExpiresAt` to the new PAT's expiry date.
 4. Restart the daemon (`systemctl restart agent-router`). A restart is required because tokens are resolved from the environment at startup.
 
+## Security Setup (agent process isolation)
+
+By default, agent sessions run as the same Unix user as the daemon, so a prompt-injected
+agent could read your project PATs from `tokens.json` and the daemon bearer token. The
+`scripts/setup-agent-user.sh` script provisions an isolation substrate so agent subprocesses
+run as an unprivileged `agentworker` user with no access to those secrets and no direct
+network egress except through a hostname-filtering proxy. Enable it by setting
+`"useWorkerUid": true` in `config.json`.
+
+This is **opt-in and Linux-only**. With `useWorkerUid: false` (the default) the daemon runs
+exactly as before and the setup script is not required.
+
+### Prerequisites
+
+The setup script runs as root and expects a Debian/Ubuntu host (20.04+). It installs and
+configures:
+
+- `sudo` — to drop privileges to `agentworker` and run the fixed wrapper scripts
+- `iptables` — egress filtering for the `agentworker` uid
+- `tinyproxy` — hostname-filtering HTTPS proxy (installed via `apt` if missing)
+
+Do **not** install `iptables-persistent`: the setup script installs its own
+`agent-router-iptables.service` systemd unit that restores the rules on boot, which replaces
+`iptables-persistent` and avoids clobbering Docker/ufw rules. If `ufw` is active the script
+aborts (it would conflict) — disable ufw or add equivalent egress rules manually.
+
+### What the script does
+
+```bash
+sudo KIRO_PATH=/abs/path/to/kiro ROOTDIR=/home/agentrouter/.agent-router \
+     ./scripts/setup-agent-user.sh
+```
+
+Idempotent — safe to re-run. It:
+
+1. Creates the `agentworker` system user (home `/home/agentworker`, nologin shell).
+2. Writes `/etc/sudoers.d/agent-router-worker` (mode 440, validated with `visudo -c`): the
+   daemon may run `kiro acp` as `agentworker`, run the two fixed wrapper scripts, read-only
+   `git rev-parse`/`git log` in the worktree base, and `pkill -KILL -u agentworker`.
+3. Hardens `$ROOTDIR` to mode 750 and `tokens.json`/`daemon-token`/`config.json` to mode 600,
+   all owned by the daemon user — `agentworker` is not in the group and cannot read them.
+4. Creates `/srv/agent-router/worktrees` (setgid 2755, per-session standalone clones) and
+   `/srv/agent-router/push-tmp` (0700, daemon-only push staging).
+5. Creates `/run/agent-router/` (setgid 2750) via `tmpfiles.d` for the agent socket.
+6. Installs fixed root-owned wrapper scripts under `/usr/local/libexec/`:
+   `agent-router-seed-clone`, `agent-router-rm-session`, and `agent-router-askpass` (the
+   askpass helper feeds the PAT to daemon-side `git push` via an env var — never on disk or
+   argv).
+7. Installs tinyproxy on `127.0.0.1:8080` with `FilterDefaultDeny Yes` and an anchored
+   allowlist (GitHub, Anthropic, AWS, kiro.dev, npm registry).
+8. Installs iptables rules so `agentworker` can only reach the proxy (REJECT all else, IPv6
+   DROP), plus a `TPROXY_SSRF_BLOCK` chain that stops the proxy itself from reaching
+   link-local/RFC1918 addresses. Rules persist to `/etc/iptables/agent-router-rules.v{4,6}`
+   and are restored on boot by `agent-router-iptables.service`.
+
+### Enabling it
+
+1. Run the setup script (above).
+2. Authenticate kiro for the worker user: `sudo -u agentworker /abs/path/to/kiro login`.
+3. Set `"useWorkerUid": true` in `config.json`.
+4. Restart the daemon: `systemctl restart agent-router`. On startup the daemon logs
+   `Process isolation config { useWorkerUid: true }`.
+
+### Verification
+
+After enabling, verify the isolation boundary (`$ROOTDIR` is your daemon root dir):
+
+```bash
+# AC-1/AC-2: the worker cannot read daemon secrets
+sudo -u agentworker cat "$ROOTDIR/tokens.json"    # → Permission denied
+sudo -u agentworker cat "$ROOTDIR/daemon-token"   # → Permission denied
+
+# AC-7: startup log records the mode
+journalctl -u agent-router | grep 'useWorkerUid: true'
+
+# AC-8: the worker's HTTPS egress is forced through the filtered proxy; a
+# non-allowlisted host is blocked by the filter
+sudo -u agentworker curl -x http://127.0.0.1:8080 --max-time 5 https://example.com  # → blocked
+
+# AC-9: no direct IPv6 egress for the worker
+sudo ip6tables -S AGENTWORKER_OUT   # → ends in "-j DROP"
+```
+
+The MCP-level ACs (AC-3/4/5/6/10/11 — `git_credential` removed, `github_forward` allowlist,
+agent-socket op rejection) are exercised by the later items in this series and documented in
+`docs/security-setup.md`.
+
+### Residual risks
+
+All sessions share the single `agentworker` uid, so a compromised session could implant files
+in `/home/agentworker/.kiro/` that execute in a later session for a different project. The
+daemon mitigates the cross-session cap-token-theft vector by refusing concurrent sessions for
+different projects when `useWorkerUid` is on, but operators running high-sensitivity sessions
+should restart between projects. Full per-session-uid isolation is deferred. See
+`.kiro/specs/agent-process-isolation/requirements.md` for the complete threat model.
+
 ## Config hot-reload and `ENV:` limitations
 
 The daemon watches `config.json` for changes and hot-reloads reloadable fields (repos, cron schedules, rate limits, session timeouts, tokens hardcoded in the file) without dropping active sessions. However, some fields require a full daemon restart to take effect:
