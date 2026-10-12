@@ -76,88 +76,192 @@ kiro path from `config.json` `kiroPath`. Must NOT be under `$rootDir`. Validated
 ### C. Dual Socket Architecture
 
 ```
-$rootDir/sock                    (agentrouter:agentrouter 0600)  — operator socket (unchanged)
-/run/agent-router/agent.sock     (agentrouter:agentworker 0660)  — agent socket (NEW)
+$rootDir/sock                  agentrouter:agentrouter  0600  operator/CLI socket (unchanged; never used by MCP)
+/run/agent-router/             agentrouter:agentworker  2750  agent socket dir (setgid, no group write)
+/run/agent-router/agent.sock   agentrouter:agentworker  0660  agent socket (all MCP tool traffic)
 ```
 
-Agent socket startup:
-```typescript
-// Unlink stale socket from a prior run
-try { fs.unlinkSync(agentSocketPath); } catch {}
-const agentServer = net.createServer(handleAgentConnection);
-agentServer.listen(agentSocketPath, () => {
-  fs.chmodSync(agentSocketPath, 0o660);
-});
+**Rule: the per-session MCP server talks ONLY to the agent socket.** Every MCP tool sends its request to `AGENT_ROUTER_AGENT_SOCK` with `session_id` and `cap_token`. That covers `session_status`, `register_pr`, `merge_pr`, `complete_session`, `register_worktree`, `report_outcome`, `github_http_forward`, `push_branch`, `pr_create` and `pr_view`. The MCP server never reads `AGENT_ROUTER_SOCKET` and never falls back to it. Under `useWorkerUid` the operator socket is `0600` and `agentworker` can't open it, so any fallback would end in `EACCES`. The operator socket also serves `get_token`, so a fallback would point at the wrong endpoint anyway.
+
+This rule holds whatever `useWorkerUid` is set to, so there is a single transport path:
+
+| `useWorkerUid` | Agent socket path | Mode | Group |
+|---|---|---|---|
+| `true` | `config.agentSocketPath` (default `/run/agent-router/agent.sock`) | `0660` | `agentworker` |
+| `false` | `config.agentSocketPath` if set explicitly, else `$rootDir/agent.sock` | `0600` | daemon's primary group (no chown) |
+
+**MCP tool → agent-socket op mapping (exhaustive):**
+
+| MCP tool | Agent socket op | Extra fields |
+|---|---|---|
+| `session_status` | `session_status` | — |
+| `register_pr` | `register_pr` | `repo`, `pr_number` |
+| `merge_pr` | `merge_pr` | `repo`, `pr_number` |
+| `complete_session` | `complete_session` | `reason` |
+| `register_worktree` | `register_worktree` | `path` |
+| `report_outcome` | `report_outcome` | `outcome`, `reason_code`, `reason`, `blocked`, `pr_url` |
+| `github_http_forward` | `github_forward` | `method`, `path`, `query_params`, `body` |
+| `push_branch` | `push_branch` | `branch` |
+| `pr_create` | `pr_create` | `title`, `body`, `head`, `base` |
+| `pr_view` | `pr_view` | `pr_number` |
+
+`get_token` and `git_credential` are not reachable from any MCP code path.
+
+**Every request has this shape (one JSON line, response is one JSON line):**
+```json
+{ "op": "<op>", "session_id": "<AGENT_ROUTER_SESSION_ID>", "cap_token": "<AGENT_ROUTER_CAP_TOKEN>", ...extra }
 ```
 
-Cap token: `crypto.randomUUID().replace(/-/g, '')` (128-bit random, 32 hex chars).
-Validation: `crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(provided))`.
-Empty tokens rejected before `timingSafeEqual` (length check first).
+**MCP server env contract** (set by the daemon in `mcpServers[0].env`):
 
-Concurrent-session guard (FR-4.6) — enforced in `session-mgr.ts`, NOT on the agent socket:
+| Var | Required | Notes |
+|---|---|---|
+| `AGENT_ROUTER_SESSION_ID` | yes | |
+| `AGENT_ROUTER_AGENT_SOCK` | yes | Absolute path of the agent socket. Missing or empty → MCP server exits 1. |
+| `AGENT_ROUTER_CAP_TOKEN` | yes | 32 hex chars. Missing or empty → MCP server exits 1. |
+| `AGENT_ROUTER_SOCKET` | **never set** | The daemon must not put it in `mcpServers[0].env`. The MCP server ignores it if present. |
+| `GITHUB_API_BASE_URL` | **never set** | All GitHub HTTP happens daemon-side. |
+
+#### Socket group ownership (agentworker must be able to connect)
+
+On Linux, `connect()` to a Unix socket needs search (`x`) permission on every directory in the path and write (`w`) permission on the socket inode. The daemon runs as `agentrouter`, so an inode it creates normally gets group `agentrouter`, and `chmod 0660` alone grants `agentworker` nothing. The design uses two independent mechanisms:
+
+1. **setgid socket directory.** tmpfiles creates `d /run/agent-router 2750 agentrouter agentworker -`. With the setgid bit set, every inode created inside, including the socket made by `bind()`, inherits group `agentworker` automatically.
+2. **Explicit chown after listen.** The daemon calls `fs.chownSync(sockPath, -1, agentworkerGid)` then `fs.chmodSync(sockPath, 0o660)`. For this to work without root, `agentrouter` must be a supplementary member of `agentworker`. The setup script does `usermod -aG agentworker agentrouter` and writes a systemd drop-in `SupplementaryGroups=agentworker`.
+
+**The reverse membership is forbidden.** `agentworker` must never be added to group `agentrouter` (that would grant read access to `$rootDir` mode 750). The setup script asserts this.
+
+`agentworkerGid` is resolved once at startup with `getent group agentworker` (supports NSS), never hard-coded.
+
+**Agent socket startup verification** — if any check fails with `useWorkerUid=true`, the daemon refuses to start:
+1. Resolve `agentworkerGid` via `getent group agentworker`; throw `FatalError` if the group is absent.
+2. Verify daemon is a supplementary member of `agentworker`; throw if not.
+3. Verify socket directory: must be a real directory, owned by daemon uid, group = `agentworkerGid`, mode `2750` (setgid, no group write), no other-accessible bits.
+4. Unlink stale socket only if `lstat().isSocket()` (refuse to unlink a regular file or symlink).
+5. After `server.listen(path)`: `fs.chownSync(path, -1, agentworkerGid)`, `fs.chmodSync(path, 0o660)`.
+6. Verify socket inode: `isSocket()`, uid = daemon uid, gid = `agentworkerGid`, mode `0o660`; throw on mismatch.
+
+#### Cap token
+
+- Generated per spawn: `crypto.randomUUID().replace(/-/g, '')` (32 hex chars). Generated for **every** session in both modes.
+- Generated in `session-mgr.ts` immediately before each `acpSpawner` call. Stored in memory only, never persisted.
+- A resume generates a fresh token; the previous one becomes invalid.
+- Deleted from the map when the session ends.
+- Validation: length check first (not 32 → reject), then `crypto.timingSafeEqual`. Failure → `{ "error": "Unauthorized" }`.
+
+#### Concurrent-session guard (FR-4.6)
+
+Enforced in `session-mgr.ts`, NOT on the agent socket:
 ```typescript
-// Inside createSession() and resumeSessions() in src/session-mgr.ts
 function checkConcurrentProjectConflict(newRepo: string, activeSessions: SessionInfo[], useWorkerUid: boolean): void {
   if (!useWorkerUid) return;
-  const otherProject = activeSessions.find(s => s.repo.toLowerCase() !== newRepo.toLowerCase());
+  const otherProject = activeSessions.find(s => s.repo?.toLowerCase() !== newRepo.toLowerCase());
   if (otherProject) {
-    throw new Error(`Cannot spawn concurrent sessions for different projects in useWorkerUid mode — stop ${otherProject.sessionId} first`);
+    throw new Error(`Cannot spawn concurrent sessions for different projects in useWorkerUid mode`);
   }
 }
 ```
 The `force` flag on CLI `new_session` must NOT bypass this when `useWorkerUid=true`.
-A `pkill` sudoers rule (FR-4.7) enables the daemon to send SIGKILL to all `agentworker` processes when a session ends.
+A `pkill` sudoers rule (FR-4.7) lets the daemon send SIGKILL to all `agentworker` processes when a session ends. It kills by uid, so it applies only when no concurrent-project sessions are allowed (FR-4.6 ensures only one project at a time).
 
 ### D. Per-Session Clone Model
 
+Applies only when `useWorkerUid=true`. When `useWorkerUid=false`, `worktree-manager.ts` keeps today's `git worktree add` behavior, made async.
+
 ```
-/srv/agent-router/
-├── worktrees/
-│   └── {sessionId}/
-│       ├── seed.bundle            (written by daemon, read once for clone, then deleted)
-│       └── work/                  (git clone, owned agentworker:agentworker 755)
-│           └── (session's working directory)
-└── push-tmp/
-    └── {sessionId}/               (created at push time, deleted after)
-        ├── input.bundle           (copy of bundle from agent, before any git operations)
-        └── repo/                  (bare repo, daemon-owned, for bundle fetch + push)
+/srv/agent-router/worktrees/                  agentrouter:agentrouter  0755
+└── {sid}/                                    agentrouter:agentworker  0750   (daemon-created)
+    ├── repo                                  agentrouter:agentworker  0640   (daemon-written: "owner/name\n")
+    ├── seed.bundle                           agentrouter:agentworker  0640   (daemon-written; deleted after clone)
+    └── work/                                 agentrouter:agentworker  2770   (daemon-created, empty; setgid)
+        ├── .git/ …                           agentworker:agentworker         (created by seed-clone wrapper)
+        └── push-bundle.bundle                agentworker:agentworker         (agent-written, read by push_branch)
+/srv/agent-router/push-tmp/                   agentrouter:agentrouter  0700
 ```
 
-**Session start** (`worktree-manager.ts` updated):
-```typescript
-// Daemon creates seed bundle from shared bare clone
-execFile('git', ['bundle', 'create', seedBundlePath, '--all'], {
-  cwd: bareCLonePath,
-  env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
-});
-// Agent clones from bundle (via sudo)
-execFile('/usr/bin/sudo', [
-  '-n', '-u', 'agentworker', 'git', 'clone', seedBundlePath, workPath,
-  '-c', `safe.directory=${workPath}`,
-  '-c', 'core.hooksPath=/dev/null',
-], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
-// Delete seed bundle (one-time use)
-fs.unlinkSync(seedBundlePath);
-// The shared remote is set up in the clone so agent can fetch updates
-execFile('/usr/bin/sudo', ['-n', '-u', 'agentworker', 'git', 'remote', 'set-url', 'origin', repoUrl], {
-  cwd: workPath });
+`{sid}` must match `^[A-Za-z0-9_-]{1,64}$`. The daemon validates before any filesystem call; both wrappers validate again.
+
+**Session start** (`worktreeManager.ensureWorktree(repo, sid)`, async):
+
+1. Validate `sid`. If `{sid}/` already exists, return `{sid}/work` (resume).
+2. Refresh the shared bare clone (daemon-owned, daemon cwd).
+3. `fs.mkdirSync({sid}, { mode: 0o750 })`, `fs.chownSync({sid}, -1, agentworkerGid)`, `fs.chmodSync({sid}, 0o750)`.
+4. Write `{sid}/repo` (contents `owner/name\n`) with `{ mode: 0o640, flag: 'wx' }`, then chown group to `agentworkerGid`.
+5. Create seed bundle from the daemon's bare clone with `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null`. Then `chown(-1, agentworkerGid)` and `chmod(0o640)`.
+6. `fs.mkdirSync({sid}/work, { mode: 0o770 })`, `chown(-1, agentworkerGid)`, `chmod(0o2770)`. Set mode explicitly — `mkdir` masks off setgid.
+7. `execFileAsync('/usr/bin/sudo', ['-n', '-u', 'agentworker', '/usr/local/libexec/agent-router-seed-clone', sid], { cwd: '/', env: { PATH: '/usr/bin:/bin' }, timeout: 300_000 })`.
+8. `fs.unlinkSync(seedBundlePath)`.
+9. Return `{sid}/work`.
+
+If any step fails, run cleanup (`removeWorktree(sid)`) and rethrow.
+
+**Seed-clone wrapper** `/usr/local/libexec/agent-router-seed-clone` (root:root 0755, runs as `agentworker` via sudo):
+```bash
+#!/bin/bash
+# Generated by scripts/setup-agent-user.sh — DO NOT EDIT
+set -euo pipefail
+umask 007
+[ "$#" -eq 1 ] || { echo "usage: agent-router-seed-clone <sid>" >&2; exit 64; }
+SID="$1"
+[[ "$SID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || { echo "invalid sid" >&2; exit 64; }
+[ "$(id -un)" = "agentworker" ] || { echo "must run as agentworker" >&2; exit 77; }
+
+DIR="/srv/agent-router/worktrees/$SID"
+BUNDLE="$DIR/seed.bundle"
+WORK="$DIR/work"
+REPO_FILE="$DIR/repo"
+
+for p in "$DIR" "$BUNDLE" "$WORK" "$REPO_FILE"; do
+  [ ! -L "$p" ] || { echo "refusing symlink: $p" >&2; exit 65; }
+done
+[ -d "$DIR" ] && [ -f "$BUNDLE" ] && [ -d "$WORK" ] && [ -f "$REPO_FILE" ] || { echo "missing session files" >&2; exit 65; }
+[ -z "$(ls -A "$WORK")" ] || { echo "work dir not empty" >&2; exit 65; }
+
+REPO="$(head -c 256 "$REPO_FILE" | tr -d '\n')"
+[[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "invalid repo" >&2; exit 65; }
+
+export HOME=/home/agentworker
+export PATH=/usr/bin:/bin
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
+cd /
+
+/usr/bin/git -c core.hooksPath=/dev/null clone --no-hardlinks -- "$BUNDLE" "$WORK"
+/usr/bin/git -C "$WORK" remote set-url origin "https://github.com/$REPO.git"
+/usr/bin/git -C "$WORK" -c core.hooksPath=/dev/null checkout -q -B "agent/$SID"
 ```
 
-**CRITICAL: The daemon MUST NOT run git with cwd inside `work/`.** The agent controls
-`.git/config` in that directory (hooks, fsmonitor, diff.external, credential helpers), so
-running `git` there as `agentrouter` executes those hooks with daemon privileges.
+**Cleanup wrapper** `/usr/local/libexec/agent-router-rm-session` (root:root 0755, runs as `agentworker` via sudo):
+```bash
+#!/bin/bash
+# Generated by scripts/setup-agent-user.sh — DO NOT EDIT
+set -euo pipefail
+[ "$#" -eq 1 ] || { echo "usage: agent-router-rm-session <sid>" >&2; exit 64; }
+SID="$1"
+[[ "$SID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || { echo "invalid sid" >&2; exit 64; }
+[ "$(id -un)" = "agentworker" ] || { echo "must run as agentworker" >&2; exit 77; }
 
-Any daemon operation that needs to inspect the session's git state (head SHA, diff, outcome
-file) MUST use one of: `sudo -n -u agentworker git ...` in `workPath`, or operate on the
-daemon's own canonical bare clone. The `AttemptRunner`/`WorktreeOps` call sites must follow
-this rule. `readOutcomeFile` must use `O_NOFOLLOW`.
+WORK="/srv/agent-router/worktrees/$SID/work"
+[ ! -L "$WORK" ] || { echo "refusing symlink" >&2; exit 65; }
+[ -d "$WORK" ] || exit 0
+cd /
+/usr/bin/find "$WORK" -xdev -mindepth 1 -type d -user agentworker -exec /bin/chmod u+rwx {} +
+/usr/bin/find "$WORK" -xdev -mindepth 1 -delete
+```
+After the wrapper exits 0, the daemon (`agentrouter`) does `fs.rmSync({sid}, { recursive: true, force: true })`.
 
-Additional sudoers rules for the seeding step:
+**Session end cleanup** (`worktreeManager.removeWorktree(sid)`, async):
+1. `sudo -n -u agentworker /usr/local/libexec/agent-router-rm-session {sid}` with `cwd: '/'`, 120 s timeout.
+2. `fs.rmSync({sid}, { recursive: true, force: true })`.
+3. On wrapper failure: log ERROR, leave directory. Never run daemon-side `rm -rf` across agentworker-owned files.
+
+**Sudoers lines** (in `/etc/sudoers.d/agent-router-worker`):
 ```
-agentrouter ALL=(agentworker) NOPASSWD: /usr/bin/git clone /srv/agent-router/worktrees/*/seed.bundle /srv/agent-router/worktrees/*/work
-agentrouter ALL=(agentworker) NOPASSWD: /usr/bin/git remote set-url origin * *
+agentrouter ALL=(agentworker) NOPASSWD: /usr/local/libexec/agent-router-seed-clone *
+agentrouter ALL=(agentworker) NOPASSWD: /usr/local/libexec/agent-router-rm-session *
 ```
-(Or a single fixed wrapper script at `/usr/local/libexec/agent-router-seed-clone`.)
+No `/usr/bin/git` wildcard sudoers rules.
+
+**CRITICAL: the daemon MUST NOT run git with cwd, `-C`, or `GIT_DIR` inside `{sid}/work/`.** The agent controls `.git/config` there. Any daemon operation needing the session's git state must use a further wrapper run as `agentworker`, or operate on the daemon's own bare clone. `readOutcomeFile` uses `O_NOFOLLOW`.
 
 ### E. `github_forward` Handler (Raw Path Validation)
 

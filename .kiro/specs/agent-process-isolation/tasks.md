@@ -74,113 +74,146 @@ Requirements: FR-1.2
 
 ---
 
-## Item 84: Core wiring — config, agent-server, spawn, session cap-token
+## Item 84: Core wiring — config, agent socket, MCP transport, spawn, cap-token, per-session clone
 
 ### Task 84.1: Add config fields in `src/config.ts`
 
 Add to `AgentRouterConfig`:
 - `useWorkerUid?: boolean` (default `false`)
-- `worktreeBase?: string` (default `/srv/agent-router/worktrees`)
-- `agentSocketPath?: string` (default `/run/agent-router/agent.sock`)
+- `worktreeBase?: string` (default `/srv/agent-router/worktrees`; used only when `useWorkerUid=true`)
+- `agentSocketPath?: string`. When unset, the effective default is `/run/agent-router/agent.sock` if `useWorkerUid=true`, else `path.join(rootDir, 'agent.sock')`. Export `resolveAgentSocketPath(config, rootDir): string` and use it everywhere.
 - `githubForwardAllowList?: Array<{ methods: string[]; pathPattern: string }>`
+
+Add `useWorkerUid`, `worktreeBase` and `agentSocketPath` to the restart-required set in `classifyConfigChange`.
 
 ### Task 84.2: Add `SpawnOpts` fields in `src/agent-adapter.ts`
 
-Add:
 ```typescript
 useWorkerUid?: boolean;
 capToken?: string;
+agentSocketPath?: string;
+cwd?: string;
 ```
 
-### Task 84.3: Create `src/agent-server.ts`
+### Task 84.3: Create `src/agent-server.ts`: socket creation, group ownership, verification
 
-New file implementing the agent-only socket. Key implementation requirements:
+Export `startAgentServer(deps)` implementing the startup sequence from design §C:
+1. When `useWorkerUid=true`: resolve `agentworkerGid` via `getent group agentworker`; verify daemon is a supplementary member; verify socket directory (setgid, no group write, group = `agentworkerGid`).
+2. Unlink stale socket ONLY if `lstat().isSocket()` — refuse to unlink other file types.
+3. `server.listen(path)`.
+4. `fs.chownSync(path, -1, gid)` → `fs.chmodSync(path, mode)` → verify inode (uid, gid, mode, isSocket).
+5. If any check fails with `useWorkerUid=true`, close server and throw `FatalError` (daemon exits 1).
+6. `useWorkerUid=false`: skip gid resolution, chown, directory checks; chmod `0o600`.
+7. Provide injectable `resolveGid` and `getGroups` parameters for tests.
 
-1. Listen on `config.agentSocketPath`. After bind: `fs.chmodSync(path, 0o660)`.
+### Task 84.4: `src/agent-server.ts`: protocol, auth, dispatch
 
-2. For each connection, parse JSON-RPC-like `{ op, session_id, cap_token, ...args }`.
+1. Newline-delimited JSON. One request line → one response line → end connection. Cap request at 1 MB.
+2. Every op calls `sessionMgr.validateCapToken(session_id, cap_token)` first. Failure → `{error:"Unauthorized"}`.
+3. Dispatch all ops from the exhaustive table in design §C to the same handler functions `cli-server.ts` uses. Extract shared handlers into `src/session-ops.ts` if they are inline in `cli-server.ts`.
+4. `register_worktree`: when `useWorkerUid=true`, accept only `path === sessionMgr.getWorktreePath(session_id)`.
+5. `github_http_forward` → `github_forward` op (design §E). `push_branch` (design §H). `pr_create`, `pr_view`: REST via existing GitHub client.
+6. `get_token`, `git_credential`, `new_session` → `{error:"Unknown op"}`.
+7. `github_forward` PAT from token resolver for the session's bound repo, never from a caller argument. `push_branch` PAT via `GIT_ASKPASS_PASSWORD` env + `/usr/local/libexec/agent-router-askpass`.
 
-3. Every op calls `validateCapToken(stored, provided)` using `crypto.timingSafeEqual`.
-   Empty tokens → reject.
+### Task 84.5: Route ALL MCP tools through the agent socket (`src/mcp-server.ts`)
 
-4. Dispatch:
-   - `session_status`, `register_pr`, `merge_pr`, `complete_session`, `register_worktree`,
-     `report_outcome`, `get_session_project`: forward to existing session manager methods.
-   - `github_forward`: daemon-side allowlist + fetch (design §E).
-   - `push_branch`: bundle handoff (design §F).
-   - `pr_create`, `pr_view`: REST API via existing GitHub client.
-   - All others: `{ error: 'Unknown op' }`.
-
-5. `github_forward` path normalisation per design §E: **raw segment validation** (NOT
-   decode-then-check). Each segment (split on `/`) must match `^[A-Za-z0-9._-]+$` (plus
-   `%2F` only in ref positions). Reject `%`, `?`, `#`, `\`, control chars, empty segments.
-   Build URL with `URL` + `URLSearchParams`, run allowlist check on `url.pathname`.
-
-6. `github_forward` allowlist per FR-5.4. Repo authorization: extract owner/repo from path,
-   verify against `sessionMgr.getSessionRepo(sessionId)`. PAT from token resolver (NOT from
-   agent-supplied `repo` argument).
-
-7. `github_forward` special body checks:
-   - `POST /repos/*/pulls` and `pr_create`: parse body JSON, reject if `base` is `main` or
-     `master` (NOT `development` — that is the intended PR target).
-   - `PATCH /repos/*/pulls/{n}`: accept only `{title, body}` keys, reject all others.
-   - `POST /repos/*/issues/{n}/comments`: record returned `id` in `outbound_comments` table.
-
-8. `push_branch` validation per FR-6.1. Uses `execFile` with array args. No shell interpolation.
-   - Read bundle with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`, `fstat` for type+size, read exactly
-     `stat.size` bytes, write to `mkdtemp` dir (always cleaned up in `finally`).
-   - Check for `.github/` paths in bundle — reject if found (H-6 fix).
-   - Credential via `GIT_ASKPASS_PASSWORD` env var + fixed helper at
-     `/usr/local/libexec/agent-router-askpass` (root:root 0755, never written to disk).
-
-9. `fetch` calls use `redirect: 'manual'`.
-
-### Task 84.4: Modify `KiroAdapter.spawn()` in `src/adapters/kiro.ts`
-
-When `opts.useWorkerUid: true`:
-- `spawnFn('/usr/bin/sudo', ['-u', 'agentworker', deps.kiroPath, 'acp'], env)`
-- `env` includes: all of `opts.env` minus `GITHUB_TOKEN`, plus:
-  `AGENT_ROUTER_SESSION_ID: opts.sessionId`, `AGENT_ROUTER_AGENT_SOCK: deps.agentSocketPath`,
-  `AGENT_ROUTER_CAP_TOKEN: opts.capToken ?? ''`, `HTTPS_PROXY: 'http://127.0.0.1:8080'`
-- Preserve all existing `buildChildEnv` / `WORKDIR` fields from `opts.env`
-
-When `opts.useWorkerUid: false` (default): unchanged existing behavior.
-
-### Task 84.5: Modify `src/index.ts` acpSpawner lambda
-
-- Remove `GITHUB_TOKEN` from rawEnv when `useWorkerUid: true`. Log WARNING if it was present.
-- Generate `capToken = crypto.randomUUID().replace(/-/g, '')` when `useWorkerUid: true`.
-- Call `sessionMgr.setCapToken(sessionId, capToken)`.
-- Pass `capToken` and `agentSocketPath` to `adapter.spawn()`.
-- Pass `AGENT_ROUTER_AGENT_SOCK` + `AGENT_ROUTER_CAP_TOKEN` in `mcpServers[0].env` for
-  `session/new` and `session/load` calls.
-- Start agent server: `createAgentServer(config, sessionMgr, tokenResolver, log)`.
-- Add startup log: `log.info('Process isolation config', { useWorkerUid: config.useWorkerUid ?? false })`.
+1. Replace `McpContext` — delete `daemonSocket`, add `agentSocket` and `capToken`.
+2. Add one helper `callAgent(op, args)` that calls `sendToDaemon(agentSocket, { op, session_id: sessionId, cap_token: capToken, ...args })`.
+3. Rewrite every `case` in `handleToolsCall` to use `callAgent`. No other `sendToDaemon` call may remain in the file.
+4. Delete: `git_credential` tool definition and case, `getSessionProject`, `cachedProject`, every `get_token` call, in-process GitHub `fetch`, `credential-validators.js` import.
+5. Rewrite `runMcpServerFromEnv()` to require `AGENT_ROUTER_AGENT_SOCK` and `AGENT_ROUTER_CAP_TOKEN`, exit 1 if either is missing. Never read `AGENT_ROUTER_SOCKET`.
+6. Acceptance check: `grep -n "AGENT_ROUTER_SOCKET\|get_token\|daemonSocket" src/mcp-server.ts` returns nothing.
 
 ### Task 84.6: Modify `src/session-mgr.ts`
 
-Add:
-```typescript
-setCapToken(sessionId: string, token: string): void;
-validateCapToken(sessionId: string, token: string): boolean;  // timingSafeEqual
-getSessionRepo(sessionId: string): string | undefined;
-getSessionReadRepos(sessionId: string): string[];
-getWorktreePath(sessionId: string): string | undefined;
-```
+1. Add `setCapToken`, `validateCapToken` (timingSafeEqual, length check first), `clearCapToken`, `getSessionRepo`, `getSessionReadRepos`, `getWorktreePath`.
+2. Replace `daemonSocket` option with `agentSocketPath: string`.
+3. Make `acpSpawner` async: `async (sessionId, repo, capToken) => …`. Before each spawn, generate `const capToken = crypto.randomUUID().replace(/-/g, '')`, `setCapToken(sessionId, capToken)`, then await spawn.
+4. Build `mcpServers[0].env` as exactly `[AGENT_ROUTER_SESSION_ID, AGENT_ROUTER_AGENT_SOCK, AGENT_ROUTER_CAP_TOKEN]`. Never include `AGENT_ROUTER_SOCKET` or `GITHUB_API_BASE_URL`.
+5. Pass session's `WORKDIR` as `cwd` of `session/new`.
+6. FR-4.6 concurrent-project guard in `createSession()` and `resumeSessions()`.
+7. On session end: `clearCapToken(sessionId)`, then `await worktreeManager.removeWorktree(sessionId)`.
 
-### Task 84.7: Update `worktree-manager.ts`
+### Task 84.7: Modify `KiroAdapter.spawn()` in `src/adapters/kiro.ts`
 
-Use `config.worktreeBase` instead of `path.join(rootDir, 'worktrees')`. Each session directory
-created with mode 700 (daemon-owned).
+When `opts.useWorkerUid=true`:
+- `spawnFn('/usr/bin/sudo', ['-n', '-u', 'agentworker', deps.kiroPath, 'acp'], env, { cwd: opts.cwd ?? '/' })`.
+- `env` = `opts.env` minus `GITHUB_TOKEN`, minus every `AGENT_ROUTER_*` key other than the four needed, plus `AGENT_ROUTER_SESSION_ID`, `AGENT_ROUTER_AGENT_SOCK`, `AGENT_ROUTER_CAP_TOKEN`, `HTTPS_PROXY: 'http://127.0.0.1:8080'`.
+- Throw if `opts.capToken` or `opts.agentSocketPath` is empty.
 
-### Task 84.8: Unit tests in `test/tier1/kiro-adapter.test.ts`
+When `opts.useWorkerUid=false`: existing spawn args unchanged, agent socket vars still added to env.
 
-1. `useWorkerUid: false`: `spawnImpl` called with `(kiroPath, ['acp'], env)`.
-2. `useWorkerUid: true`: `spawnImpl` called with `('/usr/bin/sudo', ['-u', 'agentworker', kiroPath, 'acp'], env)`.
-3. `useWorkerUid: true` + `GITHUB_TOKEN` in env: env passed to `spawnImpl` has no `GITHUB_TOKEN`.
-4. `useWorkerUid: true`: env contains non-empty `AGENT_ROUTER_CAP_TOKEN`.
+### Task 84.8: Per-session clone: wrappers, sudoers, setup-script extension
 
-Requirements: FR-2.4, NFR-1.3
+1. Add `scripts/libexec/agent-router-seed-clone` and `scripts/libexec/agent-router-rm-session` with exact contents from design §D.
+2. Extend `scripts/setup-agent-user.sh`:
+   - Install both wrappers to `/usr/local/libexec/` (root:root 0755).
+   - `usermod -aG agentworker agentrouter`.
+   - Write systemd drop-in `SupplementaryGroups=agentworker`, then `systemctl daemon-reload`.
+   - Assert `agentworker` is NOT in group `agentrouter`.
+   - Append to `/etc/sudoers.d/agent-router-worker` the two wrapper sudoers lines from design §D; re-validate with `visudo -c -f`.
+   - Remove any `/usr/bin/git` sudoers lines from prior spec drafts.
+   - Create `/srv/agent-router/worktrees/` (agentrouter:agentrouter 0755) and `/srv/agent-router/push-tmp/` (agentrouter:agentrouter 0700).
+   - `echo 'd /run/agent-router 2750 agentrouter agentworker -' > /etc/tmpfiles.d/agent-router.conf && systemd-tmpfiles --create`.
+3. Smoke test: `sudo -n -u agentworker /usr/local/libexec/agent-router-seed-clone 'bad/sid'` must exit 64.
+
+### Task 84.9: `worktree-manager.ts`: replace `git worktree add` with per-session clone
+
+1. Make `ensureWorktree(repo, sessionId): Promise<string>` async in both modes.
+2. In `useWorkerUid=false`: wrap existing `git worktree add` with `execFileAsync`, unchanged behavior.
+3. In `useWorkerUid=true`: implement session start steps 1–9 from design §D. Modes must be set explicitly with `chmodSync` after create — never rely on umask. The only git commands the daemon runs are in its own bare clone (fetch, bundle create).
+4. `getWorktreePath(sid)` returns `{worktreeBase}/{sid}/work`.
+
+### Task 84.10: `worktree-manager.ts`: session cleanup
+
+Make `removeWorktree(sid): Promise<void>` async.
+- `useWorkerUid=true`: `sudo -n -u agentworker /usr/local/libexec/agent-router-rm-session {sid}` with `cwd: '/'`, 120 s timeout. On exit 0, `fs.rmSync({sid}, { recursive: true, force: true })`. On failure, log ERROR and leave directory.
+- `useWorkerUid=false`: existing behavior.
+
+### Task 84.11: `src/index.ts` wiring
+
+1. Remove `GITHUB_TOKEN` from spawn env when `useWorkerUid=true`; log WARNING if present.
+2. Make `acpSpawner` async. `const workdir = await worktreeManager.ensureWorktree(repo, sessionId)` replaces the synchronous call. When `useWorkerUid=true` and `ensureWorktree` throws, rethrow — never start a session without its isolated clone.
+3. Compute `agentSocketPath = resolveAgentSocketPath(config, rootDir)` before `createSessionManager`. Delete `mcpExtraEnv`/`GITHUB_API_BASE_URL` forwarding.
+4. Start `agentServer = await startAgentServer(...)` before `sessionMgr.resumeSessions()`. Add to shutdown handler.
+5. Startup log: `log.info('Process isolation config', { useWorkerUid, agentSocketPath })`.
+
+### Task 84.12: Unit tests — `test/tier1/kiro-adapter.test.ts`
+
+1. `useWorkerUid: false`: spawnImpl called with `(kiroPath, ['acp'], env)`.
+2. `useWorkerUid: true`: spawnImpl called with `('/usr/bin/sudo', ['-n', '-u', 'agentworker', kiroPath, 'acp'], env, { cwd: '/' })`.
+3. `useWorkerUid: true` + `GITHUB_TOKEN`, `AGENT_ROUTER_SOCKET`, `AGENT_ROUTER_HOME` in opts.env: none present in env passed to spawnImpl.
+4. `useWorkerUid: true`: env contains 32-hex `AGENT_ROUTER_CAP_TOKEN` and `AGENT_ROUTER_AGENT_SOCK`.
+5. `useWorkerUid: true` with empty `capToken` → throws.
+
+### Task 84.13: Unit tests — `test/tier1/agent-server.test.ts`
+
+1. `useWorkerUid=true`, setgid-group temp dir: after `startAgentServer`, socket is `isSocket()`, uid = process, gid = target gid, mode `0o660`.
+2. Same but dir NOT setgid: gid still correct (proves explicit `chownSync` runs).
+3. Daemon not in agentworker group → `FatalError` matching `/not a member of group agentworker/`.
+4. Dir mode `0o2770` (group-writable) → `FatalError`.
+5. Regular file at socket path → `FatalError` (`/is not a socket/`), file not deleted.
+6. `useWorkerUid=false` → socket mode `0o600`, gid = `process.getgid()`.
+
+### Task 84.14: Unit tests — `test/tier1/mcp-server.test.ts`
+
+1. Two fake Unix sockets A (agent) and O (operator). All 7 tools (`session_status`, `register_pr`, `merge_pr`, `complete_session`, `register_worktree`, `report_outcome`, `github_http_forward`) go to A; O receives zero connections.
+2. `github_http_forward` sends `op:'github_forward'`; no request has `op:'get_token'`.
+3. `runMcpServerFromEnv` with `AGENT_ROUTER_AGENT_SOCK` unset (but `AGENT_ROUTER_SOCKET` set) → exits 1 with `AGENT_ROUTER_AGENT_SOCK environment variable is required`.
+4. `AGENT_ROUTER_CAP_TOKEN` unset → exits 1.
+5. In `session-mgr.test.ts`: `mcpServers[0].env` names are exactly `AGENT_ROUTER_SESSION_ID`, `AGENT_ROUTER_AGENT_SOCK`, `AGENT_ROUTER_CAP_TOKEN`. Resume generates a different cap token; old token fails `validateCapToken`.
+
+### Task 84.15: Unit tests — `test/tier1/worktree-manager.test.ts`
+
+With injected `exec` mock and temp `worktreeBase`:
+1. `ensureWorktree` with `useWorkerUid=true` calls, in order: git fetch in bare clone; `git … bundle create …`; then `/usr/bin/sudo -n -u agentworker /usr/local/libexec/agent-router-seed-clone {sid}` with `cwd: '/'`.
+2. No exec call contains `worktree` in args; no exec has `cwd`/`-C`/`GIT_DIR` under `work/`.
+3. Before sudo: `{sid}/` mode `0o750`, `seed.bundle`/`repo` mode `0o640`, `work/` mode `0o2770`. After success, `seed.bundle` deleted.
+4. `sid = '../x'` or `'a/b'` → rejects before any exec.
+5. Failing seed-clone exec → `removeWorktree` invoked and promise rejects.
+6. `removeWorktree` calls the rm wrapper before `fs.rmSync({sid})`. Wrapper failure leaves `{sid}/`.
+7. Wrapper scripts (bash required; skip otherwise): `agent-router-seed-clone` with zero/two args, `'..'`, or `'a/b'` exits 64. Same for `agent-router-rm-session`.
 
 ---
 
@@ -193,23 +226,13 @@ Remove from `MCP_TOOLS` and `handleToolsCall`. Assert in test that `tools/list` 
 
 ### Task 85.2: Redesign `github_http_forward` as thin relay
 
-Handler body:
-```typescript
-case 'github_http_forward': {
-  const agentSock = process.env['AGENT_ROUTER_AGENT_SOCK'] ?? process.env['AGENT_ROUTER_SOCKET'] ?? '';
-  const capToken = process.env['AGENT_ROUTER_CAP_TOKEN'] ?? '';
-  result = await sendToDaemon(agentSock, {
-    op: 'github_forward',
-    session_id: sessionId,
-    cap_token: capToken,
-    method: toolArgs['method'],
-    path: toolArgs['path'],
-    body: toolArgs['body'],
-  });
-  break;
-}
-```
-Remove: `get_token` call, `githubApiBaseUrl`, `GITHUB_API_BASE_URL`, credential validators.
+`github_http_forward` relay is implemented in Task 84.5 (`callAgent('github_forward', …)` on `AGENT_ROUTER_AGENT_SOCK`). There is **no** `?? process.env['AGENT_ROUTER_SOCKET']` fallback. This task only verifies that the following are removed from `mcp-server.ts`:
+- The `get_token` call and `githubApiBaseUrl`
+- `GITHUB_API_BASE_URL`
+- The credential validators import and `logCredentialCall`
+- Any fallback to `AGENT_ROUTER_SOCKET`
+
+Acceptance: `grep -n "AGENT_ROUTER_SOCKET\|get_token\|githubApiBaseUrl\|credential-validators" src/mcp-server.ts` returns nothing.
 
 ### Task 85.3: Add `push_branch` MCP tool (thin relay)
 
