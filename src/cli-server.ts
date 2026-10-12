@@ -551,6 +551,16 @@ export function createCliServer(deps: {
         });
 
         server.listen(socketPath, () => {
+          // Agent process isolation (FR-4.1): the operator socket must be
+          // mode 0600 so the unprivileged agentworker uid cannot connect to it
+          // (it exposes raw credential ops such as get_token). Node creates the
+          // socket with the process umask applied to 0777, so tighten it here.
+          try {
+            fs.chmodSync(socketPath, 0o600);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn('Failed to chmod CLI socket to 0600', { socketPath, error: msg });
+          }
           log.info('CLI server listening', { socketPath });
           resolve();
         });
