@@ -56,9 +56,9 @@ Requirements: FR-7.1
 
 Implement `setup_iptables()` function in `setup-agent-user.sh` as per design §G:
 - Build IPv4 chain rules in a tempfile (ONLY `:AGENTWORKER_OUT - [0:0]` and its rules, NO built-in policy lines)
-- Include tinyproxy REJECT rules (RFC1918 + metadata 169.254/16) as a `TINYPROXY_OUT` chain inside the same file
+- Include tinyproxy REJECT rules (RFC1918 + metadata 169.254/16) as a `TINYPROXY_OUT` chain inside the same file, plus an idempotent jump from OUTPUT owner-matched to tinyproxy's uid (`-m owner --uid-owner tinyproxy -j TINYPROXY_OUT`)
 - Apply with `iptables-restore --noflush`
-- Install jump rule **idempotently**: `iptables -C OUTPUT -j AGENTWORKER_OUT 2>/dev/null || iptables -I OUTPUT 1 -j AGENTWORKER_OUT`
+- Install jump rule **idempotently**: `iptables -C OUTPUT -m owner --uid-owner agentworker -j AGENTWORKER_OUT 2>/dev/null || iptables -I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT`
 - Mirror with `ip6tables-restore --noflush` (IPv6 version with RFC4193 + link-local)
 - **Do NOT** use `iptables-save`/`ip6tables-save` — that would dump all chains including Docker/ufw
 - Write rules to `/etc/iptables/agent-router-rules.v4` and `/etc/iptables/agent-router-rules.v6`
@@ -75,8 +75,8 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/sbin/iptables-restore --noflush /etc/iptables/agent-router-rules.v4
 ExecStart=/sbin/ip6tables-restore --noflush /etc/iptables/agent-router-rules.v6
-ExecStartPost=/bin/sh -c 'iptables -C OUTPUT -j AGENTWORKER_OUT 2>/dev/null || iptables -I OUTPUT 1 -j AGENTWORKER_OUT'
-ExecStartPost=/bin/sh -c 'ip6tables -C OUTPUT -j AGENTWORKER_OUT 2>/dev/null || ip6tables -I OUTPUT 1 -j AGENTWORKER_OUT'
+ExecStartPost=/bin/sh -c 'iptables -C OUTPUT -m owner --uid-owner agentworker -j AGENTWORKER_OUT 2>/dev/null || iptables -I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT'
+ExecStartPost=/bin/sh -c 'ip6tables -C OUTPUT -m owner --uid-owner agentworker -j AGENTWORKER_OUT 2>/dev/null || ip6tables -I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT'
 
 [Install]
 WantedBy=multi-user.target
@@ -178,7 +178,7 @@ When `opts.useWorkerUid=false`: existing spawn args unchanged, agent socket vars
    - Create `/srv/agent-router/worktrees/` (agentrouter:agentrouter 0755) and `/srv/agent-router/push-tmp/` (agentrouter:agentrouter 0700).
    - `echo 'd /run/agent-router 2750 agentrouter agentworker -' > /etc/tmpfiles.d/agent-router.conf && systemd-tmpfiles --create`.
 3. Smoke test: `sudo -n -u agentworker /usr/local/libexec/agent-router-seed-clone 'bad/sid'` must exit 64.
-4. Verify kiro and node are accessible to `agentworker`: `sudo -u agentworker test -x <kiroPath>` and `sudo -u agentworker test -x $(which node)`. If either fails, print a clear error and exit 1. Both binaries must NOT be under `/home/agentrouter` (agentworker cannot traverse that directory).
+4. Verify kiro, node, and the MCP server entry point are accessible to `agentworker`. All three must NOT be under `/home/agentrouter` (agentworker cannot traverse that directory). Run `sudo -u agentworker test -x <kiroPath>`, `sudo -u agentworker test -x $(which node)`, and `sudo -u agentworker test -r <mcpServerEntryPoint>` — fail daemon startup with a clear error if any check fails. `mcpServerEntryPoint` is the path resolved by `resolveMcpServerCommand(moduleDir)` in `index.ts`.
 5. Add pkill sudoers line: `agentrouter ALL=(root) NOPASSWD: /usr/bin/pkill -KILL -u agentworker`.
 
 ### Task 84.9: `worktree-manager.ts`: replace `git worktree add` with per-session clone

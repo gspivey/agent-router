@@ -36,10 +36,10 @@ the checked string differs from what `new URL()` sends. Instead, validate each r
 against `^[A-Za-z0-9._-]+$` (plus `%2F` only in ref positions). Build the URL with
 `URL` + `URLSearchParams`, then run the allowlist check on `url.pathname`.
 
-### Socket directory mode 0750 not 0770 (M-2 fix)
+### Socket directory mode 2750 not 0770 (M-2 fix)
 
 Write permission on the directory lets `agentworker` unlink `agent.sock` and substitute its
-own listener. Mode 0750 (group search + execute only) lets `agentworker` find and connect to
+own listener. Mode 2750 (setgid + group search, no group write) lets `agentworker` find and connect to
 the socket without being able to replace it.
 
 ## Component Design
@@ -52,7 +52,7 @@ Sequence:
 3. Harden `$rootDir` — chmod 750 dir, chmod 600 token files (daemon-owned)
 4. Create `/srv/agent-router/worktrees/` (755, agentrouter) and
    `/srv/agent-router/push-tmp/` (700, agentrouter)
-5. Create `/run/agent-router/` via `tmpfiles.d` (0750, agentrouter:agentworker)
+5. Create `/run/agent-router/` via `tmpfiles.d` (2750 setgid, agentrouter:agentworker)
 6. Write `/usr/local/libexec/agent-router-askpass` (immutable root:root 0755):
    ```bash
    #!/bin/sh
@@ -265,46 +265,129 @@ No `/usr/bin/git` wildcard sudoers rules.
 
 ### E. `github_forward` Handler (Raw Path Validation)
 
+The handler validates the **raw** path string exactly as the agent sent it. It never decodes it. Every check runs on the same bytes that `new URL()` sends to GitHub, and step 5 asserts that the two are identical.
+
+#### Segment grammar
+
+| Name | Definition | Notes |
+|---|---|---|
+| `SEG_RE` | `^[A-Za-z0-9._-]+$` | One raw path segment. No `%`, no `/`, no `?`, `#`, `\`, whitespace or control characters. The segments `.` and `..` are rejected even though they match. |
+| `REF_RAW_RE` | `^[A-Za-z0-9._-]+(?:%2F[A-Za-z0-9._-]+)*$` | One raw segment inside a `{ref}`/`{branch}` slot. It is one or more `SEG_RE` parts joined by the exact three bytes `%2F`. No other percent-escape is accepted. |
+| `NUM_RE` | `^[0-9]+$` | |
+
+`%2F` may appear **only** inside a `{ref}` or `{branch}` slot. The per-segment pass in step 2 lets a `REF_RAW_RE` segment through anywhere. The allowlist match in step 4 then rejects it in any slot other than `{ref}`/`{branch}`.
+
+#### Placeholder semantics (allowlist patterns)
+
+| Placeholder | Matches |
+|---|---|
+| literal (e.g. `pulls`) | exactly one raw segment, byte-equal and case-sensitive |
+| `{o}`, `{r}` | exactly one raw segment matching `SEG_RE` |
+| `{n}` | exactly one raw segment matching `NUM_RE` |
+| `{ref}`, `{branch}` as the **last** pattern component | one or more raw segments (joined by literal `/`), each matching `REF_RAW_RE` |
+| `{ref}`, `{branch}` in a **non-last** position | exactly one raw segment matching `REF_RAW_RE`; a slash in the branch name must be sent as `%2F` |
+
+For every `{ref}`/`{branch}` value, every part after the first is checked against `RESERVED_REF_PARTS` (GitHub sub-resource names: `protection`, `check-runs`, `check-suites`, `status`, `statuses`, `comments`, `pulls`, `hooks`, `keys`, `restrictions`, `rename`, `merges`). A match → reject.
+
+#### Allowlist (FR-5.4)
+
+| Method | Pattern | Body constraint |
+|---|---|---|
+| GET | `/repos/{o}/{r}/pulls` | |
+| GET | `/repos/{o}/{r}/pulls/{n}` | |
+| GET | `/repos/{o}/{r}/pulls/{n}/files` | |
+| GET | `/repos/{o}/{r}/pulls/{n}/reviews` | |
+| GET | `/repos/{o}/{r}/pulls/{n}/comments` | |
+| POST | `/repos/{o}/{r}/pulls` | `base` ∉ {`main`, `master`} |
+| PATCH | `/repos/{o}/{r}/pulls/{n}` | keys ⊆ {`title`, `body`} |
+| GET | `/repos/{o}/{r}/issues/{n}/comments` | |
+| POST | `/repos/{o}/{r}/issues/{n}/comments` | record returned `id` in `outbound_comments` |
+| GET | `/repos/{o}/{r}/commits/{ref}/check-runs` | |
+| GET | `/repos/{o}/{r}/actions/runs` | |
+| GET | `/repos/{o}/{r}/actions/runs/{n}` | |
+| GET | `/repos/{o}/{r}/actions/runs/{n}/jobs` | |
+| GET | `/repos/{o}/{r}/statuses/{ref}` | |
+| GET | `/repos/{o}/{r}/git/refs/heads/{branch}` | |
+| GET | `/repos/{o}/{r}/branches/{branch}` | |
+
+**Explicit deny list** (checked before allowlist, case-insensitive):
+- any path whose first segment is not `repos`
+- `PATCH /repos/{o}/{r}` (repo settings)
+- `/repos/{o}/{r}/hooks/**`, `/keys/**`, `/merges/**`
+- `/repos/{o}/{r}/actions/runners/**`, `/actions/secrets/**`
+- non-GET `/repos/{o}/{r}/contents/**`
+
 ```typescript
-function validateAndBuildUrl(rawPath: string, queryParams?: Record<string, string>): URL | null {
+const GITHUB_API = 'https://api.github.com';
+const SEG_RE = /^[A-Za-z0-9._-]+$/;
+const REF_RAW_RE = /^[A-Za-z0-9._-]+(?:%2F[A-Za-z0-9._-]+)*$/;
+const NUM_RE = /^[0-9]+$/;
+const DOT_PARTS = new Set(['.', '..']);
+const RESERVED_REF_PARTS = new Set([
+  'protection', 'check-runs', 'check-suites', 'status', 'statuses',
+  'comments', 'pulls', 'hooks', 'keys', 'restrictions', 'rename', 'merges',
+]);
+const ALLOWED_PARAMS = new Set(['per_page', 'page', 'state', 'head', 'base', 'sort', 'direction']);
+
+function isSeg(s: string): boolean { return SEG_RE.test(s) && !DOT_PARTS.has(s); }
+function refParts(s: string): string[] | null {
+  if (!REF_RAW_RE.test(s)) return null;
+  const parts = s.split('%2F');
+  return parts.some(p => DOT_PARTS.has(p)) ? null : parts;
+}
+
+// validateAndBuildUrl: returns { url, route } or null on ANY failure.
+// Steps: 1=shape, 2=charset (raw), 3=deny, 4=allowlist, 5=build+verify, 6=query.
+export function validateAndBuildUrl(
+  method: string, rawPath: string, queryParams?: Record<string, string>
+): { url: URL; route: Route } | null {
+  const m = method.toUpperCase();
   if (!rawPath.startsWith('/')) return null;
-  const segments = rawPath.split('/');
-  // Each segment (except empty first after leading /) must match safe chars
-  const SEG_RE = /^[A-Za-z0-9._\-]+$/;
-  const REF_SEG_RE = /^[A-Za-z0-9._\-\/]+$/;  // branch names with slashes
-  for (let i = 1; i < segments.length; i++) {
-    const seg = segments[i];
-    if (seg === '') return null;  // empty segment (double slash or trailing slash)
-    // Check for ref positions (branches, commits) where slashes are allowed
-    const isRefPosition = isRefSegmentPosition(i, segments);
-    if (isRefPosition) {
-      if (!REF_SEG_RE.test(seg)) return null;
-    } else {
-      if (!SEG_RE.test(seg)) return null;
-    }
+  const segs = rawPath.split('/').slice(1);
+
+  // 2. Per-segment charset (raw, never decoded)
+  for (const s of segs) {
+    if (s === '') return null;
+    if (!isSeg(s) && !refParts(s)) return null;  // %2F permitted here; slot validates in 4
   }
-  const url = new URL(rawPath, 'https://api.github.com');
-  if (url.origin !== 'https://api.github.com') return null;
-  // Verify url.pathname matches the validated path (no URL normalization surprise)
-  if (url.pathname !== rawPath.replace(/\/+$/, '')) return null;
+
+  // 3. Deny list
+  if (isDenied(m, segs)) return null;
+
+  // 4. Allowlist
+  const matched = ALLOWLIST.find(r => r.method === m && matchRoute(r.slots, segs));
+  if (!matched) return null;
+
+  // 5. Build URL; pathname must be byte-identical to what was validated
+  const url = new URL(rawPath, GITHUB_API);
+  if (url.origin !== GITHUB_API || url.pathname !== rawPath) return null;
+
+  // 6. Query params (structured only)
   if (queryParams) {
-    const ALLOWED_PARAMS = new Set(['per_page', 'page', 'state', 'head', 'base', 'sort', 'direction']);
     for (const [k, v] of Object.entries(queryParams)) {
-      if (!ALLOWED_PARAMS.has(k)) return null;
+      if (!ALLOWED_PARAMS.has(k) || typeof v !== 'string') return null;
       url.searchParams.set(k, v);
     }
   }
-  return url;
+  return { url, route: matched };
 }
 ```
 
-Allowlist check runs on `url.pathname` (post-URL-construction, exactly what gets sent).
+**Body check** (after `JSON.parse`):
+```typescript
+if (route.bodyKeys) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return { error: 'not permitted' };
+  for (const k of Object.keys(body)) {
+    if (!route.bodyKeys.has(k)) return { error: 'not permitted' };
+  }
+}
+```
 
 **Repo authorization** (both read and write):
 ```typescript
 const m = url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)/);
 if (m) {
-  const pathRepo = `${m[1]}/${m[2]}`.toLowerCase();  // case-insensitive
+  const pathRepo = `${m[1]}/${m[2]}`.toLowerCase();
   const sessionRepo = sessionMgr.getSessionRepo(sessionId)?.toLowerCase();
   const isWrite = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method.toUpperCase());
   const readRepos = sessionMgr.getSessionReadRepos(sessionId).map(r => r.toLowerCase());
@@ -314,6 +397,19 @@ if (m) {
   }
 }
 ```
+
+#### Key test cases (FR-5.6)
+
+`/repos/o/r/git/refs/heads/agent/foo` → accept (trailing `{branch}`).
+`/repos/o/r/git/refs/heads/agent%2Ffoo` → accept (`%2F` inside `{branch}`).
+`/repos/o/r/commits/agent%2Ffoo/check-runs` → accept (non-trailing `{ref}`, encoded).
+`/repos/o/r/commits/agent/foo/check-runs` → reject (non-trailing `{ref}` is one segment; `foo` is not `check-runs`).
+`/repos/o/r/branches/agent/foo/protection` → reject (`protection` ∈ RESERVED_REF_PARTS).
+`/repos/o%2Fx/r/pulls` → reject (`%2F` outside a ref slot fails the allowlist).
+`/repos/o/r/pulls/../../hooks` → reject (dot segment).
+`/repos/o/r/git/refs/heads/agent%2ffoo` → reject (lowercase `%2f`).
+`/graphql` → reject (deny list).
+`PATCH /repos/o/r` → reject (deny list).
 
 ### F. tinyproxy Configuration
 
@@ -349,11 +445,22 @@ EOF
 ^registry\.npmjs\.org$
 EOF
   systemctl enable --now tinyproxy
-  # Block tinyproxy uid from accessing cloud metadata and RFC1918
+  # Block tinyproxy uid from accessing cloud metadata and RFC1918.
+  # These rules are written into a TINYPROXY_OUT chain inside the persisted
+  # agent-router-rules.v4 file (design §G), so they survive reboots.
+  # The setup script creates/flushes the chain and adds an idempotent jump
+  # from OUTPUT (owner-matched to tinyproxy's uid) so they take effect immediately.
   TPROXY_UID=$(id -u tinyproxy)
+  iptables -L TINYPROXY_OUT -n &>/dev/null || iptables -N TINYPROXY_OUT
+  iptables -F TINYPROXY_OUT
   for cidr in 169.254.0.0/16 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do
-    iptables -A OUTPUT -m owner --uid-owner "$TPROXY_UID" -d "$cidr" -j REJECT || true
+    iptables -A TINYPROXY_OUT -d "$cidr" -j REJECT
   done
+  # Idempotent jump for tinyproxy uid (separate from agentworker jump)
+  iptables -C OUTPUT -m owner --uid-owner "$TPROXY_UID" -j TINYPROXY_OUT 2>/dev/null || \
+    iptables -I OUTPUT 2 -m owner --uid-owner "$TPROXY_UID" -j TINYPROXY_OUT
+  # TINYPROXY_OUT chain is also written into agent-router-rules.v4 via setup_iptables()
+  # so the rules and jump are restored at every boot by agent-router-iptables.service.
 }
 ```
 
@@ -538,7 +645,7 @@ agent-router/
 | git push leaking PAT via argv | GIT_ASKPASS helper; PAT in child env only |
 | git push running attacker hooks | Bundle fetch into daemon-owned repo; `core.hooksPath=/dev/null` |
 | Agent controls daemon's bare clone | Per-session standalone clone; bare clone mode 700 |
-| Socket squatting | Socket dir mode 0750 (group cannot write) |
+| Socket squatting | Socket dir mode 2750 (group cannot write) |
 | Cloud metadata SSRF via tinyproxy | tinyproxy uid REJECT for 169.254.0.0/16 and RFC1918 |
 | IPv6 exfiltration | ip6tables DROP from AGENTWORKER_OUT |
 | Cross-repo PAT use | Repo scope check on all agent socket ops |
