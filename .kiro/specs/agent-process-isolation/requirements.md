@@ -148,7 +148,7 @@ FR-5.3: Daemon-side `github_forward` handler:
 1. Validate `session_id` + `cap_token`
 2. Validate raw path using **strict character-set validation** (not decode-then-check):
    - Each segment (split on `/`) must match `^[A-Za-z0-9._-]+$`
-   - `%2F` allowed only in `{refSegments}` positions
+   - `%2F` allowed only in `{ref}`/`{branch}` slots (see design §E)
    - Any other `%`, `?`, `#`, `\`, control chars, or empty segment → reject
    - Path must start with `/`
 3. Accept query parameters as a separate `queryParams` argument (structured, not in path).

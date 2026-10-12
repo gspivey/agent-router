@@ -458,7 +458,7 @@ EOF
   done
   # Idempotent jump for tinyproxy uid (separate from agentworker jump)
   iptables -C OUTPUT -m owner --uid-owner "$TPROXY_UID" -j TINYPROXY_OUT 2>/dev/null || \
-    iptables -I OUTPUT 2 -m owner --uid-owner "$TPROXY_UID" -j TINYPROXY_OUT
+    iptables -I OUTPUT 1 -m owner --uid-owner "$TPROXY_UID" -j TINYPROXY_OUT
   # TINYPROXY_OUT chain is also written into agent-router-rules.v4 via setup_iptables()
   # so the rules and jump are restored at every boot by agent-router-iptables.service.
 }
@@ -503,6 +503,9 @@ RULES
     echo ':AGENTWORKER_OUT - [0:0]'
     iptables -S AGENTWORKER_OUT | tail -n +2  # rules only, skip ":AGENTWORKER_OUT" header
     echo '-I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT'
+    echo ':TINYPROXY_OUT - [0:0]'
+    iptables -S TINYPROXY_OUT | tail -n +2    # metadata and RFC1918 REJECT rules
+    echo "-I OUTPUT 1 -m owner --uid-owner $(id -u tinyproxy) -j TINYPROXY_OUT"
     echo 'COMMIT'
   } > /etc/iptables/agent-router-rules.v4
   {
@@ -510,6 +513,11 @@ RULES
     echo ':AGENTWORKER_OUT - [0:0]'
     ip6tables -S AGENTWORKER_OUT | tail -n +2
     echo '-I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT'
+    echo ':TINYPROXY_OUT - [0:0]'
+    # IPv6 equivalents: fc00::/7 (ULA), fe80::/10 (link-local)
+    echo "-A TINYPROXY_OUT -d fc00::/7 -j REJECT"
+    echo "-A TINYPROXY_OUT -d fe80::/10 -j REJECT"
+    echo "-I OUTPUT 1 -m owner --uid-owner $(id -u tinyproxy) -j TINYPROXY_OUT"
     echo 'COMMIT'
   } > /etc/iptables/agent-router-rules.v6
 }

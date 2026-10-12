@@ -77,6 +77,8 @@ ExecStart=/sbin/iptables-restore --noflush /etc/iptables/agent-router-rules.v4
 ExecStart=/sbin/ip6tables-restore --noflush /etc/iptables/agent-router-rules.v6
 ExecStartPost=/bin/sh -c 'iptables -C OUTPUT -m owner --uid-owner agentworker -j AGENTWORKER_OUT 2>/dev/null || iptables -I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT'
 ExecStartPost=/bin/sh -c 'ip6tables -C OUTPUT -m owner --uid-owner agentworker -j AGENTWORKER_OUT 2>/dev/null || ip6tables -I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT'
+ExecStartPost=/bin/sh -c 'UID=$(id -u tinyproxy); iptables -C OUTPUT -m owner --uid-owner "$UID" -j TINYPROXY_OUT 2>/dev/null || iptables -I OUTPUT 1 -m owner --uid-owner "$UID" -j TINYPROXY_OUT'
+ExecStartPost=/bin/sh -c 'UID=$(id -u tinyproxy); ip6tables -C OUTPUT -m owner --uid-owner "$UID" -j TINYPROXY_OUT 2>/dev/null || ip6tables -I OUTPUT 1 -m owner --uid-owner "$UID" -j TINYPROXY_OUT'
 
 [Install]
 WantedBy=multi-user.target
