@@ -1,41 +1,24 @@
 import * as net from 'node:net';
 import { createInterface } from 'node:readline';
-import {
-  validateMethod,
-  validatePathPrefix,
-  validatePathMatchesRepo,
-  validateBodySize,
-  validateRepoAuthorization,
-} from './credential-validators.js';
 import type { Logger } from './log.js';
-
-/** Error codes for credential tool structured logging (Property 14). */
-export type CredentialErrorCode =
-  | 'token_missing'
-  | 'repo_unauthorized'
-  | 'upstream_5xx'
-  | 'upstream_timeout'
-  | 'body_too_large'
-  | 'method_invalid'
-  | 'path_invalid';
-
-/** Structured log entry for credential tool calls (Property 14). */
-export interface CredentialLogEntry {
-  tool_name: string;
-  repo: string;
-  project: string;
-  session_id: string;
-  status: 'success' | 'error';
-  duration_ms: number;
-  error_code?: CredentialErrorCode;
-}
 
 export interface McpContext {
   sessionId: string;
+  /** Operator/daemon socket (session_status, register_pr, merge_pr, …). */
   daemonSocket: string;
   log?: Logger;
-  /** Override the GitHub API base URL (for testing against fake server). Defaults to https://api.github.com */
-  githubApiBaseUrl?: string;
+  /**
+   * Agent socket path for the credential-boundary relays
+   * (`github_http_forward`, `push_branch`, `pr_create`, `pr_view`). When
+   * omitted, resolved from `AGENT_ROUTER_AGENT_SOCK` / `AGENT_ROUTER_SOCKET`
+   * at call time. Agent process isolation, FR-5.2 / FR-6.2.
+   */
+  agentSocket?: string;
+  /**
+   * Per-session capability token presented to the agent socket. When omitted,
+   * resolved from `AGENT_ROUTER_CAP_TOKEN` at call time (FR-4.4).
+   */
+  capToken?: string;
 }
 
 export interface McpServer {
@@ -118,27 +101,51 @@ const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'github_http_forward',
-    description: 'Forward an HTTP request to the GitHub API with project-scoped authentication.',
+    description:
+      'Forward an HTTP request to the GitHub API. The daemon injects project-scoped authentication, enforces an allowlist of (method, path) pairs, and restricts access to this session\'s repository. Only the agent socket ever sees the token.',
     inputSchema: {
       type: 'object',
       properties: {
-        method: { type: 'string', description: 'HTTP method: GET, POST, PUT, PATCH, DELETE' },
+        method: { type: 'string', description: 'HTTP method: GET, POST, PATCH' },
         path: { type: 'string', description: 'GitHub API path (e.g., /repos/owner/name/pulls)' },
         body: { type: 'string', description: 'Request body as JSON string (optional)' },
-        repo: { type: 'string', description: 'Repository in owner/repo format' },
       },
-      required: ['method', 'path', 'repo'],
+      required: ['method', 'path'],
     },
   },
   {
-    name: 'git_credential',
-    description: 'Get git HTTPS credentials for a repository.',
+    name: 'push_branch',
+    description:
+      'Push a feature branch to the session\'s GitHub repository. First create a bundle in your working directory with `git bundle create ./push-bundle.bundle origin/<base>..<branch>`, then call this tool with the branch name. The daemon verifies the bundle, rejects workflow (.github) changes and protected branches, and pushes from a daemon-owned repository with credentials the agent never sees.',
     inputSchema: {
       type: 'object',
       properties: {
-        repo: { type: 'string', description: 'Repository in owner/repo format' },
+        branch: { type: 'string', description: 'Feature branch to push (e.g. agent/my-fix). Protected branches are rejected.' },
       },
-      required: ['repo'],
+      required: ['branch'],
+    },
+  },
+  {
+    name: 'pr_create',
+    description:
+      'Open a pull request on the session\'s repository targeting the base branch. The daemon rejects pull requests whose base is a protected push-target branch (main/master).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        body: { type: 'object', description: 'Pull request fields: { title, head, base, body }.' },
+      },
+      required: ['body'],
+    },
+  },
+  {
+    name: 'pr_view',
+    description: 'Fetch a pull request on the session\'s repository by number.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pr_number: { type: 'number', description: 'Pull request number' },
+      },
+      required: ['pr_number'],
     },
   },
   {
@@ -226,69 +233,27 @@ function makeSuccessResponse(id: number | string | null, result: unknown): JsonR
 
 export function createMcpServer(ctx: McpContext): McpServer {
   const { sessionId, daemonSocket } = ctx;
-  const log = ctx.log;
-  const githubApiBaseUrl = ctx.githubApiBaseUrl ?? 'https://api.github.com';
   let running = false;
   let rl: ReturnType<typeof createInterface> | null = null;
 
-  // Cached session project info — populated on first tool call that needs it.
-  // Fetched once from the daemon and reused for the session's lifetime.
-  let cachedProject: { project: string; repos: string[]; readRepos: string[] } | null = null;
-  let projectFetchFailed: string | null = null;
-
   /**
-   * Log a structured credential tool call entry (Property 14).
-   * Fields: tool_name, repo, project, session_id, status, duration_ms, error_code.
+   * Resolve the agent socket path for the credential-boundary relays. The
+   * daemon wires `AGENT_ROUTER_AGENT_SOCK` into the per-session MCP env (and
+   * falls back to the operator socket when isolation is off). The explicit
+   * `ctx.agentSocket` wins for tests.
    */
-  function logCredentialCall(
-    toolName: string,
-    repo: string,
-    project: string,
-    startTime: number,
-    status: 'success' | 'error',
-    errorCode?: CredentialErrorCode,
-  ): void {
-    if (!log) return;
-    const durationMs = Date.now() - startTime;
-    const fields: Record<string, unknown> = {
-      tool_name: toolName,
-      repo,
-      project,
-      session_id: sessionId,
-      status,
-      duration_ms: durationMs,
-    };
-    if (errorCode) {
-      fields['error_code'] = errorCode;
-    }
-    if (status === 'error') {
-      log.warn('credential tool call failed', fields);
-    } else {
-      log.info('credential tool call', fields);
-    }
+  function resolveAgentSocket(): string {
+    return (
+      ctx.agentSocket ??
+      process.env['AGENT_ROUTER_AGENT_SOCK'] ??
+      process.env['AGENT_ROUTER_SOCKET'] ??
+      daemonSocket
+    );
   }
 
-  async function getSessionProject(): Promise<{ project: string; repos: string[]; readRepos: string[] }> {
-    if (cachedProject) return cachedProject;
-    if (projectFetchFailed) throw new Error(projectFetchFailed);
-
-    const response = await sendToDaemon(daemonSocket, {
-      op: 'get_session_project',
-      session_id: sessionId,
-    });
-
-    if (response['error']) {
-      const errMsg = `Failed to get session project: ${String(response['error'])}`;
-      projectFetchFailed = errMsg;
-      throw new Error(errMsg);
-    }
-
-    cachedProject = {
-      project: response['project'] as string,
-      repos: response['repos'] as string[],
-      readRepos: response['read_repos'] as string[],
-    };
-    return cachedProject;
+  /** Resolve the per-session capability token presented to the agent socket. */
+  function resolveCapToken(): string {
+    return ctx.capToken ?? process.env['AGENT_ROUTER_CAP_TOKEN'] ?? '';
   }
 
   async function handleInitialize(req: JsonRpcRequest): Promise<void> {
@@ -397,11 +362,8 @@ export function createMcpServer(ctx: McpContext): McpServer {
           const method = toolArgs['method'];
           const path = toolArgs['path'];
           const body = toolArgs['body'];
-          const repo = toolArgs['repo'];
-          const startTime = Date.now();
 
           if (typeof method !== 'string' || method.length === 0) {
-            logCredentialCall('github_http_forward', typeof repo === 'string' ? repo : '', '', startTime, 'error', 'method_invalid');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "method" argument' }) }],
               isError: true,
@@ -409,228 +371,80 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
           if (typeof path !== 'string' || path.length === 0) {
-            logCredentialCall('github_http_forward', typeof repo === 'string' ? repo : '', '', startTime, 'error', 'method_invalid');
             writeResponse(makeSuccessResponse(req.id, {
               content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "path" argument' }) }],
               isError: true,
             }));
             return;
           }
-          if (typeof repo !== 'string' || repo.length === 0) {
-            logCredentialCall('github_http_forward', '', '', startTime, 'error', 'repo_unauthorized');
-            writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "repo" argument' }) }],
-              isError: true,
-            }));
-            return;
-          }
 
-          const bodyStr = typeof body === 'string' ? body : undefined;
-
-          // Validate method
-          const methodErr = validateMethod(method);
-          if (methodErr) {
-            logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'method_invalid');
-            writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: methodErr.message, code: methodErr.code }) }],
-              isError: true,
-            }));
-            return;
-          }
-
-          // Validate path prefix
-          const pathErr = validatePathPrefix(path);
-          if (pathErr) {
-            logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'path_invalid');
-            writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: pathErr.message, code: pathErr.code }) }],
-              isError: true,
-            }));
-            return;
-          }
-
-          // Cross-check the path's owner/repo against the authorized repo argument
-          // (Requirement 5): reject before any token is fetched so a crafted path
-          // cannot use an allowed `repo` to write an unauthorized repo.
-          const matchErr = validatePathMatchesRepo(path, repo);
-          if (matchErr) {
-            const code = matchErr.code === 'repo_unauthorized' ? 'repo_unauthorized' : 'path_invalid';
-            logCredentialCall('github_http_forward', repo, '', startTime, 'error', code);
-            writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: matchErr.message, code: matchErr.code }) }],
-              isError: true,
-            }));
-            return;
-          }
-
-          // Validate body size
-          const bodyErr = validateBodySize(bodyStr);
-          if (bodyErr) {
-            logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'body_too_large');
-            writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: bodyErr.message, code: bodyErr.code }) }],
-              isError: true,
-            }));
-            return;
-          }
-
-          // Get session project for authorization
-          let sessionProject: { project: string; repos: string[]; readRepos: string[] };
-          try {
-            sessionProject = await getSessionProject();
-          } catch (err: unknown) {
-            logCredentialCall('github_http_forward', repo, '', startTime, 'error', 'token_missing');
-            throw err;
-          }
-
-          // Validate repo authorization
-          const authErr = validateRepoAuthorization(method, repo, {
-            boundProjectRepos: sessionProject.repos,
-            readRepos: sessionProject.readRepos,
-          });
-          if (authErr) {
-            logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'repo_unauthorized');
-            writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: authErr.message, code: authErr.code }) }],
-              isError: true,
-            }));
-            return;
-          }
-
-          // Fetch token (not cached — fetched per call so rotation propagates).
-          // The daemon derives the project from this session's bound project.
-          const tokenResp = await sendToDaemon(daemonSocket, {
-            op: 'get_token',
+          // Thin relay to the daemon-side `github_forward` op on the agent
+          // socket. The daemon owns the allowlist, repo-scope check, token
+          // injection, and size caps — the agent never sees a credential.
+          result = await sendToDaemon(resolveAgentSocket(), {
+            op: 'github_forward',
             session_id: sessionId,
+            cap_token: resolveCapToken(),
+            method,
+            path,
+            body,
           });
-          if (tokenResp['error']) {
-            logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'token_missing');
-            writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: `Token retrieval failed: ${String(tokenResp['error'])}` }) }],
-              isError: true,
-            }));
-            return;
-          }
-
-          const token = tokenResp['token'] as string;
-          const baseUrl = githubApiBaseUrl;
-
-          // Forward request to GitHub API with 30s timeout
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 30_000);
-
-          try {
-            const upstreamUrl = `${baseUrl}${path}`;
-            const fetchOpts: RequestInit = {
-              method,
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'User-Agent': 'agent-router/0.1.0',
-                'Accept': 'application/vnd.github+json',
-              },
-              signal: controller.signal,
-            };
-            if (bodyStr !== undefined) {
-              fetchOpts.body = bodyStr;
-              (fetchOpts.headers as Record<string, string>)['Content-Type'] = 'application/json';
-            }
-
-            const upstreamResp = await fetch(upstreamUrl, fetchOpts);
-            clearTimeout(timeout);
-
-            const responseBody = await upstreamResp.text();
-            const responseHeaders: Record<string, string> = {};
-            upstreamResp.headers.forEach((value, key) => {
-              responseHeaders[key] = value;
-            });
-
-            const errorCode = upstreamResp.status >= 500 ? 'upstream_5xx' as const : undefined;
-            logCredentialCall(
-              'github_http_forward',
-              repo,
-              sessionProject.project,
-              startTime,
-              errorCode ? 'error' : 'success',
-              errorCode,
-            );
-
-            result = {
-              status: upstreamResp.status,
-              headers: responseHeaders,
-              body: responseBody,
-            };
-          } catch (fetchErr: unknown) {
-            clearTimeout(timeout);
-            if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
-              logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'upstream_timeout');
-              writeResponse(makeSuccessResponse(req.id, {
-                content: [{ type: 'text', text: JSON.stringify({ error: 'Request timed out after 30 seconds', code: 'upstream_timeout' }) }],
-                isError: true,
-              }));
-              return;
-            }
-            logCredentialCall('github_http_forward', repo, sessionProject.project, startTime, 'error', 'upstream_timeout');
-            throw fetchErr;
-          }
           break;
         }
-        case 'git_credential': {
-          const repo = toolArgs['repo'];
-          const startTime = Date.now();
-
-          if (typeof repo !== 'string' || repo.length === 0) {
-            logCredentialCall('git_credential', '', '', startTime, 'error', 'repo_unauthorized');
+        case 'push_branch': {
+          const branch = toolArgs['branch'];
+          if (typeof branch !== 'string' || branch.length === 0) {
             writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "repo" argument' }) }],
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or empty "branch" argument' }) }],
               isError: true,
             }));
             return;
           }
-
-          // Get session project for authorization
-          let sessionProject: { project: string; repos: string[]; readRepos: string[] };
-          try {
-            sessionProject = await getSessionProject();
-          } catch (err: unknown) {
-            logCredentialCall('git_credential', repo, '', startTime, 'error', 'token_missing');
-            throw err;
-          }
-
-          // git_credential requires the repo to be in the Bound_Project repos (Req 6.2)
-          if (!sessionProject.repos.includes(repo)) {
-            logCredentialCall('git_credential', repo, sessionProject.project, startTime, 'error', 'repo_unauthorized');
-            writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: `Repository "${repo}" is not in the bound project's repo list. Git credentials are only available for bound project repos.`, code: 'repo_unauthorized' }) }],
-              isError: true,
-            }));
-            return;
-          }
-
-          // Fetch token (not cached — fetched per call so rotation propagates).
-          // The daemon derives the project from this session's bound project.
-          const tokenResp = await sendToDaemon(daemonSocket, {
-            op: 'get_token',
+          // Thin relay to the daemon-side `push_branch` op on the agent socket.
+          // The agent must have created `./push-bundle.bundle` in its working
+          // directory first; the daemon verifies and pushes it.
+          result = await sendToDaemon(resolveAgentSocket(), {
+            op: 'push_branch',
             session_id: sessionId,
+            cap_token: resolveCapToken(),
+            branch,
           });
-          if (tokenResp['error']) {
-            logCredentialCall('git_credential', repo, sessionProject.project, startTime, 'error', 'token_missing');
+          break;
+        }
+        case 'pr_create': {
+          const body = toolArgs['body'];
+          if (body === undefined || body === null || typeof body !== 'object') {
             writeResponse(makeSuccessResponse(req.id, {
-              content: [{ type: 'text', text: JSON.stringify({ error: `Token retrieval failed: ${String(tokenResp['error'])}`, code: 'token_missing' }) }],
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or invalid "body" argument' }) }],
               isError: true,
             }));
             return;
           }
-
-          const token = tokenResp['token'] as string;
-
-          // Return git credential format (Req 6.3)
-          logCredentialCall('git_credential', repo, sessionProject.project, startTime, 'success');
-          result = {
-            protocol: 'https',
-            host: 'github.com',
-            username: 'x-access-token',
-            password: token,
-          };
+          // Thin relay to the daemon-side `pr_create` op on the agent socket.
+          result = await sendToDaemon(resolveAgentSocket(), {
+            op: 'pr_create',
+            session_id: sessionId,
+            cap_token: resolveCapToken(),
+            body,
+          });
+          break;
+        }
+        case 'pr_view': {
+          const prNumber = toolArgs['pr_number'];
+          if (typeof prNumber !== 'number' || !Number.isInteger(prNumber) || prNumber <= 0) {
+            writeResponse(makeSuccessResponse(req.id, {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'Missing or invalid "pr_number" argument' }) }],
+              isError: true,
+            }));
+            return;
+          }
+          // Thin relay to the daemon-side `pr_view` op on the agent socket.
+          result = await sendToDaemon(resolveAgentSocket(), {
+            op: 'pr_view',
+            session_id: sessionId,
+            cap_token: resolveCapToken(),
+            pr_number: prNumber,
+          });
           break;
         }
         case 'register_worktree': {
@@ -776,7 +590,8 @@ export function createMcpServer(ctx: McpContext): McpServer {
 
 /**
  * Start the MCP server from environment variables (`AGENT_ROUTER_SESSION_ID`,
- * `AGENT_ROUTER_SOCKET`, and the optional `GITHUB_API_BASE_URL`). Called by the
+ * `AGENT_ROUTER_SOCKET`, and — for the credential-boundary relays —
+ * `AGENT_ROUTER_AGENT_SOCK` + `AGENT_ROUTER_CAP_TOKEN`). Called by the
  * `agent-router-mcp` bin entry and by the `isMainModule` guard below. Exits the
  * process non-zero if the required env vars are missing or the server errors.
  */
@@ -793,12 +608,11 @@ export function runMcpServerFromEnv(): void {
     process.exit(1);
   }
 
-  const envBaseUrl = process.env['GITHUB_API_BASE_URL'];
-
+  // The agent socket + cap token resolve from env inside createMcpServer at
+  // call time (AGENT_ROUTER_AGENT_SOCK / AGENT_ROUTER_CAP_TOKEN).
   const server = createMcpServer({
     sessionId: envSessionId,
     daemonSocket: envSocket,
-    ...(envBaseUrl ? { githubApiBaseUrl: envBaseUrl } : {}),
   });
 
   server.start().catch((err: unknown) => {

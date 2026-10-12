@@ -189,9 +189,10 @@ export function createACPClientFromStreams(
         // Option-based auto-approval. ACP permission requests are keyed by the
         // options the agent offers (allow_always / allow_once / …), NOT by MCP
         // tool name — so this single path covers permission requests for all
-        // eight daemon MCP tools (session_status, register_pr, merge_pr,
-        // complete_session, github_http_forward, git_credential,
-        // register_worktree, report_outcome) without any tool-name allowlist.
+        // ten daemon MCP tools (session_status, register_pr, merge_pr,
+        // complete_session, github_http_forward, push_branch, pr_create,
+        // pr_view, register_worktree, report_outcome) without any tool-name
+        // allowlist.
         // See .kiro/specs/mcp-server-wiring/design.md §6 (Requirement 7.5).
         autoApprovePermission(request);
         return;
