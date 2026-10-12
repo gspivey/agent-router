@@ -85,6 +85,17 @@ then implement task `4.1b`.
 
 Items move here after they merge to `development`.
 
+### 84. Agent process isolation — config, agent socket, spawn change, cap-token, worktree base
+
+Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
+full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7`, `84.8`.
+Depends on item 83 (user, socket dir, worktree dir must exist).
+
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.8`
+- [x] Complete · PR: #150
+
+---
+
 ### 83. Agent process isolation — setup script, user, proxy, iptables, rootDir hardening
 
 Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
@@ -1016,17 +1027,6 @@ is the foundation item — small, self-contained, and proves the self-build loop
 
 - Spec: `BACKLOG.md § P2.10`
 - [x] Complete · PR: #36
-
-### 84. Agent process isolation — config, agent socket, spawn change, cap-token, worktree base
-
-Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
-full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7`, `84.8`.
-Depends on item 83 (user, socket dir, worktree dir must exist).
-
-- Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.8`
-- [ ] Complete · PR: --
-
----
 
 ### 85. Agent process isolation — MCP changes (remove git_credential, github_forward relay, push_branch)
 

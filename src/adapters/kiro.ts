@@ -20,6 +20,12 @@ export interface KiroAdapterDeps {
   kiroPath: string;
   log: Logger;
   /**
+   * Agent-only socket path forwarded to the child as AGENT_ROUTER_AGENT_SOCK
+   * when `useWorkerUid` is true. May be overridden per-spawn via
+   * `SpawnOpts.agentSocketPath`.
+   */
+  agentSocketPath?: string;
+  /**
    * Override the spawn function. Tests use this to assert the spawn args
    * without actually launching a child process.
    */
@@ -43,8 +49,29 @@ export function createKiroAdapter(deps: KiroAdapterDeps): AgentAdapter {
     },
 
     spawn(opts: SpawnOpts): ACPClient {
+      const baseEnv = { ...(opts.env ?? {}) };
+
+      if (opts.useWorkerUid === true) {
+        // Agent process isolation (FR-2.2): drop privileges to `agentworker`
+        // via sudo, withhold GITHUB_TOKEN, and hand the child only the agent
+        // socket + cap token + proxy env it needs. All existing buildChildEnv
+        // fields (WORKDIR, etc.) are preserved.
+        const { GITHUB_TOKEN: _dropped, ...rest } = baseEnv;
+        void _dropped;
+        const agentSocketPath = opts.agentSocketPath ?? deps.agentSocketPath ?? '';
+        const env: Record<string, string> = {
+          ...rest,
+          AGENT_ROUTER_SESSION_ID: opts.sessionId,
+          AGENT_ROUTER_AGENT_SOCK: agentSocketPath,
+          AGENT_ROUTER_CAP_TOKEN: opts.capToken ?? '',
+          HTTPS_PROXY: 'http://127.0.0.1:8080',
+        };
+        return spawnFn('/usr/bin/sudo', ['-u', 'agentworker', deps.kiroPath, 'acp'], env);
+      }
+
+      // Default (useWorkerUid: false): unchanged existing behavior.
       return spawnFn(deps.kiroPath, ['acp'], {
-        ...(opts.env ?? {}),
+        ...baseEnv,
         AGENT_ROUTER_SESSION_ID: opts.sessionId,
       });
     },

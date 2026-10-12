@@ -428,7 +428,7 @@ full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7
 Depends on item 83 (user, socket dir, worktree dir must exist).
 
 - Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.8`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #150
 
 ---
 
