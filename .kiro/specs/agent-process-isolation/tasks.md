@@ -417,7 +417,7 @@ Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `ta
 full, then implement tasks `83.1`, `83.2`, `83.3`, `83.4`.
 
 - Spec: `.kiro/specs/agent-process-isolation/` · tasks `83.1–83.4`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #149
 
 ---
 
