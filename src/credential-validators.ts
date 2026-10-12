@@ -1,14 +1,17 @@
 /**
- * Credential validators — pure validation functions for MCP credential tools.
+ * Credential validators — pure validation functions for GitHub API requests.
  *
- * These validators are used by the github_http_forward and git_credential MCP tool
- * handlers to validate incoming requests before processing.
+ * These validators (method, path-prefix, path/repo cross-check, body size, repo
+ * authorization) are pure helpers retained for direct unit testing. As of the
+ * agent-process-isolation changes the credential boundary moved daemon-side
+ * (`src/agent-server.ts` performs raw-path validation, the allowlist check, and
+ * repo-scope enforcement), so the per-session MCP relay no longer calls these.
  *
  * All functions are pure (no I/O, no side effects) and exported individually
  * for direct unit testing with fast-check property tests.
  */
 
-/** Valid HTTP methods for github_http_forward. */
+/** Valid HTTP methods for a GitHub API forward. */
 export const VALID_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 export type ValidMethod = (typeof VALID_METHODS)[number];
 

@@ -8,7 +8,7 @@
  * exported resolveMcpServerCommand() helper with src/ as moduleDir and a real
  * module resolver, then spawns the returned command/args as a real child
  * process against a stub Unix socket, completes an MCP `initialize` handshake,
- * and asserts `tools/list` returns all eight tool names. It exercises surfaces
+ * and asserts `tools/list` returns all ten tool names. It exercises surfaces
  * not covered by unit/Tier 2 tests: the tsx/esm loader URL, the argv[1]
  * main-module guard, and the AGENT_ROUTER_* env contract.
  *
@@ -38,7 +38,9 @@ const EXPECTED_TOOLS = [
   'merge_pr',
   'complete_session',
   'github_http_forward',
-  'git_credential',
+  'push_branch',
+  'pr_create',
+  'pr_view',
   'register_worktree',
   'report_outcome',
 ];
@@ -98,7 +100,7 @@ function mcpRoundTrip(
 }
 
 describe('MCP entry-execution smoke test (Task 9b)', () => {
-  it('launches the resolved command/args and tools/list returns all eight tools', async () => {
+  it('launches the resolved command/args and tools/list returns all ten tools', async () => {
     const resolved = resolveMcpServerCommand(SRC_DIR, resolveSpecifier);
     if (resolved === undefined) {
       // MCP entry point absent from the build — skip with a warning.
