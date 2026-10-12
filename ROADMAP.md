@@ -85,6 +85,16 @@ then implement task `4.1b`.
 
 Items move here after they merge to `development`.
 
+### 83. Agent process isolation — setup script, user, proxy, iptables, rootDir hardening
+
+Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
+full, then implement tasks `83.1`, `83.2`, `83.3`, `83.4`.
+
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `83.1–83.4`
+- [x] Complete · PR: #149
+
+---
+
 ### 79. Wire MCP server into ACP sessions (register_pr, merge_pr, complete_session)
 
 Read `.kiro/specs/mcp-server-wiring/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -1006,16 +1016,6 @@ is the foundation item — small, self-contained, and proves the self-build loop
 
 - Spec: `BACKLOG.md § P2.10`
 - [x] Complete · PR: #36
-
-### 83. Agent process isolation — setup script, user, proxy, iptables, rootDir hardening
-
-Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
-full, then implement tasks `83.1`, `83.2`, `83.3`, `83.4`.
-
-- Spec: `.kiro/specs/agent-process-isolation/` · tasks `83.1–83.4`
-- [ ] Complete · PR: --
-
----
 
 ### 84. Agent process isolation — config, agent socket, spawn change, cap-token, worktree base
 
