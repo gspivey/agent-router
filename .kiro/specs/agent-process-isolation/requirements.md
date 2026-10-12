@@ -93,10 +93,10 @@ processing. The agent-controlled path is used only for reading, not for git oper
 FR-4.1: Operator socket: `$rootDir/sock`, mode 0600. Unchanged. Not accessible to `agentworker`.
 
 FR-4.2: Agent socket: `/run/agent-router/agent.sock`, mode 0660. `/run/agent-router/` owned
-`agentrouter:agentworker`, mode **0750** (search+read, NOT write — prevents socket squatting).
+`agentrouter:agentworker`, mode **2750** (search+read, NOT write — prevents socket squatting).
 Created via `tmpfiles.d`:
 ```
-d /run/agent-router 0750 agentrouter agentworker -
+d /run/agent-router 2750 agentrouter agentworker -
 ```
 After `server.listen()`, daemon calls `fs.chmodSync(agentSockPath, 0o660)`. Unlink stale socket
 before listen.

@@ -33,8 +33,8 @@ Idempotent bash script, runs as root. Steps:
 
 4. Create `/srv/agent-router/worktrees/` (mode 755, `agentrouter:agentrouter`)
 
-5. Create `/run/agent-router/` via `tmpfiles.d` (mode 0750, `agentrouter:agentworker`):
-   `echo 'd /run/agent-router 0750 agentrouter agentworker -' > /etc/tmpfiles.d/agent-router.conf`
+5. Create `/run/agent-router/` via `tmpfiles.d` with the **setgid** bit so the agent socket inherits group `agentworker` automatically:
+   `echo 'd /run/agent-router 2750 agentrouter agentworker -' > /etc/tmpfiles.d/agent-router.conf && systemd-tmpfiles --create /etc/tmpfiles.d/agent-router.conf`
 
 6. Install and configure tinyproxy (Task 83.2)
 
@@ -52,16 +52,37 @@ tinyproxy's uid targeting `169.254.0.0/16` and RFC1918 ranges (prevents SSRF thr
 
 Requirements: FR-7.1
 
-### Task 83.3: iptables rules
+### Task 83.3: iptables rules + systemd persistence unit
 
-Implement `setup_iptables()` function in `setup-agent-user.sh` as per design §C:
-- Build IPv4 chain rules in a tempfile (ONLY `:AGENTWORKER_OUT - [0:0]` and its rules, NO
-  built-in policy lines `:INPUT` / `:FORWARD` / `:OUTPUT`)
+Implement `setup_iptables()` function in `setup-agent-user.sh` as per design §G:
+- Build IPv4 chain rules in a tempfile (ONLY `:AGENTWORKER_OUT - [0:0]` and its rules, NO built-in policy lines)
+- Include tinyproxy REJECT rules (RFC1918 + metadata 169.254/16) as a `TINYPROXY_OUT` chain inside the same file
 - Apply with `iptables-restore --noflush`
-- Install jump rule idempotently with `iptables -C ... || iptables -I OUTPUT 1 ...`
-- Mirror with `ip6tables-restore --noflush` (default DROP chain)
-- NO explicit DNS allow rule (proxy handles DNS, blocking direct DNS prevents tunnelling)
-- Save with `iptables-save`/`ip6tables-save`
+- Install jump rule **idempotently**: `iptables -C OUTPUT -j AGENTWORKER_OUT 2>/dev/null || iptables -I OUTPUT 1 -j AGENTWORKER_OUT`
+- Mirror with `ip6tables-restore --noflush` (IPv6 version with RFC4193 + link-local)
+- **Do NOT** use `iptables-save`/`ip6tables-save` — that would dump all chains including Docker/ufw
+- Write rules to `/etc/iptables/agent-router-rules.v4` and `/etc/iptables/agent-router-rules.v6`
+
+Create `/etc/systemd/system/agent-router-iptables.service`:
+```
+[Unit]
+Description=agent-router iptables rules
+Before=agent-router.service
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/sbin/iptables-restore --noflush /etc/iptables/agent-router-rules.v4
+ExecStart=/sbin/ip6tables-restore --noflush /etc/iptables/agent-router-rules.v6
+ExecStartPost=/bin/sh -c 'iptables -C OUTPUT -j AGENTWORKER_OUT 2>/dev/null || iptables -I OUTPUT 1 -j AGENTWORKER_OUT'
+ExecStartPost=/bin/sh -c 'ip6tables -C OUTPUT -j AGENTWORKER_OUT 2>/dev/null || ip6tables -I OUTPUT 1 -j AGENTWORKER_OUT'
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable with `systemctl enable --now agent-router-iptables.service`.
 
 Requirements: FR-7.2, FR-7.4
 
@@ -133,7 +154,7 @@ Export `startAgentServer(deps)` implementing the startup sequence from design §
 4. Build `mcpServers[0].env` as exactly `[AGENT_ROUTER_SESSION_ID, AGENT_ROUTER_AGENT_SOCK, AGENT_ROUTER_CAP_TOKEN]`. Never include `AGENT_ROUTER_SOCKET` or `GITHUB_API_BASE_URL`.
 5. Pass session's `WORKDIR` as `cwd` of `session/new`.
 6. FR-4.6 concurrent-project guard in `createSession()` and `resumeSessions()`.
-7. On session end: `clearCapToken(sessionId)`, then `await worktreeManager.removeWorktree(sessionId)`.
+7. On session end: `clearCapToken(sessionId)`, then `await worktreeManager.removeWorktree(sessionId)`. Then, when `useWorkerUid=true` and no other `agentworker` session is still active (check session count before pkill), run `sudo -n pkill -KILL -u agentworker` to clean up any orphaned processes.
 
 ### Task 84.7: Modify `KiroAdapter.spawn()` in `src/adapters/kiro.ts`
 
@@ -157,6 +178,8 @@ When `opts.useWorkerUid=false`: existing spawn args unchanged, agent socket vars
    - Create `/srv/agent-router/worktrees/` (agentrouter:agentrouter 0755) and `/srv/agent-router/push-tmp/` (agentrouter:agentrouter 0700).
    - `echo 'd /run/agent-router 2750 agentrouter agentworker -' > /etc/tmpfiles.d/agent-router.conf && systemd-tmpfiles --create`.
 3. Smoke test: `sudo -n -u agentworker /usr/local/libexec/agent-router-seed-clone 'bad/sid'` must exit 64.
+4. Verify kiro and node are accessible to `agentworker`: `sudo -u agentworker test -x <kiroPath>` and `sudo -u agentworker test -x $(which node)`. If either fails, print a clear error and exit 1. Both binaries must NOT be under `/home/agentrouter` (agentworker cannot traverse that directory).
+5. Add pkill sudoers line: `agentrouter ALL=(root) NOPASSWD: /usr/bin/pkill -KILL -u agentworker`.
 
 ### Task 84.9: `worktree-manager.ts`: replace `git worktree add` with per-session clone
 
@@ -214,6 +237,18 @@ With injected `exec` mock and temp `worktreeBase`:
 5. Failing seed-clone exec → `removeWorktree` invoked and promise rejects.
 6. `removeWorktree` calls the rm wrapper before `fs.rmSync({sid})`. Wrapper failure leaves `{sid}/`.
 7. Wrapper scripts (bash required; skip otherwise): `agent-router-seed-clone` with zero/two args, `'..'`, or `'a/b'` exits 64. Same for `agent-router-rm-session`.
+
+### Task 84.16: Audit and eliminate daemon-side git in session worktrees
+
+Ensure no daemon code runs git with `cwd`, `-C`, or `GIT_DIR` pointing inside `{sid}/work/`. The agent controls `.git/config` there, so running git as `agentrouter` executes agent-controlled hooks.
+
+1. Grep `src/` for: `execFile*.*'git'`, `cwd:.*work`, `-C.*work`, `GIT_DIR.*work`. Document every hit in a checklist comment in this task's PR body.
+2. For each hit: either route through a fixed sudo wrapper (as `agentworker`), or redirect to the daemon's bare clone path. No daemon git call should have cwd/`-C`/`GIT_DIR` pointing into `{sid}/work/`.
+3. Update `AttemptRunner` and `WorktreeOps` call sites found in step 1. Ensure `readOutcomeFile` uses `O_NOFOLLOW`.
+4. Also fix `loadSession` in `acp.ts` to pass `WORKDIR` as `cwd` (FR-3.4.5) — today it sends `process.cwd()`.
+5. Acceptance test: a test that instruments `execFile` and asserts no git call has `cwd`/`-C` matching `*/work/*`.
+
+Requirements: FR-3.4.5, FR-3.5
 
 ---
 
@@ -280,7 +315,7 @@ In `test/tier1/agent-server.test.ts` (new):
 ```typescript
 // Called in main() after loadConfig(), before session manager init:
 checkTokenFilePermissions(rootDir, log);  // existing plan, checks mode & 0o044
-checkIptablesRules(log);                  // reads /etc/iptables/rules.v4
+checkIptablesRules(log);                  // reads /etc/iptables/agent-router-rules.v4
 log.info('Process isolation config', { useWorkerUid: config.useWorkerUid ?? false });
 ```
 
@@ -334,10 +369,10 @@ full, then implement tasks `83.1`, `83.2`, `83.3`, `83.4`.
 ### 84. Agent process isolation — config, agent socket, spawn change, cap-token, worktree base
 
 Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
-full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7`, `84.8`.
+full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7`, `84.8`, `84.9`, `84.10`, `84.11`, `84.12`, `84.13`, `84.14`, `84.15`, `84.16`.
 Depends on item 83 (user, socket dir, worktree dir must exist).
 
-- Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.8`
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.16`
 - [ ] Complete · PR: --
 
 ---

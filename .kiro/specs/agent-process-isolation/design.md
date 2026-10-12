@@ -438,28 +438,15 @@ async function handlePushBranch(sessionId: string, branch: string): Promise<unkn
   fs.writeFileSync(bundleDst, buf, { mode: 0o600 });
 
   try {
-    // 3. Verify bundle
-    await execFileAsync('git', ['bundle', 'verify', bundleDst], {
-      env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }
-    });
-
-    // 4. Check for .github/ paths — reject if any changed file is a workflow file
-    const listOut = await execFileAsync('git', ['bundle', 'list-heads', bundleDst]);
-    // Parse refs and check diff-tree for .github/ changes
-    // (simplified: run ls-tree to get all files at the head commit)
-    const verifyOut = await execFileAsync('git', [
-      '-c', 'protocol.file.allow=always',
-      'ls-tree', '--name-only', '-r', `FETCH_HEAD`,
-      '--', '.github/',
-    ], { env: { ...cleanGitEnv, GIT_DIR: path.join(pushTmpDir, 'repo') } });
-    if (verifyOut.stdout.trim().length > 0) {
-      throw new Error('Bundle contains .github/ files — workflow pushes are not permitted');
-    }
-
-    // 5. Create daemon-owned bare repo, fetch bundle
+    // 3. Create daemon-owned bare repo and verify bundle
     const bareRepo = path.join(pushTmpDir, 'repo');
     fs.mkdirSync(bareRepo, { mode: 0o700 });
     await execFileAsync('git', ['init', '--bare', bareRepo]);
+    await execFileAsync('git', [
+      '-C', bareRepo, 'bundle', 'verify', bundleDst,
+    ], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+
+    // 4. Fetch bundle into bare repo
     await execFileAsync('git', [
       '-C', bareRepo,
       '-c', 'core.hooksPath=/dev/null',
@@ -469,9 +456,25 @@ async function handlePushBranch(sessionId: string, branch: string): Promise<unkn
       'fetch', bundleDst, `refs/heads/${branch}:refs/heads/${branch}`,
     ], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
 
-    // 6. Push from daemon-owned repo (PAT in child env, never on disk)
+    // 4b. Fetch the base branch from the daemon's bare clone to compare against
     const sessionRepo = sessionMgr.getSessionRepo(sessionId)!;
-    const pat = tokenResolver.resolveToken(sessionRepo);
+    const bareCone = getBareCLonePath(sessionRepo);
+    await execFileAsync('git', [
+      '-C', bareRepo, 'fetch', bareCone, `refs/heads/development:refs/heads/_base`,
+    ], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+
+    // 5. Check for .github/ paths in DIFF (not ls-tree) — reject if any changed file is a workflow file
+    const diffOut = await execFileAsync('git', [
+      '-C', bareRepo, 'diff', '--name-only', `refs/heads/_base...refs/heads/${branch}`, '--', '.github/',
+    ], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+    if (diffOut.stdout.trim().length > 0) {
+      throw new Error('Bundle modifies .github/ files — workflow pushes are not permitted');
+    }
+
+    // 6. Push from daemon-owned repo (PAT in child env, never on disk)
+    // PAT comes from credentialTokenStore for the session's bound repo — no env fallback
+    const pat = credentialTokenStore.getToken(sessionRepo);
+    if (!pat) throw new Error(`No token configured for repo ${sessionRepo}`);
     await execFileAsync('git', [
       '-C', bareRepo,
       '-c', 'core.hooksPath=/dev/null',
