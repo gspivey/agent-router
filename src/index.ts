@@ -47,6 +47,7 @@ import type { CheckWatchdog } from './check-watchdog.js';
 import { shouldNotify, sendSessionEndNotification } from './notify.js';
 import { startTokenExpiryChecker } from './token-expiry.js';
 import { createWorktreeManager, canonicalClonePath } from './worktree-manager.js';
+import { checkTokenFilePermissions, checkIptablesRules } from './isolation-startup.js';
 import { createAgentServer } from './agent-server.js';
 import type { AgentServer } from './agent-server.js';
 import { buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from './acp.js';
@@ -486,6 +487,14 @@ async function main(): Promise<void> {
   });
   log.info('Config loaded', { port: config.port, repos: config.repos.length, cron: config.cron.length });
 
+  // ---- Agent process isolation startup checks (item 86, FR-3.2 / FR-7.4) ----
+  // Advisory, non-fatal, and run in both modes: warn if the daemon's secret
+  // files are group/other-readable, and warn if the agentworker iptables rules
+  // are not present on disk. The mode banner itself is logged below once the
+  // worktree manager is wired. These never throw.
+  checkTokenFilePermissions(rootDir, log);
+  checkIptablesRules(log);
+
   // Init database (WAL mode enabled inside initDatabase)
   const dbPath = path.join(rootDir, 'agent-router.db');
   const db = initDatabase(dbPath);
@@ -748,6 +757,13 @@ async function main(): Promise<void> {
         delete env['GITHUB_TOKEN'];
       }
       const adapterForRepo = repo ? (adapterMapHolder.current.get(repo) ?? adapter) : adapter;
+      // Agent process isolation (FR-2.3): the claude-code adapter has no sudo
+      // uid-drop path, so running it under useWorkerUid would silently execute
+      // as the daemon user with no isolation. Refuse the session loudly.
+      if (useWorker && adapterForRepo.name === 'claude-code') {
+        log.error('useWorkerUid not supported for claude-code adapter — refusing session', { repo });
+        throw new Error('useWorkerUid not supported for claude-code adapter');
+      }
       return adapterForRepo.spawn({
         sessionId,
         env,
