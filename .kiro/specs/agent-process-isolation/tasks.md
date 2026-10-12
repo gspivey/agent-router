@@ -439,7 +439,7 @@ full, then implement tasks `85.1`, `85.2`, `85.3`, `85.4`, `85.5`, `85.6`. Depen
 (agent socket and cap_token in place).
 
 - Spec: `.kiro/specs/agent-process-isolation/` · tasks `85.1–85.6`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #151
 
 ---
 
