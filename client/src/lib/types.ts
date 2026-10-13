@@ -220,3 +220,46 @@ export interface ConfigResponse {
 export interface CronToggleResponse {
   ok: true;
 }
+
+/**
+ * A recent-PR row in the `GET /overview` response, mirrors `OverviewRecentPr`
+ * from `src/web-routes.ts` (spa-polish ROADMAP 87, Req 2.1).
+ */
+export interface OverviewRecentPr {
+  readonly title: string;
+  readonly repo: string;
+  readonly url: string;
+  readonly state: string;
+  /** ISO 8601 string. */
+  readonly opened_at: string;
+}
+
+/**
+ * A cron-summary row in the `GET /overview` response, mirrors
+ * `OverviewCronSummary` from `src/web-routes.ts` (spa-polish ROADMAP 87).
+ */
+export interface OverviewCronSummary {
+  readonly name: string;
+  readonly repo: string;
+  readonly schedule: string;
+  readonly state: 'active' | 'paused' | 'error';
+  /** ISO 8601 string, or null when paused or unknown. */
+  readonly next_fire: string | null;
+}
+
+/**
+ * The `GET /overview` response shape, mirrors `OverviewResponse` from
+ * `src/web-routes.ts` by value (client-owns-types). The server-side `health`
+ * field is `'healthy' | 'degraded'` only; a failed fetch (crashed/unreachable
+ * daemon) is surfaced as a client-only error state, not a `health` value
+ * (spa-polish ROADMAP 87, Req 2).
+ */
+export interface OverviewResponse {
+  readonly active_sessions: number;
+  readonly queue_depth: number;
+  readonly recent_prs: OverviewRecentPr[];
+  readonly cron_summary: OverviewCronSummary[];
+  readonly health: 'healthy' | 'degraded';
+  readonly version: string;
+  readonly uptime_s: number;
+}

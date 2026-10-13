@@ -19,6 +19,7 @@ import type {
   InterruptResponse,
   KillResponse,
   ListSessionsQuery,
+  OverviewResponse,
   RepoPageResponse,
   RepoSessionsResponse,
   SessionDetailResponse,
@@ -184,5 +185,16 @@ export const api = {
       method: 'POST',
     });
     return readJson<CronToggleResponse>(res);
+  },
+
+  /**
+   * `GET /overview` — the read-only daemon summary powering the Overview
+   * dashboard (spa-polish ROADMAP 87, Req 2.2). Uses the same authed fetch /
+   * `AuthError` handling as `getConfig`; a crashed/unreachable daemon surfaces
+   * as a thrown error the Overview page renders as a "failed to fetch" state.
+   */
+  async getOverview(): Promise<OverviewResponse> {
+    const res = await authedFetch('/overview');
+    return readJson<OverviewResponse>(res);
   },
 };

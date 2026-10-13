@@ -67,7 +67,7 @@
     data-session-id={session.session_id}
     data-status={session.status}
     onclick={open}
-    class="flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left"
+    class="flex min-h-[72px] w-full min-w-0 items-center gap-3 px-4 py-3 text-left"
   >
     <span
       data-testid="status-badge"
@@ -87,7 +87,11 @@
       <span class="truncate text-sm font-medium text-[var(--text-primary)]">
         {session.repo ?? 'no repo'}
       </span>
-      <span class="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+      <span
+        data-testid="session-subtitle"
+        class="flex min-w-0 items-center gap-2 break-words line-clamp-2 text-xs text-[var(--text-muted)]"
+        style="overflow-wrap: anywhere;"
+      >
         <span data-testid="short-id" class="font-mono">{shortId}</span>
         <span>{formatCreated(session.created_at)}</span>
       </span>

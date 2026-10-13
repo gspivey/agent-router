@@ -19,6 +19,7 @@
   import SessionList from './components/SessionList.svelte';
   import ConfigView from './components/ConfigView.svelte';
   import ChatView from './components/ChatView.svelte';
+  import PageLayout from './components/PageLayout.svelte';
 
   // The token is resolved in `main.ts` before mount, so children that fetch on
   // their own `onMount` already see it. Here we only wire the hash router.
@@ -49,11 +50,11 @@
   <div data-testid="app-shell" class="min-h-screen">
     <Header />
     {#if route.current.view === 'list'}
-      <SessionList />
+      <PageLayout width="wide"><SessionList /></PageLayout>
     {:else if route.current.view === 'config'}
-      <ConfigView />
+      <PageLayout width="wide"><ConfigView /></PageLayout>
     {:else}
-      <ChatView sessionId={route.current.sessionId} />
+      <PageLayout width="narrow"><ChatView sessionId={route.current.sessionId} /></PageLayout>
     {/if}
   </div>
 {/if}
