@@ -113,6 +113,7 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   app.use('/repos/*', authMiddleware);
   app.use('/projects', authMiddleware);
   app.use('/config', authMiddleware);
+  app.use('/overview', authMiddleware);
   app.use('/v1', authMiddleware);
   app.use('/v1/*', authMiddleware);
 

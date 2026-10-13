@@ -1,9 +1,16 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Build-time app version, read from client/package.json so the header can show
+// it via the `__APP_VERSION__` define (spa-polish ROADMAP 87, Req 7.1).
+const pkgVersion = JSON.parse(
+  readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'),
+).version as string;
 
 // The daemon's control port. Supplied via env in dev so the Vite proxy can
 // forward API/SSE calls back to the running daemon.
@@ -13,6 +20,8 @@ const target = `http://localhost:${CONTROL_PORT}`;
 export default defineConfig({
   // Assets are referenced under /app/ to match the daemon mount (CRITICAL-1).
   base: '/app/',
+  // Expose the client package version as a build-time constant (Req 7.1).
+  define: { __APP_VERSION__: JSON.stringify(pkgVersion) },
   plugins: [svelte()],
   resolve: {
     alias: {
@@ -34,6 +43,7 @@ export default defineConfig({
       '/repos': { target, changeOrigin: true },
       '/projects': { target, changeOrigin: true },
       '/config': { target, changeOrigin: true },
+      '/overview': { target, changeOrigin: true },
     },
   },
 });

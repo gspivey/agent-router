@@ -39,7 +39,7 @@
   });
 </script>
 
-<section data-testid="session-list" class="flex flex-col">
+<section data-testid="session-list" class="flex flex-col overflow-x-hidden">
   {#if loading}
     <p data-testid="list-loading" class="p-4 text-sm text-[var(--text-muted)]">Loading sessions…</p>
   {:else if error}

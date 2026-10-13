@@ -17,6 +17,12 @@
   --success: #3fb950;
   --error: #f85149;
   --warning: #d29922;
+  /* spa-polish (ROADMAP 87): named accent for nav/focus (same value as
+     --tool-card-accent), a muted alias of --text-muted, and a translucent
+     header background expressed in RGB-channel form so Tailwind opacity works. */
+  --accent: #388bfd;
+  --muted: #8b949e;
+  --header-bg: rgb(13 17 23 / 0.9);
 }
 
 body {

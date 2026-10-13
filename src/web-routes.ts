@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { SessionManager } from './session-mgr.js';
 import type { SessionFiles, SessionMeta } from './session-files.js';
 import type { SSEBroker } from './sse-broker.js';
@@ -410,6 +411,144 @@ export function validatePerRepoLimit(value: string): number | null {
   return n;
 }
 
+// --- Overview endpoint helpers (spa-polish ROADMAP 87) ---
+
+/** A recent-PR row in the `GET /overview` response (Req 1.2). */
+export interface OverviewRecentPr {
+  readonly title: string;
+  readonly repo: string;
+  readonly url: string;
+  readonly state: string;
+  readonly opened_at: string; // ISO 8601
+}
+
+/** A cron-summary row in the `GET /overview` response (Req 1.2, 1.5). */
+export interface OverviewCronSummary {
+  readonly name: string;
+  readonly repo: string;
+  readonly schedule: string;
+  readonly state: 'active' | 'paused' | 'error';
+  readonly next_fire: string | null;
+}
+
+/** The `GET /overview` response body (Req 1.2). */
+export interface OverviewResponse {
+  readonly active_sessions: number;
+  readonly queue_depth: number;
+  readonly recent_prs: OverviewRecentPr[];
+  readonly cron_summary: OverviewCronSummary[];
+  readonly health: 'healthy' | 'degraded';
+  readonly version: string;
+  readonly uptime_s: number;
+}
+
+/**
+ * A cron state row as consumed by `buildCronSummary`. The persisted
+ * `cron_state` table (and `CronState`) carries only `name`/`paused` today, so
+ * `last_status` is OPTIONAL: when a future schema adds it, the error-first
+ * derivation picks it up automatically; when absent, no cron is ever `error`
+ * (a schema change is out of scope for this feature — Req 1.5).
+ */
+export interface CronSummarySource {
+  readonly name: string;
+  readonly paused: boolean;
+  readonly last_status?: string;
+}
+
+/**
+ * Map each configured cron to its summary row, deriving `state` error-first
+ * (Req 1.5 / 13.3): `IF last_status === 'failed' THEN 'error' ELSE IF paused
+ * THEN 'paused' ELSE 'active'`. `next_fire` is the next scheduled fire time as
+ * an ISO 8601 string, or `null` when paused or unknown.
+ *
+ * Pure — all data is passed in for testability.
+ */
+export function buildCronSummary(
+  cronConfig: readonly CronConfig[],
+  cronStates: readonly CronSummarySource[],
+  now: Date = new Date(),
+): OverviewCronSummary[] {
+  const stateByName = new Map(cronStates.map(s => [s.name, s]));
+  return cronConfig.map(cron => {
+    const state = stateByName.get(cron.name);
+    const paused = state !== undefined && state.paused;
+    const failed = state !== undefined && state.last_status === 'failed';
+    const derived: OverviewCronSummary['state'] = failed
+      ? 'error'
+      : paused
+        ? 'paused'
+        : 'active';
+    let nextFire: string | null = null;
+    if (!paused) {
+      const next = getNextCronFire(cron.schedule, now);
+      nextFire = next !== null ? next.toISOString() : null;
+    }
+    return {
+      name: cron.name,
+      repo: cron.repo,
+      schedule: cron.schedule,
+      state: derived,
+      next_fire: nextFire,
+    };
+  });
+}
+
+/**
+ * Compute overall daemon health (Req 1.6). Returns `'degraded'` when any cron
+ * is `paused` or `error`, OR any active session was created more than 2h ago;
+ * otherwise `'healthy'`. There is no `'error'` health output: a crashed daemon
+ * cannot respond, so "down" is observed client-side as a failed fetch.
+ *
+ * Pure — the reference time (`nowS`, unix seconds) is injected.
+ */
+export function computeHealth(input: {
+  cronSummary: readonly OverviewCronSummary[];
+  activeSessions: readonly { created_at: number }[];
+  nowS: number;
+}): 'healthy' | 'degraded' {
+  const { cronSummary, activeSessions, nowS } = input;
+  for (const cron of cronSummary) {
+    if (cron.state === 'paused' || cron.state === 'error') return 'degraded';
+  }
+  const staleBefore = nowS - 7200; // 2h
+  for (const s of activeSessions) {
+    if (s.created_at < staleBefore) return 'degraded';
+  }
+  return 'healthy';
+}
+
+/**
+ * Shape recent PRs from session PR registrations (Req 1.2). `state` is
+ * `'merged'` when `merged_at` is set, else `'open'`; `title` is derived as
+ * `repo#number` (no fabricated data); `opened_at` is the registration time as
+ * an ISO 8601 string. `registered_at`/`merged_at` are unix SECONDS (see
+ * `src/session-mgr.ts`), so they are scaled to milliseconds for `Date`. The
+ * newest PR (by `registered_at`) comes first.
+ *
+ * Pure — all data is passed in for testability.
+ */
+export function collectRecentPrs(sessions: readonly SessionMeta[]): OverviewRecentPr[] {
+  const rows: Array<OverviewRecentPr & { readonly _ts: number }> = [];
+  const seen = new Set<string>();
+  for (const s of sessions) {
+    for (const pr of s.prs) {
+      const key = `${pr.repo}#${pr.pr_number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        title: `${pr.repo}#${pr.pr_number}`,
+        repo: pr.repo,
+        url: `https://github.com/${pr.repo}/pull/${pr.pr_number}`,
+        state: pr.merged_at !== undefined ? 'merged' : 'open',
+        opened_at: new Date(pr.registered_at * 1000).toISOString(),
+        _ts: pr.registered_at,
+      });
+    }
+  }
+  rows.sort((a, b) => b._ts - a._ts);
+  return rows.map(({ _ts, ...rest }) => rest);
+}
+
 // --- Route factory ---
 
 export function createWebRoutes(deps: {
@@ -425,6 +564,40 @@ export function createWebRoutes(deps: {
 }): Hono<WebEnv> {
   const { sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, config, tokenStore, db } = deps;
   const app = new Hono<WebEnv>();
+
+  // --- Overview endpoint state (spa-polish ROADMAP 87) ---
+  // Captured once so `uptime_s` reflects the daemon's process lifetime and the
+  // version is read from disk only once (Req 1.7).
+  const overviewStartedAt = Date.now();
+  const overviewVersion: string = (() => {
+    try {
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const pkgPath = path.resolve(here, '..', 'package.json');
+      const parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: unknown };
+      return typeof parsed.version === 'string' ? parsed.version : 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  })();
+
+  /**
+   * Count tasks in the `'queued'` state in the task DB (Req 1.4). The task
+   * tables share the main DB connection (`db.raw()`), so this is a direct count
+   * query. Returns `0` when the DB or the `tasks` table is unavailable (the
+   * tasks feature is optional); never parses `ROADMAP.md`.
+   */
+  function computeQueueDepth(): number {
+    if (db === undefined) return 0;
+    try {
+      const row = db
+        .raw()
+        .prepare(`SELECT count(*) AS n FROM tasks WHERE state = 'queued'`)
+        .get() as { n?: number } | undefined;
+      return typeof row?.n === 'number' ? row.n : 0;
+    } catch {
+      return 0;
+    }
+  }
 
   // GET /sessions
   app.get('/sessions', (c) => {
@@ -922,6 +1095,36 @@ export function createWebRoutes(deps: {
       log.error('Failed to assemble config response', { error: err instanceof Error ? err.message : String(err) });
       return c.json({ error: 'Failed to load configuration' }, 500);
     }
+  });
+
+  // GET /overview — read-only daemon summary for the SPA Overview dashboard
+  // (spa-polish ROADMAP 87, Req 1). Registered at the unprefixed mount path
+  // `/overview` (matching `/config`, `/sessions`); the Vite dev proxy forwards
+  // it to the daemon. ALWAYS returns HTTP 200 with zero/empty fallbacks when a
+  // data source is unavailable (Req 1.8) and never mutates state (Req 1.9).
+  app.get('/overview', (c) => {
+    const nowS = Math.floor(Date.now() / 1000);
+    const sessions = sessionFiles.listSessions();
+    const active = sessions.filter(s => s.status === 'active');
+
+    const cronStates = db?.getAllCronStates() ?? [];
+    const cronSummary = buildCronSummary(config?.cron ?? [], cronStates);
+    const health = computeHealth({
+      cronSummary,
+      activeSessions: active.map(s => ({ created_at: s.created_at })),
+      nowS,
+    });
+
+    const body: OverviewResponse = {
+      active_sessions: active.length,
+      queue_depth: computeQueueDepth(),
+      recent_prs: collectRecentPrs(sessions),
+      cron_summary: cronSummary,
+      health,
+      version: overviewVersion,
+      uptime_s: Math.floor((Date.now() - overviewStartedAt) / 1000),
+    };
+    return c.json(body);
   });
 
   return app;
