@@ -1046,3 +1046,36 @@ full, then implement tasks `86.1`, `86.2`, `86.3`, `86.4`. Depends on items 83, 
 
 - Spec: `.kiro/specs/agent-process-isolation/` · tasks `86.1–86.4`
 - [x] Complete · PR: #152
+
+### 87. SPA Polish — Backend endpoint, shared primitives, layout & overflow
+
+Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`.
+
+- Spec: `.kiro/specs/spa-polish/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
+- [ ] Complete · PR: --
+
+---
+
+### 88. SPA Polish — Header branding, router/overview routing, message grammar
+
+Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `8`, `9`, `10`, `11`. Depends on item 87 (shared primitives and
+CSS tokens must be present).
+
+- Spec: `.kiro/specs/spa-polish/` · tasks `8`, `9`, `10`, `11`
+- [ ] Complete · PR: --
+
+---
+
+### 89. SPA Polish — Overview page, Config cron status, empty states
+
+Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `12`, `13`, `14`, `15`, `16`. Depends on item 88 (router
+overview route and MessageRow must be present).
+
+- Spec: `.kiro/specs/spa-polish/` · tasks `12`, `13`, `14`, `15`, `16`
+- [ ] Complete · PR: --
+
+---
+
