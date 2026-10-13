@@ -342,3 +342,92 @@ describe('agent socket server (item 85)', () => {
     expect(h.execCalls.some((c) => c.args.includes('push'))).toBe(true);
   });
 });
+
+// --- push_branch git auth env (fix: askpass-helper-absent) ---
+
+describe('push_branch git auth env — buildGitAuthEnv fallback', () => {
+  // We need access to the env that execFileImpl receives.
+  interface ExecCall {
+    args: readonly string[];
+    env?: Record<string, string | undefined>;
+  }
+
+  async function startServerCapEnv(opts: { sessionMgr?: SessionManager } = {}): Promise<{
+    server: AgentServer;
+    socketPath: string;
+    tmpDir: string;
+    execCalls: ExecCall[];
+  }> {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-env-'));
+    const socketPath = path.join(tmpDir, 'agent.sock');
+    const execCalls: ExecCall[] = [];
+
+    async function execFileImpl(
+      _cmd: string,
+      args: readonly string[],
+      options?: { env?: Record<string, string | undefined> },
+    ): Promise<{ stdout: string; stderr: string }> {
+      execCalls.push({ args, env: options?.env ?? {} });
+      if (args.includes('rev-parse')) {
+        return { stdout: 'SAME_TREE_SHA\n', stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    }
+
+    const server = createAgentServer({
+      socketPath,
+      sessionMgr: opts.sessionMgr ?? makeSessionMgr(),
+      github: githubStub,
+      tokenResolver,
+      log: silentLog,
+      worktreeBase: path.join(tmpDir, 'worktrees'),
+      baseBranch: 'development',
+      fetchImpl: okFetch,
+      execFileImpl: execFileImpl as unknown as NonNullable<AgentServerDeps['execFileImpl']>,
+    });
+    await server.start();
+    return { server, socketPath, tmpDir, execCalls };
+  }
+
+  it('uses GIT_CONFIG extraheader when askpass helper is absent (useWorkerUid=false path)', async () => {
+    const h2 = await startServerCapEnv();
+    try {
+      // Write a stub bundle.
+      const workDir = path.join(h2.tmpDir, 'worktrees', SESSION_ID, 'work');
+      fs.mkdirSync(workDir, { recursive: true });
+      fs.writeFileSync(path.join(workDir, 'push-bundle.bundle'), Buffer.from('stub-bundle'));
+
+      const resp = await roundTrip(h2.socketPath, {
+        op: 'push_branch',
+        session_id: SESSION_ID,
+        cap_token: CAP_TOKEN,
+        branch: 'agent/fix',
+      });
+      expect(resp['error']).toBeUndefined();
+
+      // Find the push exec call.
+      const pushCall = h2.execCalls.find((c) => c.args.includes('push'));
+      expect(pushCall).toBeDefined();
+
+      // The askpass helper must NOT appear since it does not exist on disk.
+      expect(pushCall?.env?.['GIT_ASKPASS']).toBeUndefined();
+
+      // The extraheader approach must be present.
+      expect(pushCall?.env?.['GIT_CONFIG_COUNT']).toBe('2');
+      expect(pushCall?.env?.['GIT_CONFIG_KEY_1']).toBe(
+        'http.https://github.com/.extraheader',
+      );
+      // The value must be a basic auth header containing the base64-encoded PAT.
+      const header = pushCall?.env?.['GIT_CONFIG_VALUE_1'] ?? '';
+      const encoded = Buffer.from('x-access-token:ghp_dummy_token').toString('base64');
+      expect(header).toBe(`AUTHORIZATION: basic ${encoded}`);
+
+      // credential.helper must be cleared.
+      expect(pushCall?.env?.['GIT_CONFIG_KEY_0']).toBe('credential.helper');
+      expect(pushCall?.env?.['GIT_CONFIG_VALUE_0']).toBe('');
+    } finally {
+      await h2.server.shutdown();
+      fs.rmSync(h2.tmpDir, { recursive: true, force: true });
+    }
+  });
+});
