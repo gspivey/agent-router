@@ -1079,3 +1079,30 @@ overview route and MessageRow must be present).
 
 ---
 
+
+### 90. Security isolation fix — code (MCP socket fallback, agent-server PAT source, .github fail-closed)
+
+Read `.kiro/specs/security-isolation-fix/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `90.1`–`90.10`. Realigns shipped agent-process-isolation code with the
+corrected spec: removes the MCP operator-socket fallback (CRITICAL), sources the agent-server PAT
+from `credentialTokenResolver` via the credential token store only (HIGH — `tokens.json` is now
+required for `push_branch`/`pr_create`/`pr_view`), and makes the `push_branch` `.github/` guard
+fail closed. Adds startup warnings for both missing `agentworker` account (when `useWorkerUid:
+true`) and `_fallback` token mode. Depends on items 83–86.
+
+- Spec: `.kiro/specs/security-isolation-fix/` · tasks `90.1`–`90.10`
+- [ ] Complete
+
+### 91. Security isolation fix — provisioning (usermod step, iptables chain rename, docs)
+
+Read `.kiro/specs/security-isolation-fix/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `91.1`–`91.8`. Adds `usermod -aG "$WORKER_USER" "$DAEMON_USER"` to
+`setup-agent-user.sh`, renames the tinyproxy iptables chain from `TPROXY_SSRF_BLOCK` to
+`TINYPROXY_OUT` in the script and docs, and documents the provisioning prerequisites. Depends on
+item 90 (merge conflict on `src/index.ts` and `src/isolation-startup.ts`).
+
+- Spec: `.kiro/specs/security-isolation-fix/` · tasks `91.1`–`91.8`
+- [ ] Complete
+
+---
+
