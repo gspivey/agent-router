@@ -64,21 +64,19 @@ FR-3.4: Each session shall use a **standalone git clone** owned by `agentworker`
 worktree attached to a daemon-owned bare repo. The workflow:
 1. At session start, the daemon seeds the clone by creating a bundle from the daemon's bare
    clone (`git bundle create /srv/agent-router/worktrees/{sid}/seed.bundle --all`), then
-   uses the fixed root-owned wrapper script (see design §D) to perform the clone as agentworker:
-   `/usr/local/libexec/agent-router-seed-clone {sid}` (BASE is hardcoded in the wrapper;
-   sudo env_reset drops GIT_CONFIG_* vars, so the wrapper sets them internally).
-2. The agent's clone is owned by `agentworker`, mode 755. `/srv/agent-router/worktrees/`
-   is mode **2755 agentrouter:agentworker** (setgid) so new `{sid}/` dirs inherit the group.
+   has `agentworker` clone from the bundle:
+   `sudo -u agentworker git clone /srv/agent-router/worktrees/{sid}/seed.bundle /srv/agent-router/worktrees/{sid}/work/`
+   with `GIT_CONFIG_NOSYSTEM=1 -c safe.directory=...`.
+2. The agent's clone is owned by `agentworker`, mode 755.
 3. The daemon's bare clone is owned by `agentrouter`, mode 700. `agentworker` cannot write to it.
-4. The setup script installs wrapper scripts and their sudoers rules.
+4. The setup script adds a sudoers rule for the bundle seeding helper.
 5. **The daemon SHALL NOT run any git command with a cwd inside the agent's `work/` directory.**
    The agent controls `.git/config` in that directory (hooks, fsmonitor, credential helpers),
    so any daemon-side `git` invocation there runs those hooks as `agentrouter`. Any daemon
-   git operations on session state (e.g. checking head SHA) must be performed via
-   `sudo -u agentworker git ...` (via sudoers rules allowing read-only subcommands) to avoid
-   privilege escalation. The `AttemptRunner`/`WorktreeOps` call sites that require git
-   operations in the session working tree must use the sudo path or operate on the daemon's
-   canonical clone only.
+   git operations on session state (e.g. checking head SHA, listing files, verifying presence)
+   must be performed via `sudo -u agentworker git ...` to avoid privilege escalation. The
+   `AttemptRunner`/`WorktreeOps` call sites that require git operations in the session working
+   tree must use the sudo path or operate on the daemon's canonical clone only.
 
 FR-3.5: The `worktree-manager.ts` shall be updated to implement FR-3.4. The shared bare clone
 for fetching remotes remains daemon-owned. The per-session working directory is
@@ -95,7 +93,7 @@ processing. The agent-controlled path is used only for reading, not for git oper
 FR-4.1: Operator socket: `$rootDir/sock`, mode 0600. Unchanged. Not accessible to `agentworker`.
 
 FR-4.2: Agent socket: `/run/agent-router/agent.sock`, mode 0660. `/run/agent-router/` owned
-`agentrouter:agentworker`, mode **0750** (search+read, NOT write — prevents socket squatting).
+`agentrouter:agentworker`, mode **2750** (search+read, NOT write — prevents socket squatting).
 Created via `tmpfiles.d`:
 ```
 d /run/agent-router 2750 agentrouter agentworker -
@@ -123,24 +121,14 @@ is true. Comparison is on the project's bound repo string (case-insensitive). Th
 since all sessions share the `agentworker` uid, one agent can read another's `/proc/<pid>/environ`
 to steal the other's cap token and then call `github_forward`/`push_branch` as that session.
 
-FR-4.7: The daemon shall include a `pkill` sudoers rule to signal stray `agentworker` processes
-after all sessions have ended. **Do NOT call `pkill -u agentworker` while any other session is
-still active** — FR-4.6 allows concurrent sessions for the same project, and a blanket kill
-by uid would SIGKILL their kiro processes.
-
-Correct usage:
-```typescript
-// In session cleanup — only call pkill if this is the last active session
-if (sessionMgr.getActiveWorkerSessionCount() <= 1) {
-  await execFileAsync('/usr/bin/sudo', ['-n', '/usr/bin/pkill', '-KILL', '-u', 'agentworker']);
-}
-```
-Sudoers rule:
+FR-4.7: The daemon shall include a `pkill` sudoers rule so it can signal stray `agentworker`
+processes after a session ends:
 ```
 agentrouter ALL=(root) NOPASSWD: /usr/bin/pkill -KILL -u agentworker
 ```
-This allows the daemon to send SIGKILL to all processes owned by `agentworker` to reap stray
-kiro processes after the last session ends. The `getActiveWorkerSessionCount()` guard is load-bearing.
+This allows the daemon to send SIGKILL to all processes owned by `agentworker` during session
+cleanup (sudo's inability to pass SIGKILL through to child processes makes direct kill of the
+kiro subprocess unreliable). Call this after `kill()` returns / session ends.
 
 FR-4.8 (Residual risk, documented): The shared `agentworker` uid means a compromised session
 can implant files in `/home/agentworker/.kiro/` (hooks, config) that execute in a later session
@@ -160,7 +148,7 @@ FR-5.3: Daemon-side `github_forward` handler:
 1. Validate `session_id` + `cap_token`
 2. Validate raw path using **strict character-set validation** (not decode-then-check):
    - Each segment (split on `/`) must match `^[A-Za-z0-9._-]+$`
-   - `%2F` allowed only in `{refSegments}` positions
+   - `%2F` allowed only in `{ref}`/`{branch}` slots (see design §E)
    - Any other `%`, `?`, `#`, `\`, control chars, or empty segment → reject
    - Path must start with `/`
 3. Accept query parameters as a separate `queryParams` argument (structured, not in path).
@@ -234,31 +222,14 @@ FR-6.1: `push_branch` agent socket op:
    - Read exactly `stat.size` bytes into a daemon-owned buffer (not read-until-EOF)
    - Write to `/srv/agent-router/push-tmp/{sid}/input.bundle` via `mkdtemp` (daemon-owned,
      mode 0700, deleted in `finally` block — on both success and failure)
-5. (Bundle verify is in step 7c — it must run inside a bare repo, after the repo is created.)
-6. Verify the bundle does not modify `.github/`. The check MUST cover all commits in the
-   push, not just the tip's direct parent. Method: after creating the bare repo and fetching
-   the base branch ref (steps 7a-7b below), compare the `.github` tree SHA at
-   `refs/heads/{branch}` vs `refs/remotes/base/{baseBranch}` using `git rev-parse --verify`:
-   - If both are absent (exit code 1): PASS.
-   - If both present and SHAs are identical: PASS.
-   - Any other case: REJECT.
-   Treat any `rev-parse` error with non-empty stderr as a hard failure (fail closed, do not
-   treat as "absent").
-   NOTE: do NOT use diff-tree, ls-tree, or path-prefix matching against `.github/`. The
-   tree-SHA method is the only approach that covers all commits in the push.
-7. Create bare repo at `/srv/agent-router/push-tmp/{sid}/repo/`. Then execute in order:
-   a. `git init --bare <bareRepo>` (creates the repo needed by all subsequent git calls)
-   b. Fetch base branch from daemon's canonical bare clone:
-      `git -C <bareRepo> fetch <bareClonePath> refs/heads/{baseBranch}:refs/remotes/base/{baseBranch}`
-      with `core.hooksPath=/dev/null protocol.file.allow=always credential.helper=`
-   c. `git -C <bareRepo> bundle verify <bundleDst>` — MUST run inside a repo (step a)
-      and AFTER base branch is available (step b). The tool description for agents should
-      use `git bundle create ./push-bundle.bundle origin/{baseBranch}..{branch}` so the
-      bundle has the base as a prerequisite, which `bundle verify` checks.
-   d. Fetch bundle: `git -C <bareRepo> fetch <bundleDst> refs/heads/{branch}:refs/heads/{branch}`
-      with `core.hooksPath=/dev/null core.fsmonitor=false protocol.file.allow=always credential.helper=`
-   e. Now run the step 6 tree-SHA comparison (named refs exist at this point).
-   All git invocations use array args (no shell), `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null`.
+5. Run `git bundle verify /srv/agent-router/push-tmp/{sid}/input.bundle` in a clean env.
+6. Inspect the bundle's changed file paths via `git bundle list-heads` then diff-tree.
+   **Reject the bundle if any path starts with `.github/`** — agents pushing workflow files
+   would run with the repo's Actions token on the next `push` trigger, bypassing all controls.
+7. Create bare repo at `/srv/agent-router/push-tmp/{sid}/repo/`, fetch bundle into it:
+   `git fetch {bundlepath} refs/heads/{branch}:refs/heads/{branch}`
+   with `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null -c core.hooksPath=/dev/null
+   -c core.fsmonitor=false -c credential.helper=` and all args as array (no shell).
 8. Push from the daemon-owned bare repo using PAT in child env only (`GIT_ASKPASS_PASSWORD`
    env var; fixed helper `/usr/local/libexec/agent-router-askpass` root:root 0755 echoes it).
    Push refspec: `refs/heads/{branch}:refs/heads/{branch}`.
@@ -292,16 +263,12 @@ FR-7.2: iptables rules for `agentworker`:
 - IPv4: ESTABLISHED/RELATED, tcp/8080 to 127.0.0.1 (proxy), REJECT all else.
 - IPv6: AGENTWORKER_OUT default DROP.
 - NO direct DNS allow rule (proxy handles DNS, blocking prevents tunnelling).
-- Save: write **valid standalone restore files** `/etc/iptables/agent-router-rules.v4` and
-  `/etc/iptables/agent-router-rules.v6`, each with correct `*filter` header, both
-  `AGENTWORKER_OUT` and `TPROXY_SSRF_BLOCK` chain declarations, and `COMMIT` trailer.
-  A systemd unit `agent-router-iptables.service` runs **both** restores before
-  `agent-router.service` starts:
-  - `iptables-restore --noflush /etc/iptables/agent-router-rules.v4`
-  - `ip6tables-restore --noflush /etc/iptables/agent-router-rules.v6`
-  (`Before=agent-router.service`, `WantedBy=multi-user.target`, `DefaultDependencies=no`).
+- Save: write a **valid standalone restore file** `/etc/iptables/agent-router-rules.v4`
+  with correct `*filter` header and `COMMIT` trailer (so `iptables-restore` can load it on
+  boot). A separate systemd unit `agent-router-iptables.service` runs
+  `iptables-restore --noflush /etc/iptables/agent-router-rules.v4` before
+  `agent-router.service` starts (`Before=agent-router.service`, `WantedBy=network.target`).
   This replaces `iptables-persistent` and avoids interfering with Docker/ufw rules.
-  Without the IPv6 restore, agentworker has unfiltered direct IPv6 egress after reboot.
 
 FR-7.3: `HTTPS_PROXY=http://127.0.0.1:8080` in child env (sudoers `env_keep` + spawn env).
 

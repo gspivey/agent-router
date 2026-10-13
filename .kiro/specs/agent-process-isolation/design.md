@@ -36,10 +36,10 @@ the checked string differs from what `new URL()` sends. Instead, validate each r
 against `^[A-Za-z0-9._-]+$` (plus `%2F` only in ref positions). Build the URL with
 `URL` + `URLSearchParams`, then run the allowlist check on `url.pathname`.
 
-### Socket directory mode 0750 not 0770 (M-2 fix)
+### Socket directory mode 2750 not 0770 (M-2 fix)
 
 Write permission on the directory lets `agentworker` unlink `agent.sock` and substitute its
-own listener. Mode 0750 (group search + execute only) lets `agentworker` find and connect to
+own listener. Mode 2750 (setgid + group search, no group write) lets `agentworker` find and connect to
 the socket without being able to replace it.
 
 ## Component Design
@@ -50,10 +50,9 @@ Sequence:
 1. Create `agentworker` with home `/home/agentworker`
 2. Write sudoers rule (see §B below)
 3. Harden `$rootDir` — chmod 750 dir, chmod 600 token files (daemon-owned)
-4. Create `/srv/agent-router/worktrees/` (mode **2755** = setgid+0755, agentrouter:agentworker)
-   and
+4. Create `/srv/agent-router/worktrees/` (755, agentrouter) and
    `/srv/agent-router/push-tmp/` (700, agentrouter)
-5. Create `/run/agent-router/` via `tmpfiles.d` (**2750** = setgid+0750, agentrouter:agentworker) — setgid ensures sockets created by daemon inherit agentworker group
+5. Create `/run/agent-router/` via `tmpfiles.d` (2750 setgid, agentrouter:agentworker)
 6. Write `/usr/local/libexec/agent-router-askpass` (immutable root:root 0755):
    ```bash
    #!/bin/sh
@@ -77,174 +76,318 @@ kiro path from `config.json` `kiroPath`. Must NOT be under `$rootDir`. Validated
 ### C. Dual Socket Architecture
 
 ```
-$rootDir/sock                    (agentrouter:agentrouter 0600)  — operator socket (unchanged)
-/run/agent-router/agent.sock     (agentrouter:agentworker 0660)  — agent socket (NEW)
+$rootDir/sock                  agentrouter:agentrouter  0600  operator/CLI socket (unchanged; never used by MCP)
+/run/agent-router/             agentrouter:agentworker  2750  agent socket dir (setgid, no group write)
+/run/agent-router/agent.sock   agentrouter:agentworker  0660  agent socket (all MCP tool traffic)
 ```
 
-Agent socket startup:
-```typescript
-// Unlink stale socket from a prior run
-try { fs.unlinkSync(agentSocketPath); } catch {}
-const agentServer = net.createServer(handleAgentConnection);
-agentServer.listen(agentSocketPath, () => {
-  fs.chmodSync(agentSocketPath, 0o660);
-});
+**Rule: the per-session MCP server talks ONLY to the agent socket.** Every MCP tool sends its request to `AGENT_ROUTER_AGENT_SOCK` with `session_id` and `cap_token`. That covers `session_status`, `register_pr`, `merge_pr`, `complete_session`, `register_worktree`, `report_outcome`, `github_http_forward`, `push_branch`, `pr_create` and `pr_view`. The MCP server never reads `AGENT_ROUTER_SOCKET` and never falls back to it. Under `useWorkerUid` the operator socket is `0600` and `agentworker` can't open it, so any fallback would end in `EACCES`. The operator socket also serves `get_token`, so a fallback would point at the wrong endpoint anyway.
+
+This rule holds whatever `useWorkerUid` is set to, so there is a single transport path:
+
+| `useWorkerUid` | Agent socket path | Mode | Group |
+|---|---|---|---|
+| `true` | `config.agentSocketPath` (default `/run/agent-router/agent.sock`) | `0660` | `agentworker` |
+| `false` | `config.agentSocketPath` if set explicitly, else `$rootDir/agent.sock` | `0600` | daemon's primary group (no chown) |
+
+**MCP tool → agent-socket op mapping (exhaustive):**
+
+| MCP tool | Agent socket op | Extra fields |
+|---|---|---|
+| `session_status` | `session_status` | — |
+| `register_pr` | `register_pr` | `repo`, `pr_number` |
+| `merge_pr` | `merge_pr` | `repo`, `pr_number` |
+| `complete_session` | `complete_session` | `reason` |
+| `register_worktree` | `register_worktree` | `path` |
+| `report_outcome` | `report_outcome` | `outcome`, `reason_code`, `reason`, `blocked`, `pr_url` |
+| `github_http_forward` | `github_forward` | `method`, `path`, `query_params`, `body` |
+| `push_branch` | `push_branch` | `branch` |
+| `pr_create` | `pr_create` | `title`, `body`, `head`, `base` |
+| `pr_view` | `pr_view` | `pr_number` |
+
+`get_token` and `git_credential` are not reachable from any MCP code path.
+
+**Every request has this shape (one JSON line, response is one JSON line):**
+```json
+{ "op": "<op>", "session_id": "<AGENT_ROUTER_SESSION_ID>", "cap_token": "<AGENT_ROUTER_CAP_TOKEN>", ...extra }
 ```
 
-Cap token: `crypto.randomUUID().replace(/-/g, '')` (128-bit random, 32 hex chars).
-Validation: `crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(provided))`.
-Empty tokens rejected before `timingSafeEqual` (length check first).
+**MCP server env contract** (set by the daemon in `mcpServers[0].env`):
 
-Concurrent-session guard (FR-4.6) — enforced in `session-mgr.ts`, NOT on the agent socket:
+| Var | Required | Notes |
+|---|---|---|
+| `AGENT_ROUTER_SESSION_ID` | yes | |
+| `AGENT_ROUTER_AGENT_SOCK` | yes | Absolute path of the agent socket. Missing or empty → MCP server exits 1. |
+| `AGENT_ROUTER_CAP_TOKEN` | yes | 32 hex chars. Missing or empty → MCP server exits 1. |
+| `AGENT_ROUTER_SOCKET` | **never set** | The daemon must not put it in `mcpServers[0].env`. The MCP server ignores it if present. |
+| `GITHUB_API_BASE_URL` | **never set** | All GitHub HTTP happens daemon-side. |
+
+#### Socket group ownership (agentworker must be able to connect)
+
+On Linux, `connect()` to a Unix socket needs search (`x`) permission on every directory in the path and write (`w`) permission on the socket inode. The daemon runs as `agentrouter`, so an inode it creates normally gets group `agentrouter`, and `chmod 0660` alone grants `agentworker` nothing. The design uses two independent mechanisms:
+
+1. **setgid socket directory.** tmpfiles creates `d /run/agent-router 2750 agentrouter agentworker -`. With the setgid bit set, every inode created inside, including the socket made by `bind()`, inherits group `agentworker` automatically.
+2. **Explicit chown after listen.** The daemon calls `fs.chownSync(sockPath, -1, agentworkerGid)` then `fs.chmodSync(sockPath, 0o660)`. For this to work without root, `agentrouter` must be a supplementary member of `agentworker`. The setup script does `usermod -aG agentworker agentrouter` and writes a systemd drop-in `SupplementaryGroups=agentworker`.
+
+**The reverse membership is forbidden.** `agentworker` must never be added to group `agentrouter` (that would grant read access to `$rootDir` mode 750). The setup script asserts this.
+
+`agentworkerGid` is resolved once at startup with `getent group agentworker` (supports NSS), never hard-coded.
+
+**Agent socket startup verification** — if any check fails with `useWorkerUid=true`, the daemon refuses to start:
+1. Resolve `agentworkerGid` via `getent group agentworker`; throw `FatalError` if the group is absent.
+2. Verify daemon is a supplementary member of `agentworker`; throw if not.
+3. Verify socket directory: must be a real directory, owned by daemon uid, group = `agentworkerGid`, mode `2750` (setgid, no group write), no other-accessible bits.
+4. Unlink stale socket only if `lstat().isSocket()` (refuse to unlink a regular file or symlink).
+5. After `server.listen(path)`: `fs.chownSync(path, -1, agentworkerGid)`, `fs.chmodSync(path, 0o660)`.
+6. Verify socket inode: `isSocket()`, uid = daemon uid, gid = `agentworkerGid`, mode `0o660`; throw on mismatch.
+
+#### Cap token
+
+- Generated per spawn: `crypto.randomUUID().replace(/-/g, '')` (32 hex chars). Generated for **every** session in both modes.
+- Generated in `session-mgr.ts` immediately before each `acpSpawner` call. Stored in memory only, never persisted.
+- A resume generates a fresh token; the previous one becomes invalid.
+- Deleted from the map when the session ends.
+- Validation: length check first (not 32 → reject), then `crypto.timingSafeEqual`. Failure → `{ "error": "Unauthorized" }`.
+
+#### Concurrent-session guard (FR-4.6)
+
+Enforced in `session-mgr.ts`, NOT on the agent socket:
 ```typescript
-// Inside createSession() and resumeSessions() in src/session-mgr.ts
 function checkConcurrentProjectConflict(newRepo: string, activeSessions: SessionInfo[], useWorkerUid: boolean): void {
   if (!useWorkerUid) return;
-  const otherProject = activeSessions.find(s => s.repo.toLowerCase() !== newRepo.toLowerCase());
+  const otherProject = activeSessions.find(s => s.repo?.toLowerCase() !== newRepo.toLowerCase());
   if (otherProject) {
-    throw new Error(`Cannot spawn concurrent sessions for different projects in useWorkerUid mode — stop ${otherProject.sessionId} first`);
+    throw new Error(`Cannot spawn concurrent sessions for different projects in useWorkerUid mode`);
   }
 }
 ```
 The `force` flag on CLI `new_session` must NOT bypass this when `useWorkerUid=true`.
-A `pkill` sudoers rule (FR-4.7) enables the daemon to send SIGKILL to all `agentworker` processes
-when the **last** active worker session ends. **Guard with `getActiveWorkerSessionCount() <= 1`**
-before calling — FR-4.6 allows concurrent sessions for the same project, and a blanket uid kill
-would SIGKILL sibling sessions' kiro processes. Add the pkill rule to `/etc/sudoers.d/agent-router-worker`:
-```
-agentrouter ALL=(root) NOPASSWD: /usr/bin/pkill -KILL -u agentworker
-```
+A `pkill` sudoers rule (FR-4.7) lets the daemon send SIGKILL to all `agentworker` processes when a session ends. It kills by uid, so it applies only when no concurrent-project sessions are allowed (FR-4.6 ensures only one project at a time).
 
 ### D. Per-Session Clone Model
 
+Applies only when `useWorkerUid=true`. When `useWorkerUid=false`, `worktree-manager.ts` keeps today's `git worktree add` behavior, made async.
+
 ```
-/srv/agent-router/
-├── worktrees/
-│   └── {sessionId}/
-│       ├── seed.bundle            (written by daemon, read once for clone, then deleted)
-│       └── work/                  (git clone, owned agentworker:agentworker 755)
-│           └── (session's working directory)
-└── push-tmp/
-    └── {sessionId}/               (created at push time, deleted after)
-        ├── input.bundle           (copy of bundle from agent, before any git operations)
-        └── repo/                  (bare repo, daemon-owned, for bundle fetch + push)
+/srv/agent-router/worktrees/                  agentrouter:agentrouter  0755
+└── {sid}/                                    agentrouter:agentworker  0750   (daemon-created)
+    ├── repo                                  agentrouter:agentworker  0640   (daemon-written: "owner/name\n")
+    ├── seed.bundle                           agentrouter:agentworker  0640   (daemon-written; deleted after clone)
+    └── work/                                 agentrouter:agentworker  2770   (daemon-created, empty; setgid)
+        ├── .git/ …                           agentworker:agentworker         (created by seed-clone wrapper)
+        └── push-bundle.bundle                agentworker:agentworker         (agent-written, read by push_branch)
+/srv/agent-router/push-tmp/                   agentrouter:agentrouter  0700
 ```
 
-**CRITICAL: The daemon MUST NOT run git with cwd inside `work/`.** The agent controls
-`.git/config` in that directory (hooks, fsmonitor, diff.external, credential helpers), so
-running `git` there as `agentrouter` executes those hooks with daemon privileges.
+`{sid}` must match `^[A-Za-z0-9_-]{1,64}$`. The daemon validates before any filesystem call; both wrappers validate again.
 
-Any daemon operation that needs to inspect the session's git state (head SHA, diff, outcome
-file) MUST use one of: `sudo -n -u agentworker git ...` in `workPath`, or operate on the
-daemon's own canonical bare clone. The `AttemptRunner`/`WorktreeOps` call sites must follow
-this rule. `readOutcomeFile` must use `O_NOFOLLOW`.
+**Session start** (`worktreeManager.ensureWorktree(repo, sid)`, async):
 
-**Fixed wrapper `/usr/local/libexec/agent-router-seed-clone`** (root:root 0755):
+1. Validate `sid`. If `{sid}/` already exists, return `{sid}/work` (resume).
+2. Refresh the shared bare clone (daemon-owned, daemon cwd).
+3. `fs.mkdirSync({sid}, { mode: 0o750 })`, `fs.chownSync({sid}, -1, agentworkerGid)`, `fs.chmodSync({sid}, 0o750)`.
+4. Write `{sid}/repo` (contents `owner/name\n`) with `{ mode: 0o640, flag: 'wx' }`, then chown group to `agentworkerGid`.
+5. Create seed bundle from the daemon's bare clone with `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null`. Then `chown(-1, agentworkerGid)` and `chmod(0o640)`.
+6. `fs.mkdirSync({sid}/work, { mode: 0o770 })`, `chown(-1, agentworkerGid)`, `chmod(0o2770)`. Set mode explicitly — `mkdir` masks off setgid.
+7. `execFileAsync('/usr/bin/sudo', ['-n', '-u', 'agentworker', '/usr/local/libexec/agent-router-seed-clone', sid], { cwd: '/', env: { PATH: '/usr/bin:/bin' }, timeout: 300_000 })`.
+8. `fs.unlinkSync(seedBundlePath)`.
+9. Return `{sid}/work`.
+
+If any step fails, run cleanup (`removeWorktree(sid)`) and rethrow.
+
+**Seed-clone wrapper** `/usr/local/libexec/agent-router-seed-clone` (root:root 0755, runs as `agentworker` via sudo):
 ```bash
 #!/bin/bash
-# Usage: agent-router-seed-clone <sessionId>
-# BASE is hardcoded to prevent path traversal. SID validated against strict regex.
+# Generated by scripts/setup-agent-user.sh — DO NOT EDIT
 set -euo pipefail
-BASE="/srv/agent-router/worktrees"
+umask 007
+[ "$#" -eq 1 ] || { echo "usage: agent-router-seed-clone <sid>" >&2; exit 64; }
 SID="$1"
-if ! [[ "$SID" =~ ^[A-Za-z0-9-]{1,64}$ ]]; then
-  echo "Invalid session ID" >&2; exit 1
-fi
-WORK="$BASE/$SID/work"
-BUNDLE="$BASE/$SID/seed.bundle"
-# Create work/ as agentworker (not root) so agentworker can write into it
-install -d -o agentworker -g agentworker -m 0755 "$WORK"
-sudo -u agentworker /usr/bin/git clone "$BUNDLE" "$WORK" \
-  --config safe.directory="$WORK" --config core.hooksPath=/dev/null
+[[ "$SID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || { echo "invalid sid" >&2; exit 64; }
+[ "$(id -un)" = "agentworker" ] || { echo "must run as agentworker" >&2; exit 77; }
+
+DIR="/srv/agent-router/worktrees/$SID"
+BUNDLE="$DIR/seed.bundle"
+WORK="$DIR/work"
+REPO_FILE="$DIR/repo"
+
+for p in "$DIR" "$BUNDLE" "$WORK" "$REPO_FILE"; do
+  [ ! -L "$p" ] || { echo "refusing symlink: $p" >&2; exit 65; }
+done
+[ -d "$DIR" ] && [ -f "$BUNDLE" ] && [ -d "$WORK" ] && [ -f "$REPO_FILE" ] || { echo "missing session files" >&2; exit 65; }
+[ -z "$(ls -A "$WORK")" ] || { echo "work dir not empty" >&2; exit 65; }
+
+REPO="$(head -c 256 "$REPO_FILE" | tr -d '\n')"
+[[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "invalid repo" >&2; exit 65; }
+
+export HOME=/home/agentworker
+export PATH=/usr/bin:/bin
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
+cd /
+
+/usr/bin/git -c core.hooksPath=/dev/null clone --no-hardlinks -- "$BUNDLE" "$WORK"
+/usr/bin/git -C "$WORK" remote set-url origin "https://github.com/$REPO.git"
+/usr/bin/git -C "$WORK" -c core.hooksPath=/dev/null checkout -q -B "agent/$SID"
 ```
 
-**Fixed wrapper `/usr/local/libexec/agent-router-rm-session`** (root:root 0755):
+**Cleanup wrapper** `/usr/local/libexec/agent-router-rm-session` (root:root 0755, runs as `agentworker` via sudo):
 ```bash
 #!/bin/bash
-# Usage: agent-router-rm-session <sessionId>
-# BASE is hardcoded. SID validated. work/ removed as agentworker to avoid permission issues.
+# Generated by scripts/setup-agent-user.sh — DO NOT EDIT
 set -euo pipefail
-BASE="/srv/agent-router/worktrees"
+[ "$#" -eq 1 ] || { echo "usage: agent-router-rm-session <sid>" >&2; exit 64; }
 SID="$1"
-if ! [[ "$SID" =~ ^[A-Za-z0-9-]{1,64}$ ]]; then
-  echo "Invalid session ID" >&2; exit 1
-fi
-SESSION_DIR="$BASE/$SID"
-# Remove agentworker-owned work/ as agentworker
-sudo -u agentworker /bin/rm -rf "$SESSION_DIR/work" 2>/dev/null || true
-# Remove the session dir itself (daemon-owned)
-rm -rf "$SESSION_DIR"
-```
+[[ "$SID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || { echo "invalid sid" >&2; exit 64; }
+[ "$(id -un)" = "agentworker" ] || { echo "must run as agentworker" >&2; exit 77; }
 
-Sudoers rules for the wrapper scripts and agentworker git inspection
-(in `/etc/sudoers.d/agent-router-worker`):
+WORK="/srv/agent-router/worktrees/$SID/work"
+[ ! -L "$WORK" ] || { echo "refusing symlink" >&2; exit 65; }
+[ -d "$WORK" ] || exit 0
+cd /
+/usr/bin/find "$WORK" -xdev -mindepth 1 -type d -user agentworker -exec /bin/chmod u+rwx {} +
+/usr/bin/find "$WORK" -xdev -mindepth 1 -delete
 ```
-# Wrapper scripts — BASE hardcoded in scripts, only SID arg is variable
-agentrouter ALL=(root) NOPASSWD: /usr/local/libexec/agent-router-seed-clone *
-agentrouter ALL=(root) NOPASSWD: /usr/local/libexec/agent-router-rm-session *
-# Read-only git inspection of agentworker work/ (HEAD sha, log, rev-parse only)
-agentrouter ALL=(agentworker) NOPASSWD: /usr/bin/git -C /srv/agent-router/worktrees/* rev-parse HEAD
-agentrouter ALL=(agentworker) NOPASSWD: /usr/bin/git -C /srv/agent-router/worktrees/* log --format\=* -n *
-```
-Note: any output read via these sudo git commands is treated as untrusted (agent controls `.git/config`).
+After the wrapper exits 0, the daemon (`agentrouter`) does `fs.rmSync({sid}, { recursive: true, force: true })`.
 
-**Directory mode table:**
-```
-/srv/agent-router/worktrees/           2755  agentrouter:agentworker  setgid; new {sid}/ dirs inherit agentworker group
-{worktreeBase}/{sid}/              0750  agentrouter:agentworker  daemon creates; group from setgid parent; agentworker can traverse
-{worktreeBase}/{sid}/seed.bundle   0640  agentrouter:agentworker  daemon writes; agentworker reads via group; deleted after clone
-{worktreeBase}/{sid}/work/         0755  agentworker:agentworker  seed-clone creates (install -d); daemon MUST NOT write here
-```
+**Session end cleanup** (`worktreeManager.removeWorktree(sid)`, async):
+1. `sudo -n -u agentworker /usr/local/libexec/agent-router-rm-session {sid}` with `cwd: '/'`, 120 s timeout.
+2. `fs.rmSync({sid}, { recursive: true, force: true })`.
+3. On wrapper failure: log ERROR, leave directory. Never run daemon-side `rm -rf` across agentworker-owned files.
 
-**Session teardown** (from session cleanup in `session-mgr.ts`):
-```typescript
-await execFileAsync('/usr/bin/sudo', [
-  '-n', '/usr/local/libexec/agent-router-rm-session', sessionId, config.worktreeBase,
-]);
+**Sudoers lines** (in `/etc/sudoers.d/agent-router-worker`):
 ```
+agentrouter ALL=(agentworker) NOPASSWD: /usr/local/libexec/agent-router-seed-clone *
+agentrouter ALL=(agentworker) NOPASSWD: /usr/local/libexec/agent-router-rm-session *
+```
+No `/usr/bin/git` wildcard sudoers rules.
+
+**CRITICAL: the daemon MUST NOT run git with cwd, `-C`, or `GIT_DIR` inside `{sid}/work/`.** The agent controls `.git/config` there. Any daemon operation needing the session's git state must use a further wrapper run as `agentworker`, or operate on the daemon's own bare clone. `readOutcomeFile` uses `O_NOFOLLOW`.
 
 ### E. `github_forward` Handler (Raw Path Validation)
 
+The handler validates the **raw** path string exactly as the agent sent it. It never decodes it. Every check runs on the same bytes that `new URL()` sends to GitHub, and step 5 asserts that the two are identical.
+
+#### Segment grammar
+
+| Name | Definition | Notes |
+|---|---|---|
+| `SEG_RE` | `^[A-Za-z0-9._-]+$` | One raw path segment. No `%`, no `/`, no `?`, `#`, `\`, whitespace or control characters. The segments `.` and `..` are rejected even though they match. |
+| `REF_RAW_RE` | `^[A-Za-z0-9._-]+(?:%2F[A-Za-z0-9._-]+)*$` | One raw segment inside a `{ref}`/`{branch}` slot. It is one or more `SEG_RE` parts joined by the exact three bytes `%2F`. No other percent-escape is accepted. |
+| `NUM_RE` | `^[0-9]+$` | |
+
+`%2F` may appear **only** inside a `{ref}` or `{branch}` slot. The per-segment pass in step 2 lets a `REF_RAW_RE` segment through anywhere. The allowlist match in step 4 then rejects it in any slot other than `{ref}`/`{branch}`.
+
+#### Placeholder semantics (allowlist patterns)
+
+| Placeholder | Matches |
+|---|---|
+| literal (e.g. `pulls`) | exactly one raw segment, byte-equal and case-sensitive |
+| `{o}`, `{r}` | exactly one raw segment matching `SEG_RE` |
+| `{n}` | exactly one raw segment matching `NUM_RE` |
+| `{ref}`, `{branch}` as the **last** pattern component | one or more raw segments (joined by literal `/`), each matching `REF_RAW_RE` |
+| `{ref}`, `{branch}` in a **non-last** position | exactly one raw segment matching `REF_RAW_RE`; a slash in the branch name must be sent as `%2F` |
+
+For every `{ref}`/`{branch}` value, every part after the first is checked against `RESERVED_REF_PARTS` (GitHub sub-resource names: `protection`, `check-runs`, `check-suites`, `status`, `statuses`, `comments`, `pulls`, `hooks`, `keys`, `restrictions`, `rename`, `merges`). A match → reject.
+
+#### Allowlist (FR-5.4)
+
+| Method | Pattern | Body constraint |
+|---|---|---|
+| GET | `/repos/{o}/{r}/pulls` | |
+| GET | `/repos/{o}/{r}/pulls/{n}` | |
+| GET | `/repos/{o}/{r}/pulls/{n}/files` | |
+| GET | `/repos/{o}/{r}/pulls/{n}/reviews` | |
+| GET | `/repos/{o}/{r}/pulls/{n}/comments` | |
+| POST | `/repos/{o}/{r}/pulls` | `base` ∉ {`main`, `master`} |
+| PATCH | `/repos/{o}/{r}/pulls/{n}` | keys ⊆ {`title`, `body`} |
+| GET | `/repos/{o}/{r}/issues/{n}/comments` | |
+| POST | `/repos/{o}/{r}/issues/{n}/comments` | record returned `id` in `outbound_comments` |
+| GET | `/repos/{o}/{r}/commits/{ref}/check-runs` | |
+| GET | `/repos/{o}/{r}/actions/runs` | |
+| GET | `/repos/{o}/{r}/actions/runs/{n}` | |
+| GET | `/repos/{o}/{r}/actions/runs/{n}/jobs` | |
+| GET | `/repos/{o}/{r}/statuses/{ref}` | |
+| GET | `/repos/{o}/{r}/git/refs/heads/{branch}` | |
+| GET | `/repos/{o}/{r}/branches/{branch}` | |
+
+**Explicit deny list** (checked before allowlist, case-insensitive):
+- any path whose first segment is not `repos`
+- `PATCH /repos/{o}/{r}` (repo settings)
+- `/repos/{o}/{r}/hooks/**`, `/keys/**`, `/merges/**`
+- `/repos/{o}/{r}/actions/runners/**`, `/actions/secrets/**`
+- non-GET `/repos/{o}/{r}/contents/**`
+
 ```typescript
-function validateAndBuildUrl(rawPath: string, queryParams?: Record<string, string>): URL | null {
+const GITHUB_API = 'https://api.github.com';
+const SEG_RE = /^[A-Za-z0-9._-]+$/;
+const REF_RAW_RE = /^[A-Za-z0-9._-]+(?:%2F[A-Za-z0-9._-]+)*$/;
+const NUM_RE = /^[0-9]+$/;
+const DOT_PARTS = new Set(['.', '..']);
+const RESERVED_REF_PARTS = new Set([
+  'protection', 'check-runs', 'check-suites', 'status', 'statuses',
+  'comments', 'pulls', 'hooks', 'keys', 'restrictions', 'rename', 'merges',
+]);
+const ALLOWED_PARAMS = new Set(['per_page', 'page', 'state', 'head', 'base', 'sort', 'direction']);
+
+function isSeg(s: string): boolean { return SEG_RE.test(s) && !DOT_PARTS.has(s); }
+function refParts(s: string): string[] | null {
+  if (!REF_RAW_RE.test(s)) return null;
+  const parts = s.split('%2F');
+  return parts.some(p => DOT_PARTS.has(p)) ? null : parts;
+}
+
+// validateAndBuildUrl: returns { url, route } or null on ANY failure.
+// Steps: 1=shape, 2=charset (raw), 3=deny, 4=allowlist, 5=build+verify, 6=query.
+export function validateAndBuildUrl(
+  method: string, rawPath: string, queryParams?: Record<string, string>
+): { url: URL; route: Route } | null {
+  const m = method.toUpperCase();
   if (!rawPath.startsWith('/')) return null;
-  const segments = rawPath.split('/');
-  // Each segment (except empty first after leading /) must match safe chars
-  const SEG_RE = /^[A-Za-z0-9._\-]+$/;
-  const REF_SEG_RE = /^[A-Za-z0-9._\-\/]+$/;  // branch names with slashes
-  for (let i = 1; i < segments.length; i++) {
-    const seg = segments[i];
-    if (seg === '') return null;  // empty segment (double slash or trailing slash)
-    // Check for ref positions (branches, commits) where slashes are allowed
-    const isRefPosition = isRefSegmentPosition(i, segments);
-    if (isRefPosition) {
-      if (!REF_SEG_RE.test(seg)) return null;
-    } else {
-      if (!SEG_RE.test(seg)) return null;
-    }
+  const segs = rawPath.split('/').slice(1);
+
+  // 2. Per-segment charset (raw, never decoded)
+  for (const s of segs) {
+    if (s === '') return null;
+    if (!isSeg(s) && !refParts(s)) return null;  // %2F permitted here; slot validates in 4
   }
-  const url = new URL(rawPath, 'https://api.github.com');
-  if (url.origin !== 'https://api.github.com') return null;
-  // Verify url.pathname matches the validated path (no URL normalization surprise)
-  if (url.pathname !== rawPath.replace(/\/+$/, '')) return null;
+
+  // 3. Deny list
+  if (isDenied(m, segs)) return null;
+
+  // 4. Allowlist
+  const matched = ALLOWLIST.find(r => r.method === m && matchRoute(r.slots, segs));
+  if (!matched) return null;
+
+  // 5. Build URL; pathname must be byte-identical to what was validated
+  const url = new URL(rawPath, GITHUB_API);
+  if (url.origin !== GITHUB_API || url.pathname !== rawPath) return null;
+
+  // 6. Query params (structured only)
   if (queryParams) {
-    const ALLOWED_PARAMS = new Set(['per_page', 'page', 'state', 'head', 'base', 'sort', 'direction']);
     for (const [k, v] of Object.entries(queryParams)) {
-      if (!ALLOWED_PARAMS.has(k)) return null;
+      if (!ALLOWED_PARAMS.has(k) || typeof v !== 'string') return null;
       url.searchParams.set(k, v);
     }
   }
-  return url;
+  return { url, route: matched };
 }
 ```
 
-Allowlist check runs on `url.pathname` (post-URL-construction, exactly what gets sent).
+**Body check** (after `JSON.parse`):
+```typescript
+if (route.bodyKeys) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return { error: 'not permitted' };
+  for (const k of Object.keys(body)) {
+    if (!route.bodyKeys.has(k)) return { error: 'not permitted' };
+  }
+}
+```
 
 **Repo authorization** (both read and write):
 ```typescript
 const m = url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)/);
 if (m) {
-  const pathRepo = `${m[1]}/${m[2]}`.toLowerCase();  // case-insensitive
+  const pathRepo = `${m[1]}/${m[2]}`.toLowerCase();
   const sessionRepo = sessionMgr.getSessionRepo(sessionId)?.toLowerCase();
   const isWrite = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method.toUpperCase());
   const readRepos = sessionMgr.getSessionReadRepos(sessionId).map(r => r.toLowerCase());
@@ -254,6 +397,19 @@ if (m) {
   }
 }
 ```
+
+#### Key test cases (FR-5.6)
+
+`/repos/o/r/git/refs/heads/agent/foo` → accept (trailing `{branch}`).
+`/repos/o/r/git/refs/heads/agent%2Ffoo` → accept (`%2F` inside `{branch}`).
+`/repos/o/r/commits/agent%2Ffoo/check-runs` → accept (non-trailing `{ref}`, encoded).
+`/repos/o/r/commits/agent/foo/check-runs` → reject (non-trailing `{ref}` is one segment; `foo` is not `check-runs`).
+`/repos/o/r/branches/agent/foo/protection` → reject (`protection` ∈ RESERVED_REF_PARTS).
+`/repos/o%2Fx/r/pulls` → reject (`%2F` outside a ref slot fails the allowlist).
+`/repos/o/r/pulls/../../hooks` → reject (dot segment).
+`/repos/o/r/git/refs/heads/agent%2ffoo` → reject (lowercase `%2f`).
+`/graphql` → reject (deny list).
+`PATCH /repos/o/r` → reject (deny list).
 
 ### F. tinyproxy Configuration
 
@@ -289,8 +445,24 @@ EOF
 ^registry\.npmjs\.org$
 EOF
   systemctl enable --now tinyproxy
+  # Block tinyproxy uid from accessing cloud metadata and RFC1918.
+  # These rules are written into a TINYPROXY_OUT chain inside the persisted
+  # agent-router-rules.v4 file (design §G), so they survive reboots.
+  # The setup script creates/flushes the chain and adds an idempotent jump
+  # from OUTPUT (owner-matched to tinyproxy's uid) so they take effect immediately.
+  TPROXY_UID=$(id -u tinyproxy)
+  iptables -L TINYPROXY_OUT -n &>/dev/null || iptables -N TINYPROXY_OUT
+  iptables -F TINYPROXY_OUT
+  for cidr in 169.254.0.0/16 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do
+    iptables -A TINYPROXY_OUT -d "$cidr" -j REJECT
+  done
+  # Idempotent jump for tinyproxy uid (separate from agentworker jump)
+  iptables -C OUTPUT -m owner --uid-owner "$TPROXY_UID" -j TINYPROXY_OUT 2>/dev/null || \
+    iptables -I OUTPUT 1 -m owner --uid-owner "$TPROXY_UID" -j TINYPROXY_OUT
+  # TINYPROXY_OUT chain is also written into agent-router-rules.v4 via setup_iptables()
+  # so the rules and jump are restored at every boot by agent-router-iptables.service.
+}
 ```
-Tinyproxy SSRF prevention rules (see §G): a dedicated `TPROXY_SSRF_BLOCK` chain blocks tinyproxy's uid from reaching `169.254.0.0/16`, RFC1918, and IPv6 cloud-metadata ranges. These rules are built in `setup_tinyproxy_ssrf_rules()` called from `setup_iptables()` before the save step so they survive reboot. Do NOT add non-idempotent `-A OUTPUT` rules outside a dedicated chain.
 
 ### G. iptables Rules (Atomic, No Policy Lines)
 
@@ -323,47 +495,43 @@ RULES
   ip6tables -C OUTPUT -m owner --uid-owner agentworker -j AGENTWORKER_OUT 2>/dev/null || \
     ip6tables -I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT
 
-  # Persist as VALID restore files including both AGENTWORKER_OUT and TPROXY_SSRF_BLOCK chains.
-  # Must include *filter header and COMMIT trailer for iptables-restore to work on boot.
-  # Call setup_tinyproxy_ssrf_rules() before this step.
+  # Persist as a VALID restore file (not a grep-filtered fragment)
+  # Must include *filter header and COMMIT trailer for iptables-restore to work on boot
   mkdir -p /etc/iptables
-  TPROXY_UID=$(id -u tinyproxy)
   {
     echo '*filter'
     echo ':AGENTWORKER_OUT - [0:0]'
-    echo ':TPROXY_SSRF_BLOCK - [0:0]'
-    iptables -S AGENTWORKER_OUT | tail -n +2  # rules only, skip chain declaration line
-    iptables -S TPROXY_SSRF_BLOCK | tail -n +2
+    iptables -S AGENTWORKER_OUT | tail -n +2  # rules only, skip ":AGENTWORKER_OUT" header
     echo '-I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT'
-    echo "-I OUTPUT 2 -m owner --uid-owner $TPROXY_UID -j TPROXY_SSRF_BLOCK"
+    echo ':TINYPROXY_OUT - [0:0]'
+    iptables -S TINYPROXY_OUT | tail -n +2    # metadata and RFC1918 REJECT rules
+    echo "-I OUTPUT 1 -m owner --uid-owner $(id -u tinyproxy) -j TINYPROXY_OUT"
     echo 'COMMIT'
   } > /etc/iptables/agent-router-rules.v4
   {
     echo '*filter'
     echo ':AGENTWORKER_OUT - [0:0]'
-    echo ':TPROXY_SSRF_BLOCK - [0:0]'
     ip6tables -S AGENTWORKER_OUT | tail -n +2
-    ip6tables -S TPROXY_SSRF_BLOCK | tail -n +2
     echo '-I OUTPUT 1 -m owner --uid-owner agentworker -j AGENTWORKER_OUT'
-    echo "-I OUTPUT 2 -m owner --uid-owner $TPROXY_UID -j TPROXY_SSRF_BLOCK"
+    echo ':TINYPROXY_OUT - [0:0]'
+    # IPv6 equivalents: fc00::/7 (ULA), fe80::/10 (link-local)
+    echo "-A TINYPROXY_OUT -d fc00::/7 -j REJECT"
+    echo "-A TINYPROXY_OUT -d fe80::/10 -j REJECT"
+    echo "-I OUTPUT 1 -m owner --uid-owner $(id -u tinyproxy) -j TINYPROXY_OUT"
     echo 'COMMIT'
   } > /etc/iptables/agent-router-rules.v6
 }
 ```
 
 Install a systemd unit `agent-router-iptables.service` (see task 83.3) that runs
-both `iptables-restore --noflush /etc/iptables/agent-router-rules.v4` AND
-`ip6tables-restore --noflush /etc/iptables/agent-router-rules.v6` before `agent-router.service`
+`iptables-restore --noflush /etc/iptables/agent-router-rules.v4` before `agent-router.service`
 starts. This replaces `iptables-persistent` and avoids interfering with Docker/ufw.
-Without the IPv6 restore step, agentworker has unfiltered direct IPv6 egress after reboot.
 
 ### H. `push_branch` Bundle Handoff (Hardened)
 
 ```typescript
-const CLEAN_GIT_ENV = { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
-
 async function handlePushBranch(sessionId: string, branch: string): Promise<unknown> {
-  // 1. Validate branch (regex + protected branch check including development/main/master)
+  // 1. Validate branch (regex + protected branch check including development)
   validateBranch(branch);
 
   // 2. Read bundle from agent's session dir (O_NOFOLLOW|O_NONBLOCK prevents FIFO hang)
@@ -385,30 +553,15 @@ async function handlePushBranch(sessionId: string, branch: string): Promise<unkn
   fs.writeFileSync(bundleDst, buf, { mode: 0o600 });
 
   try {
-    // 3. Create daemon-owned bare repo (MUST exist before bundle verify and all subsequent git ops)
+    // 3. Create daemon-owned bare repo and verify bundle
     const bareRepo = path.join(pushTmpDir, 'repo');
     fs.mkdirSync(bareRepo, { mode: 0o700 });
-    await execFileAsync('git', ['init', '--bare', bareRepo], { env: CLEAN_GIT_ENV });
-
-    // 4. Fetch base branch from daemon's canonical bare clone (needed for .github comparison
-    //    and as bundle prerequisite for verify)
-    const baseBranch = config.baseBranch ?? 'development';
-    const bareClonePath = config.bareClonePath;
-    await execFileAsync('git', [
-      '-C', bareRepo,
-      '-c', 'core.hooksPath=/dev/null',
-      '-c', 'protocol.file.allow=always',
-      '-c', 'credential.helper=',
-      'fetch', bareClonePath, `refs/heads/${baseBranch}:refs/remotes/base/${baseBranch}`,
-    ], { env: CLEAN_GIT_ENV });
-
-    // 5. Verify bundle integrity (MUST run inside a repo, AFTER base branch is available
-    //    so prerequisites can be checked)
+    await execFileAsync('git', ['init', '--bare', bareRepo]);
     await execFileAsync('git', [
       '-C', bareRepo, 'bundle', 'verify', bundleDst,
-    ], { env: CLEAN_GIT_ENV });
+    ], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
 
-    // 6. Fetch bundle (after verify passes)
+    // 4. Fetch bundle into bare repo
     await execFileAsync('git', [
       '-C', bareRepo,
       '-c', 'core.hooksPath=/dev/null',
@@ -416,32 +569,27 @@ async function handlePushBranch(sessionId: string, branch: string): Promise<unkn
       '-c', 'protocol.file.allow=always',
       '-c', 'credential.helper=',
       'fetch', bundleDst, `refs/heads/${branch}:refs/heads/${branch}`,
-    ], { env: CLEAN_GIT_ENV });
+    ], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
 
-    // 7. Check for .github/ changes by comparing tip against base branch tree (named refs only).
-    //    Do NOT use FETCH_HEAD — step 6 fetch overwrites it.
-    //    Compare tree SHAs: if identical (or both absent), no workflow files were modified.
-    const tipRef = `refs/heads/${branch}`;
-    const baseRef = `refs/remotes/base/${baseBranch}`;
-    const tipTreeOut = await execFileAsync('git', [
-      '-C', bareRepo, 'rev-parse', '--verify', '--quiet', `${tipRef}:.github`,
-    ], { env: CLEAN_GIT_ENV }).catch((err: {code?: number; stderr?: string}) => {
-      if (err.code === 1 && !err.stderr?.trim()) return { stdout: '' }; // absent: ok
-      throw err; // non-empty stderr means an actual error: fail closed
-    });
-    const baseTreeOut = await execFileAsync('git', [
-      '-C', bareRepo, 'rev-parse', '--verify', '--quiet', `${baseRef}:.github`,
-    ], { env: CLEAN_GIT_ENV }).catch((err: {code?: number; stderr?: string}) => {
-      if (err.code === 1 && !err.stderr?.trim()) return { stdout: '' };
-      throw err;
-    });
-    if (tipTreeOut.stdout.trim() !== baseTreeOut.stdout.trim()) {
-      throw new Error('Bundle modifies .github — workflow pushes are not permitted');
+    // 4b. Fetch the base branch from the daemon's bare clone to compare against
+    const sessionRepo = sessionMgr.getSessionRepo(sessionId)!;
+    const bareCone = getBareCLonePath(sessionRepo);
+    await execFileAsync('git', [
+      '-C', bareRepo, 'fetch', bareCone, `refs/heads/development:refs/heads/_base`,
+    ], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+
+    // 5. Check for .github/ paths in DIFF (not ls-tree) — reject if any changed file is a workflow file
+    const diffOut = await execFileAsync('git', [
+      '-C', bareRepo, 'diff', '--name-only', `refs/heads/_base...refs/heads/${branch}`, '--', '.github/',
+    ], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+    if (diffOut.stdout.trim().length > 0) {
+      throw new Error('Bundle modifies .github/ files — workflow pushes are not permitted');
     }
 
-    // 8. Push from daemon-owned repo (PAT in child env via GIT_ASKPASS, never on disk)
-    const sessionRepo = sessionMgr.getSessionRepo(sessionId)!;
-    const pat = tokenResolver.resolveToken(sessionRepo);
+    // 6. Push from daemon-owned repo (PAT in child env, never on disk)
+    // PAT comes from credentialTokenStore for the session's bound repo — no env fallback
+    const pat = credentialTokenStore.getToken(sessionRepo);
+    if (!pat) throw new Error(`No token configured for repo ${sessionRepo}`);
     await execFileAsync('git', [
       '-C', bareRepo,
       '-c', 'core.hooksPath=/dev/null',
@@ -450,7 +598,8 @@ async function handlePushBranch(sessionId: string, branch: string): Promise<unkn
       'push', 'origin', `refs/heads/${branch}:refs/heads/${branch}`,
     ], {
       env: {
-        ...CLEAN_GIT_ENV,
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_GLOBAL: '/dev/null',
         GIT_TERMINAL_PROMPT: '0',
         GIT_ASKPASS: '/usr/local/libexec/agent-router-askpass',
         GIT_ASKPASS_PASSWORD: pat,
@@ -504,7 +653,7 @@ agent-router/
 | git push leaking PAT via argv | GIT_ASKPASS helper; PAT in child env only |
 | git push running attacker hooks | Bundle fetch into daemon-owned repo; `core.hooksPath=/dev/null` |
 | Agent controls daemon's bare clone | Per-session standalone clone; bare clone mode 700 |
-| Socket squatting | Socket dir mode 0750 (group cannot write) |
+| Socket squatting | Socket dir mode 2750 (group cannot write) |
 | Cloud metadata SSRF via tinyproxy | tinyproxy uid REJECT for 169.254.0.0/16 and RFC1918 |
 | IPv6 exfiltration | ip6tables DROP from AGENTWORKER_OUT |
 | Cross-repo PAT use | Repo scope check on all agent socket ops |
