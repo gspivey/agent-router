@@ -306,6 +306,34 @@ const MAX_BUNDLE_BYTES = 50 * 1024 * 1024; // 50 MB (FR-6.1 step 4)
 const ASKPASS_HELPER = '/usr/local/libexec/agent-router-askpass';
 const CLEAN_GIT_ENV = { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
 
+/**
+ * Build a git auth environment that delivers the PAT without requiring the
+ * askpass helper binary (which is only installed by setup-agent-user.sh).
+ *
+ * When the askpass binary exists (worker-uid isolation path), use it as
+ * before.  When it does not exist (useWorkerUid=false), use the
+ * GIT_CONFIG_COUNT env-config approach to attach the PAT as an HTTP
+ * Authorization header — no binary required, no token in argv.
+ */
+function buildGitAuthEnv(pat: string): Record<string, string> {
+  if (fs.existsSync(ASKPASS_HELPER)) {
+    return {
+      GIT_ASKPASS: ASKPASS_HELPER,
+      GIT_ASKPASS_PASSWORD: pat,
+    };
+  }
+  // GIT_CONFIG_COUNT / KEY/VALUE env-config (git 2.31+).
+  // Sends an HTTP Authorization header for github.com only; no disk writes.
+  const basic = Buffer.from(`x-access-token:${pat}`).toString('base64');
+  return {
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'credential.helper',
+    GIT_CONFIG_VALUE_0: '',
+    GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
+    GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${basic}`,
+  };
+}
+
 export function createAgentServer(deps: AgentServerDeps): AgentServer {
   const {
     socketPath,
@@ -570,8 +598,7 @@ export function createAgentServer(deps: AgentServerDeps): AgentServer {
           env: {
             ...CLEAN_GIT_ENV,
             GIT_TERMINAL_PROMPT: '0',
-            GIT_ASKPASS: ASKPASS_HELPER,
-            GIT_ASKPASS_PASSWORD: pat,
+            ...buildGitAuthEnv(pat),
           },
         },
       );
