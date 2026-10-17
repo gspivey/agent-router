@@ -226,17 +226,31 @@ Idempotent — safe to re-run. It:
 7. Installs tinyproxy on `127.0.0.1:8080` with `FilterDefaultDeny Yes` and an anchored
    allowlist (GitHub, Anthropic, AWS, kiro.dev, npm registry).
 8. Installs iptables rules so `agentworker` can only reach the proxy (REJECT all else, IPv6
-   DROP), plus a `TPROXY_SSRF_BLOCK` chain that stops the proxy itself from reaching
+   DROP), plus a `TINYPROXY_OUT` chain that stops the proxy itself from reaching
    link-local/RFC1918 addresses. Rules persist to `/etc/iptables/agent-router-rules.v{4,6}`
    and are restored on boot by `agent-router-iptables.service`.
 
 ### Enabling it
 
-1. Run the setup script (above).
+Running `sudo scripts/setup-agent-user.sh` is a **required provisioning step** before
+`useWorkerUid: true` has any effect. Until it is run, there is no `agentworker` account to
+drop privileges to and the isolation path is inert — the daemon logs a startup WARNING
+(`useWorkerUid is true but the agentworker account is missing …`) and keeps running as the
+daemon user. The script also adds the daemon user (`agentrouter`) to the `agentworker` group
+so the daemon can open the `0660` agent socket; this supplementary group membership only
+takes effect on a fresh daemon process, so you **must restart the daemon after running
+setup** (step 4 below).
+
+1. Run the setup script (above). This is the prerequisite — without it, `useWorkerUid: true`
+   is inert and the daemon warns at startup.
 2. Authenticate kiro for the worker user: `sudo -u agentworker /abs/path/to/kiro login`.
 3. Set `"useWorkerUid": true` in `config.json`.
-4. Restart the daemon: `systemctl restart agent-router`. On startup the daemon logs
-   `Process isolation config { useWorkerUid: true }`.
+4. Restart the daemon: `systemctl restart agent-router`. A restart is required so the
+   daemon's new `agentworker` supplementary group membership (and thus agent-socket access)
+   takes effect. On startup the daemon logs `Process isolation config { useWorkerUid: true }`.
+
+See [`docs/security-setup.md`](docs/security-setup.md) for the full provisioning runbook and
+the restart requirement.
 
 ### Verification
 

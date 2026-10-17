@@ -119,3 +119,69 @@ export function checkIptablesRules(
     });
   }
 }
+
+/** Minimal user/group lookup surface, injectable for tests (FR-5.3). */
+export interface AgentUserLookup {
+  /** True when the agentworker user AND group both exist on the host. */
+  agentWorkerExists: () => boolean;
+}
+
+/**
+ * Default, non-throwing, unprivileged probe for the `agentworker` account.
+ *
+ * Checks BOTH `/etc/passwd` (for the user) and `/etc/group` (for the group),
+ * since `sudo -u agentworker` requires the user to exist and the daemon's
+ * supplementary group membership requires the group to exist. On systems using
+ * NSS/LDAP these flat files may not carry the entry; the probe then returns
+ * `false` and the startup warning fires, which is the safe default. Any read
+ * error resolves to `false`. No elevated privileges required — mirrors the
+ * `fs.readFileSync`-only approach of `checkIptablesRules`.
+ */
+export const defaultAgentUserLookup: AgentUserLookup = {
+  agentWorkerExists: () => {
+    try {
+      const passwd = fs.readFileSync('/etc/passwd', 'utf-8');
+      const group = fs.readFileSync('/etc/group', 'utf-8');
+      const userOk = passwd.split('\n').some((l) => l.startsWith('agentworker:'));
+      const groupOk = group.split('\n').some((l) => l.startsWith('agentworker:'));
+      return userOk && groupOk;
+    } catch {
+      return false;
+    }
+  },
+};
+
+/**
+ * FR-5: when the daemon is configured for uid isolation (`useWorkerUid: true`)
+ * but the `agentworker` account was never provisioned (the setup script was
+ * not run), the `sudo -u agentworker` spawn path is inert. Warn loudly at
+ * startup so the operator runs `scripts/setup-agent-user.sh`.
+ *
+ * Advisory and non-fatal, matching `checkTokenFilePermissions` and
+ * `checkIptablesRules`: it never throws, and it is a silent no-op when
+ * `useWorkerUid` is `false`. A throwing lookup is treated as "missing" (warn
+ * rather than crash).
+ */
+export function checkAgentWorkerUser(
+  useWorkerUid: boolean,
+  log: Logger,
+  lookup: AgentUserLookup = defaultAgentUserLookup,
+): void {
+  if (!useWorkerUid) return;
+  let exists: boolean;
+  try {
+    exists = lookup.agentWorkerExists();
+  } catch {
+    // Treat a throwing lookup as "missing" — warn rather than crash.
+    exists = false;
+  }
+  if (exists) return;
+  log.warn(
+    'useWorkerUid is true but the agentworker account is missing — ' +
+      'uid isolation is inert; run `sudo scripts/setup-agent-user.sh`',
+    {
+      useWorkerUid,
+      hint: 'sudo scripts/setup-agent-user.sh',
+    },
+  );
+}

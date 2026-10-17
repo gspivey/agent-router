@@ -12,8 +12,10 @@ import { describe, it, expect } from 'vitest';
 import {
   checkTokenFilePermissions,
   checkIptablesRules,
+  checkAgentWorkerUser,
   IPTABLES_RULES_PATH,
   type IsolationFsReader,
+  type AgentUserLookup,
 } from '../../src/isolation-startup.js';
 import type { Logger } from '../../src/log.js';
 
@@ -184,5 +186,49 @@ describe('checkIptablesRules (FR-7.4 / AC-7)', () => {
     };
     checkIptablesRules(log, reader, '/custom/rules.v4');
     expect(calls.filter((c) => c.level === 'warn').length).toBe(0);
+  });
+});
+
+describe('checkAgentWorkerUser (FR-5 / AC-7)', () => {
+  it('does not warn when useWorkerUid is false, regardless of lookup', () => {
+    const { log, calls } = makeLog();
+    const lookup: AgentUserLookup = {
+      agentWorkerExists: () => {
+        throw new Error('lookup should not be called when useWorkerUid is false');
+      },
+    };
+    checkAgentWorkerUser(false, log, lookup);
+    expect(calls.length).toBe(0);
+  });
+
+  it('warns exactly once with the hint when useWorkerUid is true and the account is missing', () => {
+    const { log, calls } = makeLog();
+    const lookup: AgentUserLookup = { agentWorkerExists: () => false };
+    checkAgentWorkerUser(true, log, lookup);
+    const warns = calls.filter((c) => c.level === 'warn');
+    expect(warns.length).toBe(1);
+    expect(warns[0]!.msg).toMatch(/agentworker account is missing/);
+    expect(warns[0]!.ctx?.['hint']).toBe('sudo scripts/setup-agent-user.sh');
+    expect(warns[0]!.ctx?.['useWorkerUid']).toBe(true);
+  });
+
+  it('does not warn when useWorkerUid is true and the account exists', () => {
+    const { log, calls } = makeLog();
+    const lookup: AgentUserLookup = { agentWorkerExists: () => true };
+    checkAgentWorkerUser(true, log, lookup);
+    expect(calls.filter((c) => c.level === 'warn').length).toBe(0);
+  });
+
+  it('treats a throwing lookup as missing: warns once, never rethrows', () => {
+    const { log, calls } = makeLog();
+    const lookup: AgentUserLookup = {
+      agentWorkerExists: () => {
+        throw new Error('getent exploded');
+      },
+    };
+    expect(() => checkAgentWorkerUser(true, log, lookup)).not.toThrow();
+    const warns = calls.filter((c) => c.level === 'warn');
+    expect(warns.length).toBe(1);
+    expect(warns[0]!.ctx?.['hint']).toBe('sudo scripts/setup-agent-user.sh');
   });
 });

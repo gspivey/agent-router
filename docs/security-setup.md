@@ -83,7 +83,12 @@ sudo KIRO_PATH=/abs/path/to/kiro ROOTDIR=/home/agentrouter/.agent-router \
 
 The script is **idempotent** — safe to re-run after an upgrade. It:
 
-1. Creates the `agentworker` system user (home `/home/agentworker`, `nologin` shell).
+1. Creates the `agentworker` system user (home `/home/agentworker`, `nologin` shell), and adds
+   the daemon user (`agentrouter`) to the `agentworker` group as a supplementary member so the
+   daemon can `chown`/`chmod` and open the `0660` agent socket. (The reverse — adding
+   `agentworker` to the `agentrouter` group — is deliberately **not** done; it would grant
+   `agentworker` read access to `$ROOTDIR`.) This new group membership only applies to a fresh
+   daemon process, so the daemon must be restarted after setup (see "Enabling it", step 4).
 2. Writes `/etc/sudoers.d/agent-router-worker` (mode 440, validated with `visudo -c`): lets the
    daemon run `kiro acp` as `agentworker`, run the two fixed wrapper scripts, run read-only
    `git rev-parse`/`git log` in the worktree base as `agentworker`, and
@@ -98,31 +103,41 @@ The script is **idempotent** — safe to re-run after an upgrade. It:
 7. Installs tinyproxy on `127.0.0.1:8080` with `FilterDefaultDeny Yes` and an anchored
    hostname allowlist (GitHub, Anthropic, AWS, kiro.dev, npm registry).
 8. Installs iptables rules so `agentworker` can only reach the proxy (REJECT everything else,
-   IPv6 DROP), plus a `TPROXY_SSRF_BLOCK` chain that stops the proxy itself from reaching
+   IPv6 DROP), plus a `TINYPROXY_OUT` chain that stops the proxy itself from reaching
    link-local / RFC1918 addresses. Rules persist to `/etc/iptables/agent-router-rules.v{4,6}`
    and are restored on boot by `agent-router-iptables.service`.
 
 ### Enabling it
 
-1. Run the setup script (above).
+Running `sudo scripts/setup-agent-user.sh` is a **required provisioning prerequisite** for
+`useWorkerUid: true`. Until it is run there is no `agentworker` account to drop privileges to,
+so the isolation path is inert and the daemon warns at startup (see below).
+
+1. Run the setup script (above). This is the prerequisite — skip it and `useWorkerUid: true`
+   has no effect.
 2. Authenticate kiro for the worker user:
    ```bash
    sudo -u agentworker /abs/path/to/kiro login     # or: sudo -u agentworker kiro-cli login
    ```
 3. Set `"useWorkerUid": true` in `config.json`.
-4. Restart the daemon: `systemctl restart agent-router`.
+4. Restart the daemon: `systemctl restart agent-router`. A restart is **required** so the
+   daemon's new `agentworker` supplementary group membership (added by `usermod -aG` in setup)
+   takes effect — without it the daemon cannot open the `0660` agent socket.
 
-On startup the daemon logs its mode and runs two advisory checks:
+On startup the daemon logs its mode and runs three advisory checks:
 
 ```
 Process isolation config { useWorkerUid: true }
 ```
 
 If a secret file is group/other-readable it logs
-`Secret file is group/other-readable — tighten permissions`, and if the iptables rules file is
+`Secret file is group/other-readable — tighten permissions`; if the iptables rules file is
 missing or lacks the `AGENTWORKER_OUT` chain it logs
-`iptables rules file ... — egress may be unfiltered`. Both are **warnings only** and never
-block startup — they tell you the substrate is not fully in place.
+`iptables rules file ... — egress may be unfiltered`; and if `useWorkerUid: true` but the
+`agentworker` account was never provisioned (setup script not run) it logs
+`useWorkerUid is true but the agentworker account is missing — uid isolation is inert; run
+\`sudo scripts/setup-agent-user.sh\``. All three are **warnings only** and never block
+startup — they tell you the substrate is not fully in place.
 
 ## Verification (acceptance criteria)
 
@@ -198,7 +213,7 @@ Both are exercised by `test/tier2/agent-isolation.test.ts`.
   could in principle exfiltrate to a repo or bucket it controls. This is accepted and documented.
 - **kiro login tokens** under `/home/agentworker/.kiro/` are readable by the agent process (it
   runs as `agentworker`). These are the worker's own kiro credentials, not your GitHub PATs.
-- **`*.amazonaws.com`** can resolve to private IPs; the `TPROXY_SSRF_BLOCK` chain blocks the
+- **`*.amazonaws.com`** can resolve to private IPs; the `TINYPROXY_OUT` chain blocks the
   proxy from reaching link-local and RFC1918 ranges to prevent cloud-metadata SSRF.
 
 ## Revert / debug
