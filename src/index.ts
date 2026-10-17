@@ -56,7 +56,8 @@ import { warnOnConflictingMcpConfig } from './mcp-config-check.js';
 import { createRestartRequiredState } from './restart-required.js';
 import { createTokenStore } from './token-store.js';
 import type { TokenStore } from './token-store.js';
-import { validateTokenStoreStartup } from './token-store-startup.js';
+import { validateTokenStoreStartup, checkAgentSocketTokenSource } from './token-store-startup.js';
+import { credentialTokenResolver } from './token-resolver.js';
 import { createReaper } from './reaper.js';
 import type { Reaper } from './reaper.js';
 import { initTaskDatabase } from './task-db.js';
@@ -608,6 +609,11 @@ async function main(): Promise<void> {
   // Validate: cannot use MCP credential mode with fallback (single GITHUB_TOKEN)
   validateTokenStoreStartup(credentialTokenStore, config.credentialMode);
 
+  // Advisory: in `_fallback` mode the agent-socket PAT operations fail closed
+  // because `credentialTokenResolver` has no env fallback (security-isolation-fix
+  // FR-2.4). Warn operators that a tokens.json is required for those ops.
+  checkAgentSocketTokenSource(credentialTokenStore, log);
+
   // Register SIGHUP handler for manual token reload (Requirement 2.1)
   process.on('SIGHUP', () => {
     log.info('SIGHUP received — reloading token store');
@@ -795,7 +801,12 @@ async function main(): Promise<void> {
     socketPath: agentSocketPath,
     sessionMgr,
     github,
-    tokenResolver: (o, r) => tokenResolver(o, r),
+    // Agent-socket PAT source: credential token store ONLY, no env fallback —
+    // a repo with no stored project token fails closed (security-isolation-fix
+    // FR-2). The daemon's envFallback `tokenResolver` is intentionally NOT used
+    // here (it remains in use for the `github` client and the per-session
+    // spawn env below).
+    tokenResolver: credentialTokenResolver(credentialTokenStore),
     log,
     db,
     sessionFiles,

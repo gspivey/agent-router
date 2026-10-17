@@ -7,10 +7,23 @@
  * Requirements: 1.5, 4.4
  */
 import { describe, it, expect } from 'vitest';
-import { validateTokenStoreStartup } from '../../src/token-store-startup.js';
+import { validateTokenStoreStartup, checkAgentSocketTokenSource } from '../../src/token-store-startup.js';
 import { FatalError } from '../../src/errors.js';
 import type { TokenStore, TokenMap, ProjectEntry } from '../../src/token-store.js';
 import { Secret } from '../../src/secret.js';
+import type { Logger } from '../../src/log.js';
+
+interface LogCall { level: 'info' | 'warn' | 'error'; msg: string; ctx?: Record<string, unknown> | undefined }
+function makeLog(): { log: Logger; calls: LogCall[] } {
+  const calls: LogCall[] = [];
+  const log = {
+    info: (msg: string, ctx?: Record<string, unknown>) => calls.push({ level: 'info', msg, ctx }),
+    warn: (msg: string, ctx?: Record<string, unknown>) => calls.push({ level: 'warn', msg, ctx }),
+    error: (msg: string, ctx?: Record<string, unknown>) => calls.push({ level: 'error', msg, ctx }),
+    child: () => log,
+  } as unknown as Logger;
+  return { log, calls };
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -85,5 +98,25 @@ describe('validateTokenStoreStartup', () => {
       const store = createMockTokenStore(['_fallback']);
       expect(() => validateTokenStoreStartup(store, 'mcp')).toThrow(FatalError);
     });
+  });
+});
+
+describe('checkAgentSocketTokenSource (FR-2.4 / AC-10)', () => {
+  it('warns when the store is in _fallback mode', () => {
+    const store = createMockTokenStore(['_fallback']);
+    const { log, calls } = makeLog();
+    checkAgentSocketTokenSource(store, log);
+    const warns = calls.filter((c) => c.level === 'warn');
+    expect(warns.length).toBe(1);
+    expect(warns[0]!.msg).toMatch(/tokens\.json/);
+    expect(warns[0]!.msg).toMatch(/push_branch|pr_create|pr_view/);
+    expect(warns[0]!.ctx?.['hint']).toMatch(/tokens\.json/);
+  });
+
+  it('does not warn when real projects are present (no _fallback)', () => {
+    const store = createMockTokenStore(['project-a']);
+    const { log, calls } = makeLog();
+    checkAgentSocketTokenSource(store, log);
+    expect(calls.filter((c) => c.level === 'warn').length).toBe(0);
   });
 });

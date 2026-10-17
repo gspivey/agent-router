@@ -36,6 +36,8 @@ import { spawnACPClient, buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from '../.
 import { createKiroAdapter } from '../../src/adapters/kiro.js';
 import { createClaudeCodeAdapter } from '../../src/adapters/claude-code.js';
 import { createTokenResolver, resolveSessionTokenEnv } from '../../src/github.js';
+import { createTokenStore } from '../../src/token-store.js';
+import { credentialTokenResolver } from '../../src/token-resolver.js';
 import { createAgentServer, type AgentServer, type AgentServerDeps } from '../../src/agent-server.js';
 import { createCliServer, type CliServer } from '../../src/cli-server.js';
 import { FakeKiroBackend } from '../harness/fake-kiro.js';
@@ -384,5 +386,150 @@ describe('agent socket guards without side effects (FR-5 / FR-6)', () => {
     });
     expect(resp['error']).toBe('Protected branch');
     expect(execCalls.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix 2 (FR-2 / AC-3): agent-server PAT source is the credential token store
+// with NO env fallback — a repo with no stored token fails closed.
+// ---------------------------------------------------------------------------
+
+describe('agent-server PAT source fails closed without a stored token (FR-2 / AC-3)', () => {
+  const SESSION_ID = 'iso-notoken-session';
+  const CAP_TOKEN = 'cap-token-notoken0123456789abcd01';
+  const SESSION_REPO = 'octo/widget'; // deliberately NOT in tokens.json
+
+  let tmpDir: string;
+  let socketPath: string;
+  let server: AgentServer;
+  let fetchCalls: number;
+  let execCalls: Array<readonly string[]>;
+  let execEnvs: Array<Record<string, string | undefined> | undefined>;
+  const ORIG_GH = process.env['GITHUB_TOKEN'];
+
+  const sessionMgr = {
+    validateCapToken: (sid: string, token: string) => sid === SESSION_ID && token === CAP_TOKEN,
+    getSessionRepo: (sid: string) => (sid === SESSION_ID ? SESSION_REPO : undefined),
+    getSessionReadRepos: () => [],
+  } as unknown as SessionManager;
+
+  const githubStub = {} as unknown as GitHubClient;
+
+  function roundTrip(frame: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return new Promise((resolve, reject) => {
+      const socket = net.createConnection(socketPath);
+      let buffer = '';
+      const timer = setTimeout(() => {
+        socket.destroy();
+        reject(new Error('agent socket timeout'));
+      }, 8000);
+      socket.on('connect', () => socket.write(JSON.stringify(frame) + '\n'));
+      socket.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString();
+        const idx = buffer.indexOf('\n');
+        if (idx !== -1) {
+          clearTimeout(timer);
+          socket.destroy();
+          try {
+            resolve(JSON.parse(buffer.slice(0, idx)) as Record<string, unknown>);
+          } catch (e) {
+            reject(e instanceof Error ? e : new Error(String(e)));
+          }
+        }
+      });
+      socket.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  beforeEach(async () => {
+    // A GITHUB_TOKEN in the env must NOT leak through — assert it never appears.
+    process.env['GITHUB_TOKEN'] = 'ghp_SENTINEL_env';
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-iso-notoken-'));
+    socketPath = path.join(tmpDir, 'agent.sock');
+    fetchCalls = 0;
+    execCalls = [];
+    execEnvs = [];
+
+    // Real token store whose only project does NOT contain SESSION_REPO.
+    const tokensFile = path.join(tmpDir, 'tokens.json');
+    fs.writeFileSync(
+      tokensFile,
+      JSON.stringify({ projects: { other: { token: 'tok-other', repos: ['someone/else'] } } }),
+    );
+    const store = createTokenStore({ tokensFilePath: tokensFile, log: silentLog });
+
+    const fetchImpl: typeof fetch = (async () => {
+      fetchCalls += 1;
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+
+    async function execFileImpl(
+      _cmd: string,
+      args: readonly string[],
+      options?: { env?: Record<string, string | undefined> },
+    ): Promise<{ stdout: string; stderr: string }> {
+      execCalls.push(args);
+      execEnvs.push(options?.env);
+      // rev-parse returns matching tree SHAs so the .github guard passes and
+      // execution reaches resolvePat (which must then throw).
+      if (args.includes('rev-parse')) return { stdout: 'SAME\n', stderr: '' };
+      return { stdout: '', stderr: '' };
+    }
+
+    server = createAgentServer({
+      socketPath,
+      sessionMgr,
+      github: githubStub,
+      tokenResolver: credentialTokenResolver(store),
+      log: silentLog,
+      worktreeBase: path.join(tmpDir, 'worktrees'),
+      baseBranch: 'development',
+      fetchImpl,
+      // Defined so Fix 3's .github guard does not short-circuit first.
+      bareClonePathFor: (): string | undefined => path.join(tmpDir, 'bare-clone'),
+      execFileImpl: execFileImpl as unknown as NonNullable<AgentServerDeps['execFileImpl']>,
+    });
+    await server.start();
+  });
+
+  afterEach(async () => {
+    await server.shutdown();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    if (ORIG_GH === undefined) delete process.env['GITHUB_TOKEN'];
+    else process.env['GITHUB_TOKEN'] = ORIG_GH;
+  });
+
+  it('push_branch returns an error and issues NO push when no token is stored', async () => {
+    const workDir = path.join(tmpDir, 'worktrees', SESSION_ID, 'work');
+    fs.mkdirSync(workDir, { recursive: true });
+    fs.writeFileSync(path.join(workDir, 'push-bundle.bundle'), Buffer.from('stub-bundle'));
+
+    const resp = await roundTrip({
+      op: 'push_branch',
+      session_id: SESSION_ID,
+      cap_token: CAP_TOKEN,
+      branch: 'agent/fix',
+    });
+    expect(resp['error']).toBe('push failed');
+    // No push command ran, and the sentinel GITHUB_TOKEN never reached any exec env.
+    expect(execCalls.some((a) => a.includes('push'))).toBe(false);
+    for (const env of execEnvs) {
+      if (env) expect(env['GITHUB_TOKEN']).toBeUndefined();
+    }
+  });
+
+  it('github_forward never calls fetch when the token lookup fails', async () => {
+    const resp = await roundTrip({
+      op: 'github_forward',
+      session_id: SESSION_ID,
+      cap_token: CAP_TOKEN,
+      method: 'GET',
+      path: '/repos/octo/widget/pulls/1',
+    });
+    expect(resp['error']).toBe('not permitted');
+    expect(fetchCalls).toBe(0);
   });
 });

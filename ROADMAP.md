@@ -1075,7 +1075,7 @@ then implement tasks `12`, `13`, `14`, `15`, `16`. Depends on item 88 (router
 overview route and MessageRow must be present).
 
 - Spec: `.kiro/specs/spa-polish/` · tasks `12`, `13`, `14`, `15`, `16`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #159
 
 ---
 
@@ -1091,7 +1091,7 @@ fail closed. Adds startup warnings for both missing `agentworker` account (when 
 true`) and `_fallback` token mode. Depends on items 83–86.
 
 - Spec: `.kiro/specs/security-isolation-fix/` · tasks `90.1`–`90.10`
-- [ ] Complete
+- [x] Complete · PR: #160
 
 ### 91. Security isolation fix — provisioning (usermod step, iptables chain rename, docs)
 

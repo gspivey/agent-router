@@ -23,6 +23,8 @@ import * as path from 'node:path';
 import * as url from 'node:url';
 import * as cp from 'node:child_process';
 
+import { resolveAgentSocket } from '../../src/mcp-server.js';
+
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = path.resolve(__dirname, '../../src/mcp-server.ts');
 
@@ -90,17 +92,25 @@ class McpSubprocess {
     private daemonSocket: string,
     private agentSocket: string,
     private capToken: string,
+    /** When false, AGENT_ROUTER_AGENT_SOCK is NOT set (Fix 1 fallback test). */
+    private setAgentSock: boolean = true,
   ) {}
 
   async start(): Promise<void> {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      AGENT_ROUTER_SESSION_ID: SESSION_ID,
+      AGENT_ROUTER_SOCKET: this.daemonSocket,
+      AGENT_ROUTER_CAP_TOKEN: this.capToken,
+    };
+    if (this.setAgentSock) {
+      env['AGENT_ROUTER_AGENT_SOCK'] = this.agentSocket;
+    } else {
+      // Ensure a leaked parent value cannot satisfy the relay.
+      delete env['AGENT_ROUTER_AGENT_SOCK'];
+    }
     this.proc = cp.spawn('node', ['--import', 'tsx/esm', MCP_SERVER_PATH], {
-      env: {
-        ...process.env,
-        AGENT_ROUTER_SESSION_ID: SESSION_ID,
-        AGENT_ROUTER_SOCKET: this.daemonSocket,
-        AGENT_ROUTER_AGENT_SOCK: this.agentSocket,
-        AGENT_ROUTER_CAP_TOKEN: this.capToken,
-      },
+      env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.proc.stdout!.on('data', (chunk: Buffer) => {
@@ -258,5 +268,96 @@ describe('MCP server (item 85)', () => {
     const frame = agentSocket.frames.find((f) => f['op'] === 'pr_view');
     expect(frame).toBeDefined();
     expect(frame!['pr_number']).toBe(7);
+  });
+});
+
+/**
+ * Fix 1 (security-isolation-fix FR-1): `resolveAgentSocket` resolves ONLY from
+ * `ctx.agentSocket` and `AGENT_ROUTER_AGENT_SOCK`, treats empty strings as
+ * absent, throws when both are absent, and NEVER falls back to the operator
+ * socket (`AGENT_ROUTER_SOCKET` / `daemonSocket`).
+ */
+describe('resolveAgentSocket pure helper (Fix 1 / FR-1)', () => {
+  it('returns ctx socket when present, env unset', () => {
+    expect(resolveAgentSocket('real-path', undefined)).toBe('real-path');
+  });
+
+  it('returns env socket when ctx undefined', () => {
+    expect(resolveAgentSocket(undefined, 'real-path')).toBe('real-path');
+  });
+
+  it('falls through empty ctx string to env', () => {
+    expect(resolveAgentSocket('', 'real-path')).toBe('real-path');
+  });
+
+  it('throws exact message when both absent', () => {
+    expect(() => resolveAgentSocket(undefined, undefined)).toThrow(
+      'AGENT_ROUTER_AGENT_SOCK not set; cannot relay MCP tool',
+    );
+  });
+
+  it('throws exact message when both are empty strings', () => {
+    expect(() => resolveAgentSocket('', '')).toThrow(
+      'AGENT_ROUTER_AGENT_SOCK not set; cannot relay MCP tool',
+    );
+  });
+});
+
+describe('MCP relay never falls back to the operator socket (Fix 1 / AC-1)', () => {
+  let tmpDir: string;
+  let daemonSocketPath: string;
+  let daemon: FakeAgentSocket; // records frames; proves the operator socket is untouched
+  let agentSocket: FakeAgentSocket;
+  let mcp: McpSubprocess;
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-fix1-'));
+    daemonSocketPath = path.join(tmpDir, 'daemon.sock');
+    const agentSocketPath = path.join(tmpDir, 'agent.sock');
+
+    // The operator socket is a *recording* server so we can assert it is never
+    // contacted by a relay when the agent socket is unset.
+    daemon = new FakeAgentSocket(daemonSocketPath);
+    await daemon.start();
+
+    agentSocket = new FakeAgentSocket(agentSocketPath);
+    await agentSocket.start();
+
+    // setAgentSock = false → AGENT_ROUTER_AGENT_SOCK is NOT set; only
+    // AGENT_ROUTER_SOCKET (the operator socket) is present in the env.
+    mcp = new McpSubprocess(daemonSocketPath, agentSocketPath, CAP_TOKEN, false);
+    await mcp.start();
+  });
+
+  afterEach(async () => {
+    await mcp.stop();
+    await agentSocket.stop();
+    await daemon.stop();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('github_http_forward returns isError and contacts neither the operator nor agent socket', async () => {
+    const resp = await mcp.callTool('github_http_forward', {
+      method: 'GET',
+      path: '/repos/o/r/pulls/1',
+    });
+    expect(resp.result?.isError).toBe(true);
+    const text = resp.result?.content?.[0]?.text ?? '';
+    expect(text).toContain('AGENT_ROUTER_AGENT_SOCK not set; cannot relay MCP tool');
+    // Give any stray write a moment to land, then assert zero frames.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(daemon.frames.length).toBe(0); // operator socket never contacted
+    expect(agentSocket.frames.length).toBe(0); // agent socket not resolvable
+  });
+
+  it('push_branch returns isError without crashing the MCP server', async () => {
+    const resp = await mcp.callTool('push_branch', { branch: 'agent/fix' });
+    expect(resp.result?.isError).toBe(true);
+    const text = resp.result?.content?.[0]?.text ?? '';
+    expect(text).toContain('AGENT_ROUTER_AGENT_SOCK not set; cannot relay MCP tool');
+    // Server is still alive: a subsequent non-relay call (tools/list) works.
+    const list = await mcp.listTools();
+    expect(list.result?.tools?.length).toBeGreaterThan(0);
+    expect(daemon.frames.length).toBe(0);
   });
 });

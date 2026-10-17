@@ -178,6 +178,15 @@ network egress except through a hostname-filtering proxy. Enable it by setting
 This is **opt-in and Linux-only**. With `useWorkerUid: false` (the default) the daemon runs
 exactly as before and the setup script is not required.
 
+> **`tokens.json` is required for agent-socket PAT operations.** The relays that need a
+> GitHub PAT — `push_branch`, `pr_create`, `pr_view`, and authenticated
+> `github_http_forward` — resolve credentials **only** through `tokens.json` (no
+> `GITHUB_TOKEN` env fallback). Every repo an agent operates on must appear in a project's
+> `repos` array; otherwise those relays fail closed with `No token configured for repo
+> <owner>/<repo>`. In `_fallback` mode (no `tokens.json`) the daemon logs a startup WARNING
+> and those operations are unavailable. This holds regardless of `useWorkerUid`. See
+> [`docs/security-setup.md`](docs/security-setup.md).
+
 ### Prerequisites
 
 The setup script runs as root and expects a Debian/Ubuntu host (20.04+). It installs and
