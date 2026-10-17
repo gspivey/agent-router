@@ -1102,7 +1102,7 @@ then implement tasks `91.1`–`91.8`. Adds `usermod -aG "$WORKER_USER" "$DAEMON_
 item 90 (merge conflict on `src/index.ts` and `src/isolation-startup.ts`).
 
 - Spec: `.kiro/specs/security-isolation-fix/` · tasks `91.1`–`91.8`
-- [ ] Complete
+- [x] Complete · PR: #161
 
 ---
 
