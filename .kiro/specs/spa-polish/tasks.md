@@ -203,35 +203,35 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
 
 ## Group 3 — ROADMAP item 89: Overview page, Config cron status, empty states
 
-- [ ] 12. Build the Overview page
-  - [ ] 12.1 Create `client/src/components/StatCard.svelte` built on `Card` with
+- [x] 12. Build the Overview page
+  - [x] 12.1 Create `client/src/components/StatCard.svelte` built on `Card` with
     props `{ label: string; value: string | number; badge?: { state: 'active' |
     'paused' | 'error'; label?: string } }`. When `badge` is provided, render
     `<StatusBadge state={badge.state} label={badge.label} />` below the value (the
     Health card needs a badge widget, which `value` alone cannot carry). (Req 12.3)
-  - [ ] 12.2 Create `client/src/components/Overview.svelte` fetching `getOverview()` on
+  - [x] 12.2 Create `client/src/components/Overview.svelte` fetching `getOverview()` on
     mount with loading/error/empty handling; render a `PageHeader`. (Req 12.1, 14.3)
-  - [ ] 12.3 Stat row: four `StatCard`s (Active Sessions, Queued Work, Recent PRs 24h
+  - [x] 12.3 Stat row: four `StatCard`s (Active Sessions, Queued Work, Recent PRs 24h
     count, Health) in `grid grid-cols-2 gap-4 lg:grid-cols-4`. The Health card uses
     `value="System"` and a `badge` derived from `health`:
     `healthy → {state:'active', label:'Healthy'}`, `degraded → {state:'paused',
     label:'Degraded'}` (no `error` health state — see HIGH-6). (Req 12.2)
-  - [ ] 12.4 Recent Sessions: last five sessions via `SessionCard.svelte` (reuse the
+  - [x] 12.4 Recent Sessions: last five sessions via `SessionCard.svelte` (reuse the
     session-list API method, slice to 5). (Req 12.4)
-  - [ ] 12.5 Cron Summary: compact rows (name, schedule, `StatusBadge` from
+  - [x] 12.5 Cron Summary: compact rows (name, schedule, `StatusBadge` from
     `cron_summary[].state`, next fire). (Req 12.5)
-  - [ ] 12.6 Skeleton loading state per section while in flight. (Req 12.6)
-  - [ ] 12.7 Empty states (muted icon + message) per section. (Req 12.7, 14.1)
-  - [ ] 12.8 Replace the Group-2 `overview` route placeholder in `App.svelte` with
+  - [x] 12.6 Skeleton loading state per section while in flight. (Req 12.6)
+  - [x] 12.7 Empty states (muted icon + message) per section. (Req 12.7, 14.1)
+  - [x] 12.8 Replace the Group-2 `overview` route placeholder in `App.svelte` with
     `Overview`. (Req 9.4)
 
-- [ ] 13. Config cron status column
-  - [ ] 13.1 Source the cron error state from the `/api/overview` `cron_summary` data,
+- [x] 13. Config cron status column
+  - [x] 13.1 Source the cron error state from the `/api/overview` `cron_summary` data,
     NOT from `GET /config` (which is out of scope and never sets `last_run_failed`).
     `ConfigView.svelte` fetches `/api/overview` once on mount (reusing the `getOverview()`
     API method) to obtain `cron_summary`, then uses the matching entry's `state` for the
     `StatusBadge`. No `last_run_failed` is read from `/config`. (Req 13.1)
-  - [ ] 13.2 In `ConfigView.svelte` cron table, add a `StatusBadge` column BEFORE the
+  - [x] 13.2 In `ConfigView.svelte` cron table, add a `StatusBadge` column BEFORE the
     Pause/Resume button; derive state from two sources matched by `name`:
     - **Error bit**: `cron_summary[name].state === 'error'` (from `/api/overview`).
     - **Paused bit**: `entry.paused || optimistic-paused` (from `GET /config` +
@@ -241,39 +241,39 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
       this name: derive from `entry.paused` only (no error bit).
     Keep the Pause/Resume button's neutral outline style. (Req 13.2, 13.3, 13.4, 13.5)
 
-- [ ] 14. Empty states and remaining polish
-  - [ ] 14.1 Add a muted icon + message empty state to `SessionList.svelte` and the
+- [x] 14. Empty states and remaining polish
+  - [x] 14.1 Add a muted icon + message empty state to `SessionList.svelte` and the
     chat view where data is empty. (Req 14.1)
-  - [ ] 14.2 Add a paused indicator to `RepoGroup.svelte` when all sessions in the
+  - [x] 14.2 Add a paused indicator to `RepoGroup.svelte` when all sessions in the
     group are inactive. (Req 14.2)
-  - [ ] 14.3 Ensure each primary view renders a `PageHeader`. (Req 14.3)
-  - [ ] 14.4 Verify every badge has a text label and active nav carries
+  - [x] 14.3 Ensure each primary view renders a `PageHeader`. (Req 14.3)
+  - [x] 14.4 Verify every badge has a text label and active nav carries
     `aria-current="page"`. (Req 14.4)
 
-- [ ] 15. Item 89 tests (vitest)
-  - [ ] 15.1 Component: `Overview` fetches on mount, renders four stat cards + recent
+- [x] 15. Item 89 tests (vitest)
+  - [x] 15.1 Component: `Overview` fetches on mount, renders four stat cards + recent
     sessions + cron summary; shows skeletons while loading and empty states when
     sections are empty. (Req 12)
-  - [ ] 15.2 Component: `StatCard` renders label + value, and renders a `StatusBadge`
+  - [x] 15.2 Component: `StatCard` renders label + value, and renders a `StatusBadge`
     below the value when the optional `badge` prop is supplied (Health card:
     `value="System"` + `{state:'active', label:'Healthy'}` or
     `{state:'paused', label:'Degraded'}`). (Req 12.3)
-  - [ ] 15.3 Component: `ConfigView` cron table shows the `StatusBadge` column before
+  - [x] 15.3 Component: `ConfigView` cron table shows the `StatusBadge` column before
     the action; state derives error-first from the `/api/overview` `cron_summary`
     combined with the optimistic paused flag; optimistic toggle updates the badge.
     (Req 13)
-  - [ ] 15.4 Component: `RepoGroup` paused indicator when all sessions inactive;
+  - [x] 15.4 Component: `RepoGroup` paused indicator when all sessions inactive;
     empty states present on list/overview/chat. (Req 14.1, 14.2)
 
 ---
 
 ## Final verification (all items)
 
-- [ ] 16. Feature-level checks
-  - [ ] 16.1 `svelte-check` clean. (NFR-3)
-  - [ ] 16.2 No NEW `{@html}` sink in any new/modified component; the only sanitized
+- [x] 16. Feature-level checks
+  - [x] 16.1 `svelte-check` clean. (NFR-3)
+  - [x] 16.2 No NEW `{@html}` sink in any new/modified component; the only sanitized
     markdown path remains `renderMarkdown()` inside `MessageBubble.svelte`. (NFR-1)
-  - [ ] 16.3 No hardcoded hex outside `app.css`; all colors `var(--token)`. (NFR-2)
-  - [ ] 16.4 `MessageBubble.svelte` and `SystemPill.svelte` still exist. (NFR-5)
-  - [ ] 16.5 All six issues verified by the vitest suites above; full client test run
+  - [x] 16.3 No hardcoded hex outside `app.css`; all colors `var(--token)`. (NFR-2)
+  - [x] 16.4 `MessageBubble.svelte` and `SystemPill.svelte` still exist. (NFR-5)
+  - [x] 16.5 All six issues verified by the vitest suites above; full client test run
     green.
