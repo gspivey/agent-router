@@ -88,14 +88,19 @@ describe('ChatView — historical render', () => {
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(detailResponse(entries, 1));
 
-    const { getByTestId, queryByTestId } = render(ChatView, { sessionId: 's1' });
+    const { getByTestId, queryByTestId, getAllByTestId } = render(ChatView, { sessionId: 's1' });
 
     await waitFor(() => expect(queryByTestId('chat-skeletons')).toBeNull());
 
-    // One reassembled agent bubble ("Hi there").
+    // One reassembled agent bubble ("Hi there"), rendered through MessageRow
+    // (agent kind) via the MessageBubble sanitized sink.
     expect(getByTestId('message-bubble').textContent).toContain('Hi there');
-    // System pill, tool card, permission card, internal pill, unknown pill.
-    expect(getByTestId('system-pill').textContent).toContain('Session started');
+    // System row via MessageRow (centered, no bubble); tool/permission/internal/
+    // unknown keep their dedicated components.
+    const systemRows = getAllByTestId('message-row').filter(
+      (el) => el.getAttribute('data-kind') === 'system',
+    );
+    expect(systemRows.some((el) => el.textContent?.includes('Session started'))).toBe(true);
     expect(getByTestId('tool-call-header').textContent).toContain('read_file');
     expect(getByTestId('permission-card').textContent).toContain('approve');
     expect(getByTestId('internal-pill').textContent).toBeTruthy();

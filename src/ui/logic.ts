@@ -12,6 +12,10 @@ export interface SSEEvent {
   data: string;
 }
 
+export interface HashRouteOverview {
+  view: 'overview';
+}
+
 export interface HashRouteList {
   view: 'list';
 }
@@ -25,7 +29,11 @@ export interface HashRouteConfig {
   view: 'config';
 }
 
-export type HashRoute = HashRouteList | HashRouteDetail | HashRouteConfig;
+export type HashRoute =
+  | HashRouteOverview
+  | HashRouteList
+  | HashRouteDetail
+  | HashRouteConfig;
 
 /**
  * Merge SSE events into an existing list, deduplicating by id.
@@ -90,21 +98,47 @@ export function deriveWaitingFor(lastEntryType: string | undefined): string | un
 
 /**
  * Parse a hash-based route string.
- * `#/` or empty → list view
+ * `#/` or empty → overview view
+ * `#/sessions` → session list view
  * `#/sessions/<id>` → detail view
  * `#/config` → config view
- * Anything else → list view
+ * Anything else → overview view (fallback)
  */
 export function parseHashRoute(hash: string): HashRoute {
   const trimmed = hash.startsWith('#') ? hash.slice(1) : hash;
+  // `#/sessions/<id>` → detail. The regex already excludes bare `/sessions`
+  // (it requires a trailing non-empty segment), so the `/sessions` branch below
+  // is non-overlapping.
   const match = /^\/sessions\/([^/]+)$/.exec(trimmed);
   if (match?.[1]) {
     return { view: 'detail', sessionId: match[1] };
   }
+  if (trimmed === '/sessions') {
+    return { view: 'list' };
+  }
   if (trimmed === '/config') {
     return { view: 'config' };
   }
-  return { view: 'list' };
+  // `#/`, empty, and any unrecognized hash land on the Overview dashboard.
+  return { view: 'overview' };
+}
+
+/**
+ * Map a parsed route to the `document.title` string for that view
+ * (spa-polish ROADMAP 88, Req 9.5). Kept pure so it is Tier-1 testable; the
+ * router applies it inside `syncRoute()`.
+ */
+export function routeTitle(route: HashRoute): string {
+  switch (route.view) {
+    case 'overview':
+      return 'Agent Router';
+    case 'list':
+      return 'Sessions · Agent Router';
+    case 'config':
+      return 'Config · Agent Router';
+    case 'detail':
+      return 'Session · Agent Router';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +170,69 @@ export function formatDuration(seconds: number): string {
  */
 export function prUrl(repo: string, prNumber: number): string {
   return `https://github.com/${repo}/pull/${prNumber}`;
+}
+
+// ---------------------------------------------------------------------------
+// Message grammar helpers (unified chat row — spa-polish ROADMAP 88)
+// ---------------------------------------------------------------------------
+
+/**
+ * The closed set of row kinds the unified `MessageRow` component renders. Tool
+ * calls, permissions, internal metadata, and loading skeletons are rendered by
+ * their own dedicated components and are NOT part of this union.
+ */
+export type RowKind = 'agent' | 'prompt' | 'system' | 'error';
+
+/**
+ * Format the elapsed time between `nowMs` and an entry timestamp `tsMs` as a
+ * compact relative string (spa-polish ROADMAP 88, Req 11.3).
+ *
+ * Pure and total: the clock (`nowMs`) is injected so the function is
+ * deterministic and Tier-1 testable. Buckets:
+ * - `< 60s`           → `"just now"`
+ * - `< 60m`           → `"Nm ago"`
+ * - `< 24h`           → `"Nh ago"`
+ * - otherwise         → `"Nd ago"`
+ *
+ * A future timestamp (`tsMs > nowMs`) or any non-finite input clamps to
+ * `"just now"` so the output never shows a negative or `NaN` quantity.
+ */
+export function formatRelativeTime(nowMs: number, tsMs: number): string {
+  if (!Number.isFinite(nowMs) || !Number.isFinite(tsMs)) return 'just now';
+  const elapsedMs = nowMs - tsMs;
+  if (elapsedMs < 60_000) return 'just now';
+  const minutes = Math.floor(elapsedMs / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+/**
+ * The `(kind, label)` identity of a message row, used for grouping consecutive
+ * rows from the same sender (spa-polish ROADMAP 88, Req 11.4).
+ */
+export interface RowIdentity {
+  kind: RowKind;
+  label: string;
+}
+
+/**
+ * Decide whether the label line should be VISIBLE on the current row given the
+ * previous row (spa-polish ROADMAP 88, Req 11.4).
+ *
+ * Grouping is on the `(kind, label)` PAIR: a row groups with the previous row
+ * IFF `kind === prev.kind AND label === prev.label`. The label is HIDDEN (false)
+ * only when both match — i.e. the current row continues the previous row's
+ * group. When there is no previous row (`prev` is `null`), or either the kind or
+ * the label differs, the label is SHOWN (true), because the current row starts a
+ * new group.
+ */
+export function groupLabelVisible(prev: RowIdentity | null, cur: RowIdentity): boolean {
+  if (prev === null) return true;
+  const sameGroup = prev.kind === cur.kind && prev.label === cur.label;
+  return !sameGroup;
 }
 
 // ---------------------------------------------------------------------------

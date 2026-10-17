@@ -1064,7 +1064,7 @@ then implement tasks `8`, `9`, `10`, `11`. Depends on item 87 (shared primitives
 CSS tokens must be present).
 
 - Spec: `.kiro/specs/spa-polish/` · tasks `8`, `9`, `10`, `11`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #158
 
 ---
 

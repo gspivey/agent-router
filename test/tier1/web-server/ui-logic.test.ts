@@ -7,6 +7,9 @@ import {
   statusToBadge,
   deriveWaitingFor,
   parseHashRoute,
+  routeTitle,
+  formatRelativeTime,
+  groupLabelVisible,
 } from '../../../src/ui/logic.js';
 import type { SessionStatus, SSEEvent } from '../../../src/ui/logic.js';
 
@@ -81,7 +84,10 @@ describe('ui/logic', () => {
         fc.property(fc.string(), (hash) => {
           const result = parseHashRoute(hash);
           expect(
-            result.view === 'list' || result.view === 'detail' || result.view === 'config',
+            result.view === 'overview' ||
+              result.view === 'list' ||
+              result.view === 'detail' ||
+              result.view === 'config',
           ).toBe(true);
           if (result.view === 'detail') {
             expect(result.sessionId.length).toBeGreaterThan(0);
@@ -104,18 +110,90 @@ describe('ui/logic', () => {
       );
     });
 
-    it('returns list view for empty or #/', () => {
-      expect(parseHashRoute('')).toEqual({ view: 'list' });
-      expect(parseHashRoute('#/')).toEqual({ view: 'list' });
-      expect(parseHashRoute('#')).toEqual({ view: 'list' });
+    it('returns overview view for empty or #/ (spa-polish ROADMAP 88, Req 9.1)', () => {
+      expect(parseHashRoute('')).toEqual({ view: 'overview' });
+      expect(parseHashRoute('#/')).toEqual({ view: 'overview' });
+      expect(parseHashRoute('#')).toEqual({ view: 'overview' });
+    });
+
+    it('parses bare #/sessions as the session list (Req 9.2)', () => {
+      expect(parseHashRoute('#/sessions')).toEqual({ view: 'list' });
     });
 
     it('parses #/config as the config view', () => {
       expect(parseHashRoute('#/config')).toEqual({ view: 'config' });
     });
 
-    it('treats #/config/ (trailing slash) as the list view', () => {
-      expect(parseHashRoute('#/config/')).toEqual({ view: 'list' });
+    it('treats unrecognized hashes (e.g. #/config/, #/repos) as overview (Req 9.1 fallback)', () => {
+      expect(parseHashRoute('#/config/').view).toBe('overview');
+      expect(parseHashRoute('#/repos').view).toBe('overview');
+    });
+  });
+
+  describe('routeTitle (spa-polish ROADMAP 88, Req 9.5)', () => {
+    it('maps each view to its document title', () => {
+      expect(routeTitle({ view: 'overview' })).toBe('Agent Router');
+      expect(routeTitle({ view: 'list' })).toBe('Sessions · Agent Router');
+      expect(routeTitle({ view: 'config' })).toBe('Config · Agent Router');
+      expect(routeTitle({ view: 'detail', sessionId: 'x' })).toBe('Session · Agent Router');
+    });
+  });
+
+  describe('formatRelativeTime (spa-polish ROADMAP 88, Req 11.3)', () => {
+    const NOW = 1_000_000_000_000;
+    it('buckets the elapsed time', () => {
+      expect(formatRelativeTime(NOW, NOW)).toBe('just now');
+      expect(formatRelativeTime(NOW, NOW - 30_000)).toBe('just now');
+      expect(formatRelativeTime(NOW, NOW - 3 * 60_000)).toBe('3m ago');
+      expect(formatRelativeTime(NOW, NOW - 2 * 3_600_000)).toBe('2h ago');
+      expect(formatRelativeTime(NOW, NOW - 5 * 86_400_000)).toBe('5d ago');
+    });
+
+    it('clamps a future timestamp to "just now"', () => {
+      expect(formatRelativeTime(NOW, NOW + 10_000)).toBe('just now');
+    });
+
+    it('is monotonic — a larger elapsed time never yields a smaller unit', () => {
+      const rank = (s: string): number => {
+        if (s === 'just now') return 0;
+        if (s.endsWith('m ago')) return 1;
+        if (s.endsWith('h ago')) return 2;
+        return 3; // d ago
+      };
+      fc.assert(
+        fc.property(fc.nat(20_000_000), fc.nat(20_000_000), (a, b) => {
+          const smaller = Math.min(a, b);
+          const larger = Math.max(a, b);
+          const rankSmaller = rank(formatRelativeTime(NOW, NOW - smaller));
+          const rankLarger = rank(formatRelativeTime(NOW, NOW - larger));
+          expect(rankLarger).toBeGreaterThanOrEqual(rankSmaller);
+        }),
+        { numRuns: 100 },
+      );
+    });
+  });
+
+  describe('groupLabelVisible (spa-polish ROADMAP 88, Req 11.4)', () => {
+    it('shows the label when there is no previous row', () => {
+      expect(groupLabelVisible(null, { kind: 'agent', label: 'Agent' })).toBe(true);
+    });
+
+    it('hides the label only when kind AND label both match', () => {
+      expect(
+        groupLabelVisible({ kind: 'agent', label: 'Agent' }, { kind: 'agent', label: 'Agent' }),
+      ).toBe(false);
+    });
+
+    it('shows the label when the label differs (same kind)', () => {
+      expect(
+        groupLabelVisible({ kind: 'prompt', label: 'You' }, { kind: 'prompt', label: 'Prompt' }),
+      ).toBe(true);
+    });
+
+    it('shows the label when the kind differs', () => {
+      expect(
+        groupLabelVisible({ kind: 'agent', label: 'Agent' }, { kind: 'error', label: 'Agent' }),
+      ).toBe(true);
     });
   });
 

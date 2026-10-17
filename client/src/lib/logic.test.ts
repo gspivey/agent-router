@@ -12,13 +12,14 @@ describe('shared logic alias', () => {
   });
 
   it('resolves parseHashRoute from @shared/logic', () => {
-    expect(parseHashRoute('#/')).toEqual({ view: 'list' });
+    expect(parseHashRoute('#/')).toEqual({ view: 'overview' });
+    expect(parseHashRoute('#/sessions')).toEqual({ view: 'list' });
     expect(parseHashRoute('#/sessions/abc')).toEqual({ view: 'detail', sessionId: 'abc' });
   });
 
   it('parses #/config as the config view (spa-operator-restoration A-5)', () => {
     expect(parseHashRoute('#/config')).toEqual({ view: 'config' });
-    expect(parseHashRoute('#/config/')).toEqual({ view: 'list' });
+    expect(parseHashRoute('#/config/').view).toBe('overview');
   });
 });
 

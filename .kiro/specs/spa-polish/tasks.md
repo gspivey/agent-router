@@ -120,17 +120,17 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
 
 ## Group 2 — ROADMAP item 88: header branding, router/overview routing, message grammar
 
-- [ ] 8. Extend the router with the Overview route
-  - [ ] 8.1 In `src/ui/logic.ts`, add `HashRouteOverview { view: 'overview' }` to the
+- [x] 8. Extend the router with the Overview route
+  - [x] 8.1 In `src/ui/logic.ts`, add `HashRouteOverview { view: 'overview' }` to the
     `HashRoute` union; update `parseHashRoute` so `#/`/empty → overview, `#/sessions`
     → list, `#/sessions/<id>` → detail (unchanged regex), `#/config` → config, and the
     fallback → overview. (Req 9.1, 9.2)
-  - [ ] 8.2 Add exported pure `routeTitle(route)` returning the per-view
+  - [x] 8.2 Add exported pure `routeTitle(route)` returning the per-view
     `document.title`. (Req 9.5)
-  - [ ] 8.3 In `client/src/routes/router.svelte.ts`, add `goToOverview()`
+  - [x] 8.3 In `client/src/routes/router.svelte.ts`, add `goToOverview()`
     (`#/`), change `goToList()` to `#/sessions`, and set `document.title =
     routeTitle(route.current)` inside `syncRoute()` (guarded for no-DOM). (Req 9.3, 9.5)
-  - [ ] 8.4 In `App.svelte`, add an explicit `overview` branch — there is NO deferral
+  - [x] 8.4 In `App.svelte`, add an explicit `overview` branch — there is NO deferral
     option, because omitting it makes `svelte-check` / the app crash when
     `route.current.view === 'overview'`. Item 88 MUST render a placeholder for the
     overview branch (a stub, e.g. `<div>Loading…</div>`) so the branch is present and
@@ -140,33 +140,33 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
     placeholder in task 12.8 (item 89). Keep list/config/detail branches. The router,
     titles, and nav must be fully functional in 88. (Req 9.4)
 
-- [ ] 9. Rework the header
-  - [ ] 9.1 Add the branding block to `Header.svelte`: inline `aria-hidden` SVG
+- [x] 9. Rework the header
+  - [x] 9.1 Add the branding block to `Header.svelte`: inline `aria-hidden` SVG
     router/branch glyph + "Agent Router" text, linking to `#/`. (Req 10.1)
-  - [ ] 9.2 Display `v{__APP_VERSION__}`. (Req 10.2)
-  - [ ] 9.3 Render three nav tabs in order Overview (`#/`) / Sessions (`#/sessions`) /
+  - [x] 9.2 Display `v{__APP_VERSION__}`. (Req 10.2)
+  - [x] 9.3 Render three nav tabs in order Overview (`#/`) / Sessions (`#/sessions`) /
     Config (`#/config`); compute active state (Sessions active for `list` and
     `detail`). (Req 10.3)
-  - [ ] 9.4 Replace the active style with `border-b-2 border-[var(--accent)]`; add
+  - [x] 9.4 Replace the active style with `border-b-2 border-[var(--accent)]`; add
     `aria-current="page"` to the active tab and `focus-visible:ring-2
     focus-visible:ring-[var(--accent)]` to interactive elements. (Req 10.4, 10.5)
-  - [ ] 9.5 Switch the header background to `bg-[var(--header-bg)] backdrop-blur-sm`
+  - [x] 9.5 Switch the header background to `bg-[var(--header-bg)] backdrop-blur-sm`
     (NOT `bg-[var(--bg)]/90` — the opacity modifier does not work on a hex-valued var in
     Tailwind 3; `--header-bg` is the RGB-channel token from task 1.1), keeping
     `sticky top-0 h-14`. (Req 10.6)
 
-- [ ] 10. Build the unified `MessageRow` and adopt it in chat
-  - [ ] 10.1 Read `MessageBubble.svelte`, `SystemPill.svelte`, and
+- [x] 10. Build the unified `MessageRow` and adopt it in chat
+  - [x] 10.1 Read `MessageBubble.svelte`, `SystemPill.svelte`, and
     `chat-render.ts` first. Add a `bare?: boolean` prop to `MessageBubble.svelte`: when
     `bare` is `true`, render agent text via `renderMarkdown()` but omit the outer bubble
     wrapper div, so `MessageRow` can supply its own bubble wrapper. `MessageRow` MUST
     use `<MessageBubble bare />` for the `agent` kind and MUST contain NO `{@html}`
     directive anywhere. (NFR-1, Req 11.7)
-  - [ ] 10.2 Add pure helpers to `src/ui/logic.ts`:
+  - [x] 10.2 Add pure helpers to `src/ui/logic.ts`:
     `formatRelativeTime(nowMs, tsMs)` and `groupLabelVisible(prev, cur)` where grouping
     is on the `(kind, label)` PAIR — a row groups with the previous row IFF
     `kind === prev.kind AND label === prev.label`. (Req 11.3, 11.4)
-  - [ ] 10.3 Create `client/src/components/MessageRow.svelte` for the four message-
+  - [x] 10.3 Create `client/src/components/MessageRow.svelte` for the four message-
     bubble kinds ONLY: `agent`, `prompt`, `system`, `error`. Per the
     RenderItem→RowKind mapping in design.md: tool calls stay in `ToolCallCard.svelte`,
     permissions in `PermissionCard.svelte`, internal metadata in `InternalPill`, loading
@@ -175,7 +175,7 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
     LEFT; system CENTER no bubble; error RIGHT with Tailwind palette classes per NFR-2
     exception), label line + relative timestamp + `title`, grouping via `showLabel`,
     agent never centered, no `{@html}`. (Req 11.2, 11.3, 11.6, 11.7)
-  - [ ] 10.4 Update `ChatView.svelte` to render agent message bubbles plus prompt/
+  - [x] 10.4 Update `ChatView.svelte` to render agent message bubbles plus prompt/
     system/error rows through `MessageRow` (replacing direct `MessageBubble`/
     `SystemPill` use for those kinds), keeping `ToolCallCard`/`PermissionCard`/
     `InternalPill`/`SkeletonBubble` for their kinds. Compute `showLabel` from
@@ -183,20 +183,20 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
     group and `mt-1` to subsequent rows in the same group. Keep `MessageBubble.svelte`
     and `SystemPill.svelte` as files. (Req 11.1, 11.4)
 
-- [ ] 11. Item 88 tests (vitest)
-  - [ ] 11.1 Pure: `parseHashRoute` for `#/`/``/`#/sessions`/`#/sessions/x`/`#/config`
+- [x] 11. Item 88 tests (vitest)
+  - [x] 11.1 Pure: `parseHashRoute` for `#/`/``/`#/sessions`/`#/sessions/x`/`#/config`
     /junk; `routeTitle` per view. (Req 9.1, 9.2, 9.5)
-  - [ ] 11.2 Pure: `formatRelativeTime` (just now / Nm / Nh / Nd, injected clock,
+  - [x] 11.2 Pure: `formatRelativeTime` (just now / Nm / Nh / Nd, injected clock,
     fast-check monotonicity ≥100 runs); `groupLabelVisible` groups only when
     `(kind, label)` matches (different tool names / different labels do NOT group).
     (Req 11.3, 11.4)
-  - [ ] 11.3 Component: `Header` shows "Agent Router", version, three tabs; active tab
+  - [x] 11.3 Component: `Header` shows "Agent Router", version, three tabs; active tab
     accent underline + `aria-current="page"`; backdrop-blur + `bg-[var(--header-bg)]`.
     (Req 10)
-  - [ ] 11.4 Component: `MessageRow` alignment/styling per kind (agent/prompt/system/
+  - [x] 11.4 Component: `MessageRow` alignment/styling per kind (agent/prompt/system/
     error); agent never centered; no new `{@html}`; first-of-group row has `mt-4` and
     subsequent same-group rows have `mt-1`. (Req 11.2, 11.4, 11.6, 11.7)
-  - [ ] 11.5 Component: `ChatView` renders via `MessageRow`; existing streaming tests
+  - [x] 11.5 Component: `ChatView` renders via `MessageRow`; existing streaming tests
     still pass. (Req 11.1)
 
 ---
