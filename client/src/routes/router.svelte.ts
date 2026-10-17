@@ -3,9 +3,10 @@
  *
  * There is NO external routing library (HIGH-4): routing is hand-rolled on top
  * of the native `hashchange` event plus `parseHashRoute()` from the shared logic
- * module. Three routes exist:
+ * module. Four routes exist:
  *
- *   - `#/` or empty       → the session list view
+ *   - `#/` or empty       → the Overview dashboard (spa-polish ROADMAP 88/89)
+ *   - `#/sessions`        → the session list view
  *   - `#/sessions/<id>`   → the chat (detail) view
  *   - `#/config`          → the operator config view (spa-operator-restoration)
  *
@@ -15,16 +16,23 @@
  * lifetime, so the disposer is mainly for tests).
  */
 
-import { parseHashRoute, type HashRoute } from '../lib/logic.js';
+import { parseHashRoute, routeTitle, type HashRoute } from '../lib/logic.js';
 
 /** The current parsed route, updated on every `hashchange`. */
 export const route = $state<{ current: HashRoute }>({
   current: parseHashRoute(typeof location !== 'undefined' ? location.hash : ''),
 });
 
-/** Re-read `location.hash` and update the reactive route. */
+/**
+ * Re-read `location.hash`, update the reactive route, and set `document.title`
+ * for the current view (spa-polish ROADMAP 88, Req 9.5). The `document` guard
+ * keeps this safe in a no-DOM test environment.
+ */
 export function syncRoute(): void {
   route.current = parseHashRoute(typeof location !== 'undefined' ? location.hash : '');
+  if (typeof document !== 'undefined') {
+    document.title = routeTitle(route.current);
+  }
 }
 
 /**
@@ -38,9 +46,14 @@ export function startRouter(): () => void {
   return () => window.removeEventListener('hashchange', handler);
 }
 
-/** Navigate to the session list (`#/`). */
-export function goToList(): void {
+/** Navigate to the Overview dashboard (`#/`). */
+export function goToOverview(): void {
   location.hash = '#/';
+}
+
+/** Navigate to the session list (`#/sessions`). */
+export function goToList(): void {
+  location.hash = '#/sessions';
 }
 
 /** Navigate to a session's chat/detail view (`#/sessions/<id>`). */

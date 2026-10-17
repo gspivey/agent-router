@@ -24,13 +24,17 @@
    *    >100 px, in which case a "↓ New messages" badge appears (Req 7.1 / HIGH-13).
    *
    * Rendering stays Svelte-native from the `ParsedEntry` union — the DOM-mutation
-   * `renderStreamEntry` from `web-ui.ts` is deliberately NOT reused. No raw-HTML
-   * directive anywhere: all content is plain text (NFR-6).
+   * `renderStreamEntry` from `web-ui.ts` is deliberately NOT reused. Agent
+   * bubbles, prompt, system, and error rows render through the unified
+   * `MessageRow` grammar (spa-polish ROADMAP 88); agent markdown is delegated to
+   * the single sanctioned sanitized-markdown sink inside `MessageBubble` (`bare`
+   * mode). Tool calls, permissions, internal metadata, and skeletons keep their
+   * dedicated components.
    */
   import { onMount, onDestroy, tick } from 'svelte';
   import { api, AuthError } from '../lib/api.js';
   import { auth, enterExpiredState, registerAbortHandler } from '../lib/stores.svelte.js';
-  import { parseStreamEntry, mergeEvents, type SSEEvent } from '../lib/logic.js';
+  import { parseStreamEntry, mergeEvents, groupLabelVisible, type SSEEvent, type RowIdentity } from '../lib/logic.js';
   import { buildRenderItems, type RenderItem } from '../lib/chat-render.js';
   import {
     shouldShowCursor,
@@ -39,8 +43,7 @@
   } from '../lib/streaming-state.js';
   import { connectStream, type SseHandle } from '../lib/sse.js';
   import type { SessionStatus, StreamEntry, SessionMeta } from '../lib/types.js';
-  import MessageBubble from './MessageBubble.svelte';
-  import SystemPill from './SystemPill.svelte';
+  import MessageRow from './MessageRow.svelte';
   import ToolCallCard from './ToolCallCard.svelte';
   import PermissionCard from './PermissionCard.svelte';
   import InternalPill from './InternalPill.svelte';
@@ -128,6 +131,36 @@
   });
 
   const controlsDisabled = $derived(ended || status !== 'active');
+
+  /**
+   * Per-visible-item row metadata for the unified `MessageRow` grammar
+   * (spa-polish ROADMAP 88, Req 11.4). For the two kinds `MessageRow` renders —
+   * agent bubbles and system rows — compute the `(kind, label)` identity, derive
+   * `showLabel` via `groupLabelVisible` on the previous MessageRow identity, and
+   * pick the vertical margin: the first row of a group gets `mt-4` (inter-group),
+   * subsequent same-group rows get `mt-1` (intra-group). Non-MessageRow items
+   * (tool/permission/internal/unknown) reset the grouping chain.
+   */
+  const rowMeta = $derived.by(() => {
+    const metas: { showLabel: boolean; margin: string }[] = [];
+    let prev: RowIdentity | null = null;
+    for (const item of visibleItems) {
+      let identity: RowIdentity | null = null;
+      if (item.kind === 'bubble') identity = { kind: 'agent', label: 'Agent' };
+      else if (item.kind === 'system') identity = { kind: 'system', label: '' };
+
+      if (identity === null) {
+        // A non-MessageRow item breaks the group chain.
+        metas.push({ showLabel: true, margin: 'mt-4' });
+        prev = null;
+        continue;
+      }
+      const show = groupLabelVisible(prev, identity);
+      metas.push({ showLabel: show, margin: show ? 'mt-4' : 'mt-1' });
+      prev = identity;
+    }
+    return metas;
+  });
 
   function mergeIncoming(incoming: SSEEvent[]): void {
     events = mergeEvents(events, incoming);
@@ -341,9 +374,18 @@
       {#each visibleItems as item, i (item.key)}
         <EntryShell json={item.json}>
           {#if item.kind === 'bubble'}
-            <MessageBubble text={item.text} cursor={cursorVisible && i === lastBubbleIndex} />
+            <div class={rowMeta[i]?.margin ?? 'mt-4'}>
+              <MessageRow
+                kind="agent"
+                text={item.text}
+                showLabel={rowMeta[i]?.showLabel ?? true}
+                cursor={cursorVisible && i === lastBubbleIndex}
+              />
+            </div>
           {:else if item.kind === 'system'}
-            <SystemPill text={item.text} badge={item.badge} />
+            <div class={rowMeta[i]?.margin ?? 'mt-4'}>
+              <MessageRow kind="system" text={item.text} showLabel={false} />
+            </div>
           {:else if item.kind === 'tool_call'}
             <ToolCallCard
               title={item.title}

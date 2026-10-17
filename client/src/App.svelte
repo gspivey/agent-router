@@ -5,12 +5,13 @@
    * Resolves the bearer token with the Requirement 3.1 precedence (Task 3),
    * renders the auth-error state when the token is missing or expired, and
    * otherwise mounts the single-destination chrome (`Header`) plus the
-   * hash-routed view: the session list at `#/` and the chat/detail view at
-   * `#/sessions/<id>`.
+   * hash-routed view: the Overview dashboard at `#/`, the session list at
+   * `#/sessions`, the chat/detail view at `#/sessions/<id>`, and the operator
+   * config at `#/config` (spa-polish ROADMAP 88).
    *
    * The chat view (ROADMAP 75) renders the session history as a chat
-   * conversation. Navigation has exactly ONE destination — Sessions — and no
-   * Repos or Config views exist (Requirement 5.3, 5.8).
+   * conversation. The `overview` branch renders a placeholder here (ROADMAP 88);
+   * the real `Overview.svelte` lands in ROADMAP 89.
    */
   import { onMount } from 'svelte';
   import { auth } from './lib/stores.svelte.js';
@@ -49,7 +50,13 @@
 {:else}
   <div data-testid="app-shell" class="min-h-screen">
     <Header />
-    {#if route.current.view === 'list'}
+    {#if route.current.view === 'overview'}
+      <PageLayout width="wide">
+        <div data-testid="overview-placeholder" class="text-sm text-[var(--text-muted)]">
+          Loading…
+        </div>
+      </PageLayout>
+    {:else if route.current.view === 'list'}
       <PageLayout width="wide"><SessionList /></PageLayout>
     {:else if route.current.view === 'config'}
       <PageLayout width="wide"><ConfigView /></PageLayout>
