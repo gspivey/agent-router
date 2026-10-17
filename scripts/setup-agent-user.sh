@@ -91,6 +91,15 @@ create_worker_user() {
     info "Creating system user '$WORKER_USER' with home '$WORKER_HOME'..."
     useradd -r -s /usr/sbin/nologin -d "$WORKER_HOME" -m "$WORKER_USER"
   fi
+
+  # Socket group ownership (design §C): the daemon user must be a supplementary
+  # member of the worker group so it can chown/chmod and open the 0660 agent
+  # socket; without it the daemon gets EACCES on the socket. `usermod -aG` is
+  # append-only and idempotent — re-running when membership exists is a no-op.
+  # The reverse membership (agentworker → agentrouter group) is forbidden: it
+  # would grant agentworker read access to $ROOTDIR (mode 750).
+  info "Adding daemon user '$DAEMON_USER' to the '$WORKER_USER' group..."
+  usermod -aG "$WORKER_USER" "$DAEMON_USER"
 }
 
 # ---------- 2. + 7. Sudoers rule ----------
@@ -292,22 +301,22 @@ EOF
 # tinyproxy SSRF prevention: block the tinyproxy uid from reaching link-local
 # and RFC1918 ranges (and IPv6 cloud-metadata ranges) so a filtered hostname
 # that resolves to a private IP cannot be used to pivot internally.
-# Builds a dedicated TPROXY_SSRF_BLOCK chain only — the jump + persist happen
+# Builds a dedicated TINYPROXY_OUT chain only — the jump + persist happen
 # in setup_iptables(). Called BEFORE the save step there.
 setup_tinyproxy_ssrf_rules() {
-  info "Building TPROXY_SSRF_BLOCK chain (SSRF guard for tinyproxy uid)..."
-  iptables -L TPROXY_SSRF_BLOCK -n &>/dev/null || iptables -N TPROXY_SSRF_BLOCK
-  iptables -F TPROXY_SSRF_BLOCK
+  info "Building TINYPROXY_OUT chain (SSRF guard for tinyproxy uid)..."
+  iptables -L TINYPROXY_OUT -n &>/dev/null || iptables -N TINYPROXY_OUT
+  iptables -F TINYPROXY_OUT
   local tmp
   tmp="$(mktemp)"
   cat > "$tmp" << 'RULES'
 *filter
-:TPROXY_SSRF_BLOCK - [0:0]
--A TPROXY_SSRF_BLOCK -d 169.254.0.0/16 -j REJECT
--A TPROXY_SSRF_BLOCK -d 10.0.0.0/8 -j REJECT
--A TPROXY_SSRF_BLOCK -d 172.16.0.0/12 -j REJECT
--A TPROXY_SSRF_BLOCK -d 192.168.0.0/16 -j REJECT
--A TPROXY_SSRF_BLOCK -j RETURN
+:TINYPROXY_OUT - [0:0]
+-A TINYPROXY_OUT -d 169.254.0.0/16 -j REJECT
+-A TINYPROXY_OUT -d 10.0.0.0/8 -j REJECT
+-A TINYPROXY_OUT -d 172.16.0.0/12 -j REJECT
+-A TINYPROXY_OUT -d 192.168.0.0/16 -j REJECT
+-A TINYPROXY_OUT -j RETURN
 COMMIT
 RULES
   iptables-restore --noflush "$tmp"
@@ -315,16 +324,16 @@ RULES
 
   # IPv6 counterpart: block unique-local + cloud metadata (fd00::/8 covers
   # ULA; link-local fe80::/10; drop any to be safe before RETURN).
-  ip6tables -L TPROXY_SSRF_BLOCK -n &>/dev/null || ip6tables -N TPROXY_SSRF_BLOCK
-  ip6tables -F TPROXY_SSRF_BLOCK
+  ip6tables -L TINYPROXY_OUT -n &>/dev/null || ip6tables -N TINYPROXY_OUT
+  ip6tables -F TINYPROXY_OUT
   local tmp6
   tmp6="$(mktemp)"
   cat > "$tmp6" << 'RULES6'
 *filter
-:TPROXY_SSRF_BLOCK - [0:0]
--A TPROXY_SSRF_BLOCK -d fd00::/8 -j REJECT
--A TPROXY_SSRF_BLOCK -d fe80::/10 -j REJECT
--A TPROXY_SSRF_BLOCK -j RETURN
+:TINYPROXY_OUT - [0:0]
+-A TINYPROXY_OUT -d fd00::/8 -j REJECT
+-A TINYPROXY_OUT -d fe80::/10 -j REJECT
+-A TINYPROXY_OUT -j RETURN
 COMMIT
 RULES6
   ip6tables-restore --noflush "$tmp6"
@@ -376,30 +385,30 @@ RULES
   {
     echo '*filter'
     echo ':AGENTWORKER_OUT - [0:0]'
-    echo ':TPROXY_SSRF_BLOCK - [0:0]'
+    echo ':TINYPROXY_OUT - [0:0]'
     iptables -S AGENTWORKER_OUT | tail -n +2
-    iptables -S TPROXY_SSRF_BLOCK | tail -n +2
+    iptables -S TINYPROXY_OUT | tail -n +2
     echo "-I OUTPUT 1 -m owner --uid-owner ${WORKER_USER} -j AGENTWORKER_OUT"
-    echo "-I OUTPUT 2 -m owner --uid-owner ${tproxy_uid} -j TPROXY_SSRF_BLOCK"
+    echo "-I OUTPUT 2 -m owner --uid-owner ${tproxy_uid} -j TINYPROXY_OUT"
     echo 'COMMIT'
   } > "$IPTABLES_V4"
   {
     echo '*filter'
     echo ':AGENTWORKER_OUT - [0:0]'
-    echo ':TPROXY_SSRF_BLOCK - [0:0]'
+    echo ':TINYPROXY_OUT - [0:0]'
     ip6tables -S AGENTWORKER_OUT | tail -n +2
-    ip6tables -S TPROXY_SSRF_BLOCK | tail -n +2
+    ip6tables -S TINYPROXY_OUT | tail -n +2
     echo "-I OUTPUT 1 -m owner --uid-owner ${WORKER_USER} -j AGENTWORKER_OUT"
-    echo "-I OUTPUT 2 -m owner --uid-owner ${tproxy_uid} -j TPROXY_SSRF_BLOCK"
+    echo "-I OUTPUT 2 -m owner --uid-owner ${tproxy_uid} -j TINYPROXY_OUT"
     echo 'COMMIT'
   } > "$IPTABLES_V6"
   info "Persisted iptables rules to $IPTABLES_V4 and $IPTABLES_V6."
 
   # Also apply the live jump for the tinyproxy SSRF chain so it is effective now.
-  iptables -C OUTPUT -m owner --uid-owner "$tproxy_uid" -j TPROXY_SSRF_BLOCK 2>/dev/null || \
-    iptables -I OUTPUT 2 -m owner --uid-owner "$tproxy_uid" -j TPROXY_SSRF_BLOCK
-  ip6tables -C OUTPUT -m owner --uid-owner "$tproxy_uid" -j TPROXY_SSRF_BLOCK 2>/dev/null || \
-    ip6tables -I OUTPUT 2 -m owner --uid-owner "$tproxy_uid" -j TPROXY_SSRF_BLOCK
+  iptables -C OUTPUT -m owner --uid-owner "$tproxy_uid" -j TINYPROXY_OUT 2>/dev/null || \
+    iptables -I OUTPUT 2 -m owner --uid-owner "$tproxy_uid" -j TINYPROXY_OUT
+  ip6tables -C OUTPUT -m owner --uid-owner "$tproxy_uid" -j TINYPROXY_OUT 2>/dev/null || \
+    ip6tables -I OUTPUT 2 -m owner --uid-owner "$tproxy_uid" -j TINYPROXY_OUT
 
   install_iptables_unit
 }

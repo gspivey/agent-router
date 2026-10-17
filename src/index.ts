@@ -47,7 +47,7 @@ import type { CheckWatchdog } from './check-watchdog.js';
 import { shouldNotify, sendSessionEndNotification } from './notify.js';
 import { startTokenExpiryChecker } from './token-expiry.js';
 import { createWorktreeManager, canonicalClonePath } from './worktree-manager.js';
-import { checkTokenFilePermissions, checkIptablesRules } from './isolation-startup.js';
+import { checkTokenFilePermissions, checkIptablesRules, checkAgentWorkerUser } from './isolation-startup.js';
 import { createAgentServer } from './agent-server.js';
 import type { AgentServer } from './agent-server.js';
 import { buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from './acp.js';
@@ -495,6 +495,9 @@ async function main(): Promise<void> {
   // worktree manager is wired. These never throw.
   checkTokenFilePermissions(rootDir, log);
   checkIptablesRules(log);
+  // FR-5: warn when uid isolation is configured but the agentworker account
+  // was never provisioned (setup script not run) — the spawn path is inert.
+  checkAgentWorkerUser(config.useWorkerUid ?? false, log);
 
   // Init database (WAL mode enabled inside initDatabase)
   const dbPath = path.join(rootDir, 'agent-router.db');

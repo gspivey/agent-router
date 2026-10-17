@@ -115,26 +115,26 @@ Files: `scripts/setup-agent-user.sh`, `src/isolation-startup.ts`, `src/index.ts`
 Covers FR-4, FR-5, FR-6. **Depends on Item 90.** Branch slug suggestion:
 `agent/security-isolation-fix-provisioning`.
 
-- [ ] 91.1 In `scripts/setup-agent-user.sh`, add an idempotent step (after `agentworker` is
+- [x] 91.1 In `scripts/setup-agent-user.sh`, add an idempotent step (after `agentworker` is
   created) that makes the daemon user a supplementary member of the worker group:
   `usermod -aG "$WORKER_USER" "$DAEMON_USER"` (use the script's daemon-user variable, else the
   literal `agentrouter`). Add a comment citing design §C "Socket group ownership". Do not add
   `agentworker` to the `agentrouter` group. Note: `$DAEMON_USER` is already defined in the
   script (`DAEMON_USER="agentrouter"` at the top) — use it. (FR-4.1, FR-4.2, FR-4.3; design Fix 4)
 
-- [ ] 91.2 Rename every occurrence of `TPROXY_SSRF_BLOCK` to `TINYPROXY_OUT` in:
+- [x] 91.2 Rename every occurrence of `TPROXY_SSRF_BLOCK` to `TINYPROXY_OUT` in:
   `scripts/setup-agent-user.sh` (chain create/flush, REJECT rules, OUTPUT jump, persisted v4/v6
   blocks), `README.md`, and `docs/security-setup.md`. After the change,
   `grep -rn TPROXY_SSRF_BLOCK scripts README.md docs` must return 0 results. (FR-6.1, FR-6.2;
   design Fix 6)
 
-- [ ] 91.3 Verify the changes: `grep -rn TPROXY_SSRF_BLOCK scripts README.md docs` returns 0;
+- [x] 91.3 Verify the changes: `grep -rn TPROXY_SSRF_BLOCK scripts README.md docs` returns 0;
   `bash -n scripts/setup-agent-user.sh` passes; the script contains a `usermod -aG` line adding
   `"$WORKER_USER"` to the daemon user group (verify with
   `grep -E 'usermod -aG.*WORKER_USER' scripts/setup-agent-user.sh`), and does not add
   `agentworker` to the `agentrouter` group. (AC-6, AC-8)
 
-- [ ] 91.4 Add `checkAgentWorkerUser(useWorkerUid, log, lookup = defaultAgentUserLookup)` to
+- [x] 91.4 Add `checkAgentWorkerUser(useWorkerUid, log, lookup = defaultAgentUserLookup)` to
   `src/isolation-startup.ts`, following the existing advisory-check pattern: no-op when
   `useWorkerUid` is false; calls `lookup.agentWorkerExists()` inside a try/catch (treat a throw
   as missing — log a WARNING, do not rethrow); logs exactly one WARNING (with a
@@ -145,16 +145,16 @@ Covers FR-4, FR-5, FR-6. **Depends on Item 90.** Branch slug suggestion:
   `sudo -u agentworker` needs the user); any read error → `false`. (FR-5.1, FR-5.2, FR-5.3;
   design Fix 5)
 
-- [ ] 91.5 Wire `checkAgentWorkerUser(config.useWorkerUid ?? false, log)` into `src/index.ts`
+- [x] 91.5 Wire `checkAgentWorkerUser(config.useWorkerUid ?? false, log)` into `src/index.ts`
   startup alongside `checkTokenFilePermissions` and `checkIptablesRules`. (FR-5.4; design Fix 5)
 
-- [ ] 91.6 Tier 1 tests in `test/tier1/isolation-startup.test.ts` for `checkAgentWorkerUser`:
+- [x] 91.6 Tier 1 tests in `test/tier1/isolation-startup.test.ts` for `checkAgentWorkerUser`:
   `useWorkerUid: false` → no warning; `true` + lookup returns false → exactly one WARNING with the
   hint; `true` + lookup returns true → no warning; `true` + lookup throws → exactly one WARNING
   (the function's try/catch treats the throw as missing), no exception escapes
   `checkAgentWorkerUser`. (AC-7; NFR-2)
 
-- [ ] 91.7 Update `README.md`'s existing `setup-agent-user.sh` section (around line 173) and
+- [x] 91.7 Update `README.md`'s existing `setup-agent-user.sh` section (around line 173) and
   `docs/security-setup.md` to document: `sudo scripts/setup-agent-user.sh` is the provisioning
   prerequisite for `useWorkerUid: true`; the daemon must be restarted after running setup for the
   new supplementary group membership to take effect; and the daemon logs a startup WARNING when
@@ -162,7 +162,7 @@ Covers FR-4, FR-5, FR-6. **Depends on Item 90.** Branch slug suggestion:
   cross-link to `docs/security-setup.md`. Docs land on this branch, not as a post-merge fixup.
   (FR-5.5; AC-9)
 
-- [ ] 91.8 Run `npm run typecheck` and `npm test` (Tier 1 + Tier 2); fix any failures. Confirm no
+- [x] 91.8 Run `npm run typecheck` and `npm test` (Tier 1 + Tier 2); fix any failures. Confirm no
   new runtime dependency and no `console.log`. (NFR-1, NFR-3, NFR-4)
 
 ---
