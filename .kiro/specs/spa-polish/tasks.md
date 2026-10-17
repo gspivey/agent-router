@@ -16,7 +16,7 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
 
 ## Group 1 — ROADMAP item 87: backend endpoint, shared primitives, layout & overflow
 
-- [ ] 1. Add CSS tokens and the app-version build define
+- [x] 1. Add CSS tokens and the app-version build define
   - [ ] 1.1 Add `--accent: #388bfd`, `--muted: #8b949e`, and
     `--header-bg: rgb(13 17 23 / 0.9)` (the `--bg` hex `#0d1117` as RGB channels + 90%
     alpha) to `:root` in `client/src/app.css`. `--header-bg` MUST be RGB-channel form so
@@ -28,7 +28,7 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
   - [ ] 1.3 Declare `declare const __APP_VERSION__: string;` in
     `client/src/vite-env.d.ts`. (Req 7.2)
 
-- [ ] 2. Implement the `GET /api/overview` backend endpoint
+- [x] 2. Implement the `GET /api/overview` backend endpoint
   - [ ] 2.1 Read `src/web-routes.ts` fully (factory deps, existing guarded handlers,
     `groupSessionsByRepo`, cron-state access) before editing.
   - [ ] 2.2 Add exported pure helper `computeHealth(input)` returning
@@ -59,13 +59,13 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
     middleware as other authenticated routes (`401` when unauthenticated); keep the
     handler read-only. (Req 1.1, 1.2, 1.3, 1.8, 1.9, 1.10)
 
-- [ ] 3. Add client `OverviewResponse` type and API method
+- [x] 3. Add client `OverviewResponse` type and API method
   - [ ] 3.1 Add `OverviewRecentPr`, `OverviewCronSummary`, `OverviewResponse` to
     `client/src/lib/types.ts` (client-owns-types, by value). (Req 2.1)
   - [ ] 3.2 Add `getOverview(): Promise<OverviewResponse>` to `client/src/lib/api.ts`
     using the existing fetch wrapper / `AuthError` handling. (Req 2.2)
 
-- [ ] 4. Build shared presentational primitives
+- [x] 4. Build shared presentational primitives
   - [ ] 4.1 Create `client/src/components/StatusBadge.svelte` (dot + label for
     `active`/`paused`/`error`; dot `aria-hidden`; tokenized colors). (Req 3.1–3.3)
   - [ ] 4.2 Create `client/src/components/Card.svelte`
@@ -74,7 +74,7 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
   - [ ] 4.3 Create `client/src/components/PageHeader.svelte` (`<h1>` + optional
     subtitle). (Req 4.2)
 
-- [ ] 5. Add layout margins
+- [x] 5. Add layout margins
   - [ ] 5.1 Create `client/src/components/PageLayout.svelte` with a `width:
     'wide' | 'narrow'` prop. `wide` → `max-w-6xl mx-auto px-4 py-6 sm:px-6 lg:px-8`;
     `narrow` → `max-w-4xl mx-auto px-4 sm:px-6 lg:px-8` with NO vertical padding (no
@@ -84,7 +84,7 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
     from `h-[100dvh]` to `h-[calc(100dvh-3.5rem)]` (`3.5rem` = the `h-14`/56px sticky
     header) so the chat column fits exactly below the header. (Req 5.1, 5.2)
 
-- [ ] 6. Fix session-list horizontal overflow
+- [x] 6. Fix session-list horizontal overflow
   - [ ] 6.1 Identify and reproduce the horizontal overflow bug using a REAL browser
     (not jsdom — jsdom does not lay out). The fix SHALL target the specific element
     that actually causes the overflow; likely candidates are the `RepoGroup` header
@@ -97,7 +97,7 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
   - [ ] 6.2 Add `overflow-x-hidden` to the `SessionList.svelte` container as a
     backstop. (Req 6.4)
 
-- [ ] 7. Item 87 tests (vitest)
+- [x] 7. Item 87 tests (vitest)
   - [ ] 7.1 Pure: `computeHealth` (healthy / degraded via paused cron / degraded via
     error cron / degraded via stale active session at the 2h boundary). Only
     `'healthy' | 'degraded'` outcomes — no `'error'`/poller-down case. (Req 1.6)

@@ -1053,7 +1053,7 @@ Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in fu
 then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`.
 
 - Spec: `.kiro/specs/spa-polish/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #156
 
 ---
 
