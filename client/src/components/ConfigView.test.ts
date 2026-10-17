@@ -17,12 +17,14 @@ import type { ConfigResponse } from '../lib/types.js';
 const getConfig = vi.fn();
 const pauseCron = vi.fn();
 const resumeCron = vi.fn();
+const getOverview = vi.fn();
 
 vi.mock('../lib/api.js', () => ({
   api: {
     getConfig: (...args: unknown[]) => getConfig(...args),
     pauseCron: (...args: unknown[]) => pauseCron(...args),
     resumeCron: (...args: unknown[]) => resumeCron(...args),
+    getOverview: (...args: unknown[]) => getOverview(...args),
   },
   // Re-create the AuthError shape the component checks with `instanceof`.
   AuthError: class AuthError extends Error {
@@ -74,6 +76,18 @@ describe('ConfigView', () => {
     getConfig.mockReset();
     pauseCron.mockReset();
     resumeCron.mockReset();
+    getOverview.mockReset();
+    // Default: an empty cron_summary (no error bit) so existing cron tests that
+    // do not care about the badge still resolve the non-fatal overview fetch.
+    getOverview.mockResolvedValue({
+      active_sessions: 0,
+      queue_depth: 0,
+      recent_prs: [],
+      cron_summary: [],
+      health: 'healthy',
+      version: '0.1.0',
+      uptime_s: 0,
+    });
   });
 
   afterEach(cleanup);
@@ -262,5 +276,93 @@ describe('ConfigView', () => {
     const rows = await findAllByTestId('token-row');
     expect(rows.length).toBeGreaterThan(0);
     expect(getConfig).toHaveBeenCalledTimes(2);
+  });
+
+  // --- spa-polish ROADMAP 89, Req 13: cron StatusBadge column ---
+
+  it('renders a StatusBadge column in the cron table (Req 13.2)', async () => {
+    getConfig.mockResolvedValue(makeConfig());
+    const { findByTestId } = render(ConfigView);
+    const row = await findByTestId('cron-row');
+    const badge = row.querySelector('[data-testid="status-badge"]');
+    expect(badge).not.toBeNull();
+  });
+
+  it('derives the badge as active for a non-paused, non-error cron (Req 13.3)', async () => {
+    getConfig.mockResolvedValue(makeConfig()); // dpdk-cycle, paused: false
+    const { findByTestId } = render(ConfigView);
+    const row = await findByTestId('cron-row');
+    await waitFor(() => expect(getOverview).toHaveBeenCalledTimes(1));
+    const badge = row.querySelector('[data-testid="status-badge"]');
+    await waitFor(() => expect(badge?.getAttribute('data-state')).toBe('active'));
+  });
+
+  it('derives the badge as paused for a paused cron (Req 13.3)', async () => {
+    getConfig.mockResolvedValue(
+      makeConfig({
+        crons: [
+          { name: 'c1', repo: 'o/r', schedule: '* * * * *', nextFireTime: null, paused: true },
+        ],
+      }),
+    );
+    const { findByTestId } = render(ConfigView);
+    const row = await findByTestId('cron-row');
+    const badge = row.querySelector('[data-testid="status-badge"]');
+    await waitFor(() => expect(badge?.getAttribute('data-state')).toBe('paused'));
+  });
+
+  it('derives the badge error-first when cron_summary reports an error (Req 13.3)', async () => {
+    getConfig.mockResolvedValue(makeConfig()); // dpdk-cycle, paused: false
+    getOverview.mockResolvedValue({
+      active_sessions: 0,
+      queue_depth: 0,
+      recent_prs: [],
+      cron_summary: [
+        {
+          name: 'dpdk-cycle',
+          repo: 'gspivey/dpdk-stdlib-rust',
+          schedule: '*/30 * * * *',
+          state: 'error',
+          next_fire: null,
+        },
+      ],
+      health: 'degraded',
+      version: '0.1.0',
+      uptime_s: 0,
+    });
+    const { findByTestId } = render(ConfigView);
+    const row = await findByTestId('cron-row');
+    await waitFor(() => expect(getOverview).toHaveBeenCalledTimes(1));
+    const badge = row.querySelector('[data-testid="status-badge"]');
+    await waitFor(() => expect(badge?.getAttribute('data-state')).toBe('error'));
+  });
+
+  it('updates the badge optimistically when the cron is toggled (Req 13.4)', async () => {
+    getConfig.mockResolvedValue(makeConfig()); // dpdk-cycle active
+    pauseCron.mockResolvedValue({ ok: true });
+    const { findByTestId } = render(ConfigView);
+    const row = await findByTestId('cron-row');
+    const badge = row.querySelector('[data-testid="status-badge"]');
+    await waitFor(() => expect(badge?.getAttribute('data-state')).toBe('active'));
+
+    await fireEvent.click(await findByTestId('cron-toggle-dpdk-cycle'));
+    // Optimistic toggle flips the badge to paused immediately.
+    await waitFor(() => expect(badge?.getAttribute('data-state')).toBe('paused'));
+  });
+
+  it('falls back to paused-only state when the overview fetch fails (Req 13.3 fallback)', async () => {
+    getConfig.mockResolvedValue(
+      makeConfig({
+        crons: [
+          { name: 'c1', repo: 'o/r', schedule: '* * * * *', nextFireTime: null, paused: true },
+        ],
+      }),
+    );
+    getOverview.mockRejectedValue(new Error('overview down'));
+    const { findByTestId } = render(ConfigView);
+    const row = await findByTestId('cron-row');
+    // Config still renders; the badge derives from entry.paused only (no error).
+    const badge = row.querySelector('[data-testid="status-badge"]');
+    await waitFor(() => expect(badge?.getAttribute('data-state')).toBe('paused'));
   });
 });

@@ -12,6 +12,7 @@
   import { api, AuthError } from '../lib/api.js';
   import type { RepoGroup as RepoGroupData } from '../lib/types.js';
   import RepoGroupComponent from './RepoGroup.svelte';
+  import PageHeader from './PageHeader.svelte';
 
   let groups = $state<RepoGroupData[]>([]);
   let loading = $state(true);
@@ -40,6 +41,7 @@
 </script>
 
 <section data-testid="session-list" class="flex flex-col overflow-x-hidden">
+  <PageHeader title="Sessions" subtitle="Agent sessions grouped by repository" />
   {#if loading}
     <p data-testid="list-loading" class="p-4 text-sm text-[var(--text-muted)]">Loading sessions…</p>
   {:else if error}
@@ -55,7 +57,13 @@
       </button>
     </div>
   {:else if groups.length === 0}
-    <p data-testid="list-empty" class="p-4 text-sm text-[var(--text-muted)]">No sessions yet.</p>
+    <div
+      data-testid="list-empty"
+      class="flex flex-col items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 text-center"
+    >
+      <span aria-hidden="true" class="text-2xl text-[var(--text-muted)]">📭</span>
+      <p class="m-0 text-sm text-[var(--text-muted)]">No sessions yet.</p>
+    </div>
   {:else}
     {#each groups as group (group.repo)}
       <RepoGroupComponent {group} />

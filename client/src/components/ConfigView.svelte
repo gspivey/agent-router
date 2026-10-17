@@ -4,7 +4,9 @@
    *
    * Fetches `GET /config` on mount and renders five sections:
    *   - Token Health (table, colored status dots, red-row highlight) — FR-7.2.
-   *   - Cron Schedules (table, inline optimistic pause/resume toggle) — FR-7.3.
+   *   - Cron Schedules (table, a `StatusBadge` status column sourced error-first
+   *     from `GET /api/overview` `cron_summary`, plus an inline optimistic
+   *     pause/resume toggle) — FR-7.3 / spa-polish Req 13.
    *   - Session Timeouts (display-only card) — FR-7.4.
    *   - Rate Limits (display-only card) — FR-7.5.
    *   - Repositories (table, webhook-configured indicator, no secrets) — FR-7.6.
@@ -17,7 +19,9 @@
   import { onMount } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { api, AuthError } from '../lib/api.js';
-  import type { ConfigResponse } from '../lib/types.js';
+  import type { ConfigResponse, OverviewCronSummary } from '../lib/types.js';
+  import StatusBadge from './StatusBadge.svelte';
+  import PageHeader from './PageHeader.svelte';
 
   /** Exact backend sentinel string for a configured per-repo webhook secret. */
   const WEBHOOK_CONFIGURED = '[configured]';
@@ -31,6 +35,26 @@
   /** Per-row toggle error keyed by cron name (FR-7.3d). */
   const cronErrors = new SvelteMap<string, string>();
 
+  /**
+   * Cron error bit sourced from `GET /api/overview` `cron_summary`, keyed by
+   * cron name (spa-polish ROADMAP 89, Req 13.1/13.3). `GET /config` never
+   * populates a `last_run_failed` flag, so the error state is sourced here.
+   * A name absent from this map (overview fetch failed or partial) falls back
+   * to deriving state from `entry.paused` only (no error bit).
+   */
+  const cronOverviewError = new SvelteMap<string, boolean>();
+
+  /**
+   * Derive the badge state for a cron row error-first (Req 13.3):
+   * `IF error THEN 'error' ELSE IF paused THEN 'paused' ELSE 'active'`.
+   * The paused bit reflects the optimistic toggle so the badge updates live.
+   */
+  function cronBadgeState(name: string, entryPaused: boolean): 'active' | 'paused' | 'error' {
+    if (cronOverviewError.get(name) === true) return 'error';
+    const paused = cronPaused.get(name) ?? entryPaused;
+    return paused ? 'paused' : 'active';
+  }
+
   async function load(): Promise<void> {
     loading = true;
     error = null;
@@ -41,6 +65,17 @@
       cronErrors.clear();
       for (const c of res.crons) {
         cronPaused.set(c.name, c.paused);
+      }
+      // Fetch the overview once for the cron error bit (Req 13.1). A failure
+      // here is non-fatal: the badge falls back to the paused-only state.
+      cronOverviewError.clear();
+      try {
+        const overview = await api.getOverview();
+        for (const summary of overview.cron_summary as OverviewCronSummary[]) {
+          cronOverviewError.set(summary.name, summary.state === 'error');
+        }
+      } catch {
+        // Leave `cronOverviewError` empty — badges derive from paused only.
       }
     } catch (err) {
       if (!(err instanceof AuthError)) {
@@ -89,6 +124,7 @@
 </script>
 
 <section data-testid="config-view" class="flex flex-col gap-6 p-4">
+  <PageHeader title="Config" subtitle="Daemon configuration and schedules" />
   {#if loading}
     <p data-testid="config-loading" class="text-sm text-[var(--text-muted)]">Loading…</p>
   {:else if error !== null}
@@ -161,6 +197,7 @@
               <th class="px-3 py-2 font-medium">Schedule</th>
               <th class="px-3 py-2 font-medium">Next Fire</th>
               <th class="px-3 py-2 font-medium">Status</th>
+              <th class="px-3 py-2 font-medium">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -171,6 +208,9 @@
                 <td class="px-3 py-2 text-[var(--text-muted)]">{cron.repo}</td>
                 <td class="px-3 py-2 font-mono text-xs text-[var(--text-primary)]">{cron.schedule}</td>
                 <td class="px-3 py-2 text-[var(--text-muted)]">{formatNextFire(cron.nextFireTime)}</td>
+                <td class="px-3 py-2">
+                  <StatusBadge state={cronBadgeState(cron.name, paused)} />
+                </td>
                 <td class="px-3 py-2">
                   <button
                     type="button"

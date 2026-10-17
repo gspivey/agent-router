@@ -90,6 +90,19 @@ describe('RepoGroup — header (FR-2.2)', () => {
     expect(queryByTestId('active-dot')).toBeNull();
   });
 
+  it('renders an "idle" paused indicator when there are no active sessions (Req 14.2)', () => {
+    const { getByTestId } = render(RepoGroup, { group: makeGroup({ active_sessions: [] }) });
+    const idle = getByTestId('group-paused');
+    expect(idle.textContent).toContain('idle');
+  });
+
+  it('renders no "idle" indicator when there is an active session (Req 14.2)', () => {
+    const { queryByTestId } = render(RepoGroup, {
+      group: makeGroup({ active_sessions: [makeSession({ status: 'active', completed_at: null })] }),
+    });
+    expect(queryByTestId('group-paused')).toBeNull();
+  });
+
   it('renders a "paused" pill when the cron is paused', () => {
     const { getByTestId } = render(RepoGroup, {
       group: makeGroup({ cron: { name: 'c', schedule: '* * * * *', paused: true, next_fire: null } }),

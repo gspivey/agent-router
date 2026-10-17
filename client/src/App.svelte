@@ -10,8 +10,8 @@
    * config at `#/config` (spa-polish ROADMAP 88).
    *
    * The chat view (ROADMAP 75) renders the session history as a chat
-   * conversation. The `overview` branch renders a placeholder here (ROADMAP 88);
-   * the real `Overview.svelte` lands in ROADMAP 89.
+   * conversation. The `overview` branch renders the `Overview` dashboard
+   * (ROADMAP 89).
    */
   import { onMount } from 'svelte';
   import { auth } from './lib/stores.svelte.js';
@@ -20,6 +20,7 @@
   import SessionList from './components/SessionList.svelte';
   import ConfigView from './components/ConfigView.svelte';
   import ChatView from './components/ChatView.svelte';
+  import Overview from './components/Overview.svelte';
   import PageLayout from './components/PageLayout.svelte';
 
   // The token is resolved in `main.ts` before mount, so children that fetch on
@@ -51,11 +52,7 @@
   <div data-testid="app-shell" class="min-h-screen">
     <Header />
     {#if route.current.view === 'overview'}
-      <PageLayout width="wide">
-        <div data-testid="overview-placeholder" class="text-sm text-[var(--text-muted)]">
-          Loading…
-        </div>
-      </PageLayout>
+      <PageLayout width="wide"><Overview /></PageLayout>
     {:else if route.current.view === 'list'}
       <PageLayout width="wide"><SessionList /></PageLayout>
     {:else if route.current.view === 'config'}

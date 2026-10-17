@@ -76,7 +76,17 @@ describe('SessionList', () => {
   it('renders the empty state when there are no repos', async () => {
     listRepoSessions.mockResolvedValue(response([]));
     const { findByTestId } = render(SessionList);
-    expect(await findByTestId('list-empty')).toBeTruthy();
+    const empty = await findByTestId('list-empty');
+    expect(empty).toBeTruthy();
+    // The empty state carries a muted message (Req 14.1).
+    expect(empty.textContent).toContain('No sessions yet.');
+  });
+
+  it('renders a PageHeader titled "Sessions" (Req 14.3)', async () => {
+    listRepoSessions.mockResolvedValue(response([]));
+    const { findByTestId } = render(SessionList);
+    const header = await findByTestId('page-header');
+    expect(header.querySelector('h1')?.textContent).toBe('Sessions');
   });
 
   it('renders a retriable error state on a non-auth failure', async () => {

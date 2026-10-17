@@ -5,7 +5,8 @@
    *
    * The header shows the repo name, an open-PR count badge (links to the repo's
    * PR list), a cron info / paused pill, and a pulsing green dot when any
-   * session in the group is active (FR-2.2). The body lists all active sessions
+   * session in the group is active — or an "idle" indicator when every session
+   * in the group is inactive (FR-2.2 / spa-polish Req 14.2). The body lists all active sessions
    * plus a paged window of terminal sessions with a "Show more" button
    * (FR-2.4). Collapse state is persisted to localStorage with auto-collapse for
    * stale, inactive repos (FR-2.5, FR-2.6).
@@ -110,6 +111,12 @@
         class="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--success)]"
         style="animation: pulse 2s infinite;"
       ></span>
+    {:else}
+      <span
+        data-testid="group-paused"
+        aria-label="No active sessions"
+        class="shrink-0 rounded-full bg-[var(--system-pill-bg)] px-2 py-0.5 text-xs text-[var(--text-muted)]"
+      >idle</span>
     {/if}
 
     {#if group.open_pr_count > 0}
