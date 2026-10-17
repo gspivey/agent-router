@@ -10,8 +10,9 @@ export interface McpContext {
   /**
    * Agent socket path for the credential-boundary relays
    * (`github_http_forward`, `push_branch`, `pr_create`, `pr_view`). When
-   * omitted, resolved from `AGENT_ROUTER_AGENT_SOCK` / `AGENT_ROUTER_SOCKET`
-   * at call time. Agent process isolation, FR-5.2 / FR-6.2.
+   * omitted, resolved from `AGENT_ROUTER_AGENT_SOCK` at call time. The operator
+   * socket is NEVER a fallback; absence of a non-empty path (including an empty
+   * string) is a hard error (security-isolation-fix FR-1).
    */
   agentSocket?: string;
   /**
@@ -231,24 +232,49 @@ function makeSuccessResponse(id: number | string | null, result: unknown): JsonR
   return { jsonrpc: '2.0', id, result };
 }
 
+/**
+ * Resolve the agent socket path used by the credential-boundary relays
+ * (`github_http_forward`, `push_branch`, `pr_create`, `pr_view`).
+ *
+ * The ONLY two sources are the explicit context override (`ctxSock`, used by
+ * tests) and the daemon-wired `AGENT_ROUTER_AGENT_SOCK` env var (`envSock`), in
+ * that order. The operator/daemon socket is NEVER a fallback — it performs no
+ * cap-token validation and serves privileged ops, so relaying to it would
+ * bypass the credential boundary (agent-process-isolation design §C,
+ * security-isolation-fix FR-1).
+ *
+ * Empty strings are treated as absent (coerced via `|| undefined`), since `??`
+ * alone only skips `null`/`undefined`. When neither source yields a non-empty
+ * path the function throws — a hard error surfaced to the agent as a tool error
+ * by the `handleToolsCall` catch (FR-1.4).
+ */
+export function resolveAgentSocket(
+  ctxSock: string | undefined,
+  envSock: string | undefined,
+): string {
+  const sock = (ctxSock || undefined) ?? (envSock || undefined);
+  if (sock === undefined) {
+    throw new Error('AGENT_ROUTER_AGENT_SOCK not set; cannot relay MCP tool');
+  }
+  return sock;
+}
+
 export function createMcpServer(ctx: McpContext): McpServer {
   const { sessionId, daemonSocket } = ctx;
   let running = false;
   let rl: ReturnType<typeof createInterface> | null = null;
 
   /**
-   * Resolve the agent socket path for the credential-boundary relays. The
-   * daemon wires `AGENT_ROUTER_AGENT_SOCK` into the per-session MCP env (and
-   * falls back to the operator socket when isolation is off). The explicit
-   * `ctx.agentSocket` wins for tests.
+   * Resolve the agent socket path for the credential-boundary relays. The only
+   * two sources are the explicit `ctx.agentSocket` override (tests) and the
+   * daemon-wired `AGENT_ROUTER_AGENT_SOCK` env var, in that order. The operator
+   * socket (`AGENT_ROUTER_SOCKET` / `daemonSocket`) is NEVER a fallback: it
+   * serves privileged ops and performs no cap-token validation, so relaying to
+   * it would bypass the credential boundary (agent-process-isolation design §C,
+   * security-isolation-fix FR-1). Absence of a non-empty path is a hard error.
    */
-  function resolveAgentSocket(): string {
-    return (
-      ctx.agentSocket ??
-      process.env['AGENT_ROUTER_AGENT_SOCK'] ??
-      process.env['AGENT_ROUTER_SOCKET'] ??
-      daemonSocket
-    );
+  function resolveAgentSocketForRelay(): string {
+    return resolveAgentSocket(ctx.agentSocket, process.env['AGENT_ROUTER_AGENT_SOCK']);
   }
 
   /** Resolve the per-session capability token presented to the agent socket. */
@@ -381,7 +407,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
           // Thin relay to the daemon-side `github_forward` op on the agent
           // socket. The daemon owns the allowlist, repo-scope check, token
           // injection, and size caps — the agent never sees a credential.
-          result = await sendToDaemon(resolveAgentSocket(), {
+          result = await sendToDaemon(resolveAgentSocketForRelay(), {
             op: 'github_forward',
             session_id: sessionId,
             cap_token: resolveCapToken(),
@@ -403,7 +429,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
           // Thin relay to the daemon-side `push_branch` op on the agent socket.
           // The agent must have created `./push-bundle.bundle` in its working
           // directory first; the daemon verifies and pushes it.
-          result = await sendToDaemon(resolveAgentSocket(), {
+          result = await sendToDaemon(resolveAgentSocketForRelay(), {
             op: 'push_branch',
             session_id: sessionId,
             cap_token: resolveCapToken(),
@@ -421,7 +447,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
           // Thin relay to the daemon-side `pr_create` op on the agent socket.
-          result = await sendToDaemon(resolveAgentSocket(), {
+          result = await sendToDaemon(resolveAgentSocketForRelay(), {
             op: 'pr_create',
             session_id: sessionId,
             cap_token: resolveCapToken(),
@@ -439,7 +465,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
             return;
           }
           // Thin relay to the daemon-side `pr_view` op on the agent socket.
-          result = await sendToDaemon(resolveAgentSocket(), {
+          result = await sendToDaemon(resolveAgentSocketForRelay(), {
             op: 'pr_view',
             session_id: sessionId,
             cap_token: resolveCapToken(),

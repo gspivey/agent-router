@@ -543,22 +543,27 @@ export function createAgentServer(deps: AgentServerDeps): AgentServer {
       await execFileImpl('git', ['init', '--bare', bareRepo], { env: CLEAN_GIT_ENV });
 
       const bareClonePath = deps.bareClonePathFor?.(sessionRepo);
-
-      // Fetch base branch (needed for .github comparison + bundle prereq) when
-      // the daemon's canonical bare clone is available.
-      if (bareClonePath !== undefined) {
-        await execFileImpl(
-          'git',
-          [
-            '-C', bareRepo,
-            '-c', 'core.hooksPath=/dev/null',
-            '-c', 'protocol.file.allow=always',
-            '-c', 'credential.helper=',
-            'fetch', bareClonePath, `refs/heads/${baseBranch}:refs/remotes/base/${baseBranch}`,
-          ],
-          { env: CLEAN_GIT_ENV },
-        );
+      // Fail closed when the canonical bare clone is unavailable: the `.github/`
+      // workflow guard below depends on it, so reject BEFORE any bundle work or
+      // push happens (security-isolation-fix FR-3, design Fix 3). This runs
+      // before `resolvePat`/push, so no remote push occurs when the guard
+      // cannot run.
+      if (bareClonePath === undefined) {
+        return { error: 'bare clone not configured; push_branch cannot verify .github/ changes' };
       }
+
+      // Fetch base branch (needed for .github comparison + bundle prereq).
+      await execFileImpl(
+        'git',
+        [
+          '-C', bareRepo,
+          '-c', 'core.hooksPath=/dev/null',
+          '-c', 'protocol.file.allow=always',
+          '-c', 'credential.helper=',
+          'fetch', bareClonePath, `refs/heads/${baseBranch}:refs/remotes/base/${baseBranch}`,
+        ],
+        { env: CLEAN_GIT_ENV },
+      );
 
       await execFileImpl('git', ['-C', bareRepo, 'bundle', 'verify', bundleDst], { env: CLEAN_GIT_ENV });
 
@@ -576,12 +581,11 @@ export function createAgentServer(deps: AgentServerDeps): AgentServer {
       );
 
       // .github tree-SHA comparison (named refs only) — fail closed on error.
-      if (bareClonePath !== undefined) {
-        const tip = await revParseTree(bareRepo, `refs/heads/${branch}:.github`);
-        const base = await revParseTree(bareRepo, `refs/remotes/base/${baseBranch}:.github`);
-        if (tip !== base) {
-          return { error: 'Bundle modifies .github — workflow pushes are not permitted' };
-        }
+      // bareClonePath is known-present here (checked above).
+      const tip = await revParseTree(bareRepo, `refs/heads/${branch}:.github`);
+      const base = await revParseTree(bareRepo, `refs/remotes/base/${baseBranch}:.github`);
+      if (tip !== base) {
+        return { error: 'Bundle modifies .github — workflow pushes are not permitted' };
       }
 
       const pat = resolvePat(sessionRepo);

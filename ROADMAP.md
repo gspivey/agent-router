@@ -1075,7 +1075,7 @@ then implement tasks `12`, `13`, `14`, `15`, `16`. Depends on item 88 (router
 overview route and MessageRow must be present).
 
 - Spec: `.kiro/specs/spa-polish/` · tasks `12`, `13`, `14`, `15`, `16`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #159
 
 ---
 

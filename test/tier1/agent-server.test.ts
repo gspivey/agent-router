@@ -97,6 +97,7 @@ interface Harness {
 async function startServer(opts: {
   sessionMgr?: SessionManager;
   fetchImpl?: typeof fetch;
+  bareClonePathFor?: (repo: string) => string | undefined;
 } = {}): Promise<Harness> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-sock-'));
   const socketPath = path.join(tmpDir, 'agent.sock');
@@ -115,6 +116,12 @@ async function startServer(opts: {
     return { stdout: '', stderr: '' };
   }
 
+  // Default to a defined bare clone path so the .github/ guard (Fix 3) runs; a
+  // test can pass `bareClonePathFor: () => undefined` to exercise the
+  // fail-closed path.
+  const bareClonePathFor =
+    opts.bareClonePathFor ?? ((_repo: string): string | undefined => path.join(tmpDir, 'bare-clone'));
+
   const server = createAgentServer({
     socketPath,
     sessionMgr: opts.sessionMgr ?? makeSessionMgr(),
@@ -124,6 +131,7 @@ async function startServer(opts: {
     worktreeBase: path.join(tmpDir, 'worktrees'),
     baseBranch: 'development',
     fetchImpl: opts.fetchImpl ?? okFetch,
+    bareClonePathFor,
     execFileImpl: execFileImpl as unknown as NonNullable<AgentServerDeps['execFileImpl']>,
   });
   await server.start();
@@ -341,6 +349,76 @@ describe('agent socket server (item 85)', () => {
     // A git push ran (array args include 'push').
     expect(h.execCalls.some((c) => c.args.includes('push'))).toBe(true);
   });
+
+  // --- push_branch .github/ guard fails closed (FR-3 / AC-4, AC-5) ---
+
+  it('push_branch fails closed when the bare clone is not configured', async () => {
+    h = await startServer({ bareClonePathFor: () => undefined });
+    const workDir = path.join(h.tmpDir, 'worktrees', SESSION_ID, 'work');
+    fs.mkdirSync(workDir, { recursive: true });
+    fs.writeFileSync(path.join(workDir, 'push-bundle.bundle'), Buffer.from('stub-bundle'));
+
+    const resp = await roundTrip(h.socketPath, {
+      op: 'push_branch',
+      session_id: SESSION_ID,
+      cap_token: CAP_TOKEN,
+      branch: 'agent/fix',
+    });
+    expect(resp['error']).toBe(
+      'bare clone not configured; push_branch cannot verify .github/ changes',
+    );
+    // No push occurred (fail closed before resolvePat/push).
+    expect(h.execCalls.some((c) => c.args.includes('push'))).toBe(false);
+  });
+
+  it('push_branch still rejects a bundle that modifies .github (regression)', async () => {
+    // Custom harness whose rev-parse returns different SHAs for tip vs base so
+    // the .github tree comparison trips. bareClonePathFor is defined.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-dotgithub-'));
+    const socketPath = path.join(tmpDir, 'agent.sock');
+    const execCalls: Array<{ args: readonly string[] }> = [];
+    async function execFileImpl(
+      _cmd: string,
+      args: readonly string[],
+    ): Promise<{ stdout: string; stderr: string }> {
+      execCalls.push({ args });
+      if (args.includes('rev-parse')) {
+        // tip ref (refs/heads/<branch>:.github) differs from base.
+        const isTip = args.some((a) => a.includes('refs/heads/') && a.endsWith(':.github'));
+        return { stdout: (isTip ? 'TIP_SHA\n' : 'BASE_SHA\n'), stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    }
+    const server = createAgentServer({
+      socketPath,
+      sessionMgr: makeSessionMgr(),
+      github: githubStub,
+      tokenResolver,
+      log: silentLog,
+      worktreeBase: path.join(tmpDir, 'worktrees'),
+      baseBranch: 'development',
+      fetchImpl: okFetch,
+      bareClonePathFor: (): string | undefined => path.join(tmpDir, 'bare-clone'),
+      execFileImpl: execFileImpl as unknown as NonNullable<AgentServerDeps['execFileImpl']>,
+    });
+    await server.start();
+    try {
+      const workDir = path.join(tmpDir, 'worktrees', SESSION_ID, 'work');
+      fs.mkdirSync(workDir, { recursive: true });
+      fs.writeFileSync(path.join(workDir, 'push-bundle.bundle'), Buffer.from('stub-bundle'));
+      const resp = await roundTrip(socketPath, {
+        op: 'push_branch',
+        session_id: SESSION_ID,
+        cap_token: CAP_TOKEN,
+        branch: 'agent/fix',
+      });
+      expect(resp['error']).toBe('Bundle modifies .github — workflow pushes are not permitted');
+      expect(execCalls.some((c) => c.args.includes('push'))).toBe(false);
+    } finally {
+      await server.shutdown();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });
 
 // --- push_branch git auth env (fix: askpass-helper-absent) ---
@@ -383,6 +461,7 @@ describe('push_branch git auth env — buildGitAuthEnv fallback', () => {
       worktreeBase: path.join(tmpDir, 'worktrees'),
       baseBranch: 'development',
       fetchImpl: okFetch,
+      bareClonePathFor: (_repo: string): string | undefined => path.join(tmpDir, 'bare-clone'),
       execFileImpl: execFileImpl as unknown as NonNullable<AgentServerDeps['execFileImpl']>,
     });
     await server.start();

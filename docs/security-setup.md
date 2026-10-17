@@ -51,6 +51,27 @@ falls back to `$ROOTDIR/agent.sock`) so the per-session MCP relay works in both 
 - `ufw` must **not** be active — it conflicts with the egress rules. The setup script aborts
   if ufw is running. Disable ufw or add equivalent egress rules by hand.
 
+## `tokens.json` is required for agent-socket PAT operations
+
+The agent-socket relays that need a GitHub PAT — `push_branch`, `pr_create`, `pr_view`, and
+authenticated `github_http_forward` — resolve the credential **only** through the credential
+token store (`$ROOTDIR/tokens.json`), with **no** environment fallback. A repo that is not
+listed in any `tokens.json` project cannot be pushed to or have a PR opened for it: the relay
+fails closed with `No token configured for repo <owner>/<repo>` rather than silently falling
+back to the daemon's ambient `GITHUB_TOKEN`.
+
+Practical consequence: **every repo an agent operates on must appear in a project's `repos`
+array in `tokens.json`.** This holds regardless of `useWorkerUid`. In `_fallback` mode (no
+`tokens.json`, only `GITHUB_TOKEN` set) those operations are unavailable, and the daemon logs
+an advisory WARNING at startup:
+
+```
+tokens.json not found — agent-socket PAT operations (push_branch, pr_create, pr_view)
+require a tokens.json with project-scoped credentials
+```
+
+Create a `tokens.json` with project-scoped PATs to enable these operations.
+
 ## Setup
 
 Run the setup script as root, pointing it at your kiro binary and daemon root dir:

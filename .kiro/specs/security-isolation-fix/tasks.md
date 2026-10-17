@@ -14,7 +14,7 @@ when its code and its tests are both on the branch and green.
 Files: `src/mcp-server.ts`, `src/index.ts`, `src/agent-server.ts` (+ tests).
 Covers FR-1, FR-2, FR-3. Branch slug suggestion: `agent/security-isolation-fix-code`.
 
-- [ ] 90.1 Remove the operator-socket fallback from `resolveAgentSocket()` in `src/mcp-server.ts`
+- [x] 90.1 Remove the operator-socket fallback from `resolveAgentSocket()` in `src/mcp-server.ts`
   so it resolves only `ctx.agentSocket ?? process.env['AGENT_ROUTER_AGENT_SOCK']` and throws
   `Error('AGENT_ROUTER_AGENT_SOCK not set; cannot relay MCP tool')` when both are absent or
   empty. Treat `''` as unset: because `??` only skips `null`/`undefined`, the implementation
@@ -24,12 +24,12 @@ Covers FR-1, FR-2, FR-3. Branch slug suggestion: `agent/security-isolation-fix-c
   doc comment and the `McpContext.agentSocket` JSDoc to describe the two-source resolution and
   the hard error. (FR-1.1, FR-1.2, FR-1.3; design Fix 1)
 
-- [ ] 90.2 Verify (and, if needed, adjust) that a throw from `resolveAgentSocket()` inside a
+- [x] 90.2 Verify (and, if needed, adjust) that a throw from `resolveAgentSocket()` inside a
   relay tool call (`github_http_forward`, `push_branch`, `pr_create`, `pr_view`) is surfaced by
   the existing `handleToolsCall` catch as an `isError: true` tool result and does not crash the
   MCP server. No new catch should be required — confirm by test. (FR-1.4; design Fix 1)
 
-- [ ] 90.3 Tier 1 tests for `resolveAgentSocket()`: either extract it as a small pure exported
+- [x] 90.3 Tier 1 tests for `resolveAgentSocket()`: either extract it as a small pure exported
   helper `resolveAgentSocket(ctxSock: string | undefined, envSock: string | undefined): string`
   and test it directly, or exercise it via relay tool calls through `handleToolsCall`. Test matrix
   (coercion semantics — empty string is absent):
@@ -45,7 +45,7 @@ Covers FR-1, FR-2, FR-3. Branch slug suggestion: `agent/security-isolation-fix-c
   - A relay tool call with no agent socket → `isError: true` result with the error text; server alive.
   (AC-1, AC-2; NFR-2)
 
-- [ ] 90.4 In `src/index.ts`, change the `tokenResolver` passed to `createAgentServer` so the PAT
+- [x] 90.4 In `src/index.ts`, change the `tokenResolver` passed to `createAgentServer` so the PAT
   source is the credential token store only. Implement and export a pure helper
   `credentialTokenResolver(store: TokenStore): TokenResolver` in a new or existing module (e.g.
   `src/token-resolver.ts`). The helper resolves:
@@ -60,7 +60,7 @@ Covers FR-1, FR-2, FR-3. Branch slug suggestion: `agent/security-isolation-fix-c
   existing `tokenResolver` unchanged.
   (FR-2.1, FR-2.2, FR-2.3; design Fix 2)
 
-- [ ] 90.5 Tier 1 tests for `credentialTokenResolver` (the exported helper): resolves a stored
+- [x] 90.5 Tier 1 tests for `credentialTokenResolver` (the exported helper): resolves a stored
   project token for a repo listed in that project's `repos`; throws `No token configured for repo
   <slug>` when the repo maps to no project or the project has no token. Set
   `process.env.GITHUB_TOKEN = 'ghp_SENTINEL'` during tests and assert this sentinel never appears
@@ -69,7 +69,7 @@ Covers FR-1, FR-2, FR-3. Branch slug suggestion: `agent/security-isolation-fix-c
   `store.reload()`, call the resolver again — the new token is returned. Add a `_fallback` mode
   test: store built with `fallbackToken` (no `tokens.json`), resolver throws for any repo slug.
   (AC-3, AC-10; NFR-2)
-- [ ] 90.6 Tier 2 test for the no-token path: exercise `push_branch` against the agent-server
+- [x] 90.6 Tier 2 test for the no-token path: exercise `push_branch` against the agent-server
   harness with a real `createTokenStore` (temp `tokens.json` that has no entry for the session
   repo), a stub `bareClonePathFor` that returns a valid path (so Fix 3's guard does not fire),
   and an `execFileImpl` stub where `rev-parse` returns matching tree SHAs for both `tip` and
@@ -78,7 +78,7 @@ Covers FR-1, FR-2, FR-3. Branch slug suggestion: `agent/security-isolation-fix-c
   issued. Add a `github_http_forward` case asserting `fetchImpl` was never called when the token
   lookup fails. (AC-3; NFR-2)
 
-- [ ] 90.7 In `src/agent-server.ts` `push_branch`, make the `.github/` guard fail closed by
+- [x] 90.7 In `src/agent-server.ts` `push_branch`, make the `.github/` guard fail closed by
   hoisting the `bareClonePath === undefined` rejection to immediately after
   `bareClonePathFor?.(sessionRepo)` is called, before the base-branch fetch. Return
   `{ error: 'bare clone not configured; push_branch cannot verify .github/ changes' }` at that
@@ -89,12 +89,12 @@ Covers FR-1, FR-2, FR-3. Branch slug suggestion: `agent/security-isolation-fix-c
   `bareClonePathFor` returning `undefined` — those tests must now either supply a defined bare
   clone or assert the new error; do NOT delete them. (FR-3.1, FR-3.2, FR-3.3; design Fix 3)
 
-- [ ] 90.8 Tier 1/Tier 2 tests for the `.github/` guard: `bareClonePathFor` returning `undefined`
+- [x] 90.8 Tier 1/Tier 2 tests for the `.github/` guard: `bareClonePathFor` returning `undefined`
   → the exact "bare clone not configured" error and no push on the fake remote; defined bare clone
   + bundle touching `.github/` → existing `Bundle modifies .github …` rejection (regression);
   defined bare clone + clean bundle → push proceeds. (AC-4, AC-5; NFR-2)
 
-- [ ] 90.9 Implement and export `checkAgentSocketTokenSource(store: TokenStore, log: Logger)` in
+- [x] 90.9 Implement and export `checkAgentSocketTokenSource(store: TokenStore, log: Logger)` in
   `src/token-store-startup.ts`. Use `store.getProject('_fallback') !== undefined` (consistent with
   existing `validateTokenStoreStartup` at L26) to detect fallback mode; log a WARNING stating that
   agent-socket PAT operations (`push_branch`, `pr_create`, `pr_view`) require `tokens.json`.
@@ -103,7 +103,7 @@ Covers FR-1, FR-2, FR-3. Branch slug suggestion: `agent/security-isolation-fix-c
   Update `docs/security-setup.md` and `README.md` to document that every repo used by an agent
   must appear in a `tokens.json` project. (FR-2.4; AC-10)
 
-- [ ] 90.10 Run `npm run typecheck` and `npm test` (Tier 1 + Tier 2); fix any failures. Confirm no
+- [x] 90.10 Run `npm run typecheck` and `npm test` (Tier 1 + Tier 2); fix any failures. Confirm no
   new runtime dependency was added and no `console.log` was introduced. (NFR-1, NFR-3, NFR-4)
 
 ---
