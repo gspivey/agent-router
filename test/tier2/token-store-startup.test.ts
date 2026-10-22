@@ -176,17 +176,17 @@ describe('Tier 2: Token_Store startup integration', () => {
     await stopDaemon(daemon.proc);
   }, 30000);
 
-  it('refuses to start with FatalError when fallback mode + credentialMode mcp', async () => {
-    // No tokens.json, GITHUB_TOKEN set, but credentialMode is 'mcp'
+  it('refuses to start with FatalError when credentialMode mcp has a repo without a token', async () => {
+    // Config repo has no `token`; an ambient GITHUB_TOKEN must not satisfy mcp mode.
     writeConfig(tmpDir, port, controlPort, { credentialMode: 'mcp' });
     daemon = spawnDaemon(tmpDir, { GITHUB_TOKEN: 'ghp_fallback_test' });
     const exitCode = await waitForExit(daemon.proc);
     expect(exitCode).toBe(1);
 
-    // Check that error message mentions tokens.json and credentialMode
+    // The error names credentialMode and the repo missing its token
     const allStderr = daemon.stderr.join('');
-    expect(allStderr).toMatch(/tokens\.json/i);
     expect(allStderr).toMatch(/credentialMode/i);
+    expect(allStderr).toMatch(/test-org\/test-repo/);
   }, 30000);
 
   it('SIGHUP triggers token store reload', async () => {

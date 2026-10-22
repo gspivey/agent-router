@@ -56,7 +56,6 @@ import { warnOnConflictingMcpConfig } from './mcp-config-check.js';
 import { createRestartRequiredState } from './restart-required.js';
 import { createConfigTokenStore } from './config-token-store.js';
 import type { TokenStore } from './token-store.js';
-import { validateTokenStoreStartup } from './token-store-startup.js';
 import { credentialTokenResolver } from './token-resolver.js';
 import { createReaper } from './reaper.js';
 import type { Reaper } from './reaper.js';
@@ -605,13 +604,18 @@ async function main(): Promise<void> {
   // same per-repo token the session spawn path injects. tokens.json is not read.
   const credentialTokenStore = createConfigTokenStore(() => config.repos);
 
-  // Validate: MCP credential mode needs per-repo tokens.
-  validateTokenStoreStartup(credentialTokenStore, config.credentialMode);
-
   // Repos without a token fail closed for push_branch / pr_create / pr_view.
   const reposWithoutToken = config.repos
     .filter((r) => typeof r.token !== 'string' || r.token.length === 0)
     .map((r) => `${r.owner}/${r.name}`);
+  // MCP credential mode serves every session's PAT from this store, so every
+  // configured repo needs its own token (replaces the old "tokens.json required").
+  if (config.credentialMode === 'mcp' && reposWithoutToken.length > 0) {
+    throw new FatalError(
+      `credentialMode "mcp" requires a token for every configured repo (config.json repos[].token); ` +
+      `missing: ${reposWithoutToken.join(', ')}. Add the tokens or set credentialMode to "env".`,
+    );
+  }
   if (reposWithoutToken.length > 0) {
     log.warn('Repos without a configured token: agent push/PR operations will fail closed', {
       repos: reposWithoutToken,
