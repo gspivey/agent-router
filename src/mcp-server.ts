@@ -117,7 +117,7 @@ const MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'push_branch',
     description:
-      'Push a feature branch to the session\'s GitHub repository. First create a bundle in your working directory with `git bundle create ./push-bundle.bundle origin/<base>..<branch>`, then call this tool with the branch name. The daemon verifies the bundle, rejects workflow (.github) changes and protected branches, and pushes from a daemon-owned repository with credentials the agent never sees.',
+      'Push a feature branch to the session\'s GitHub repository. Work in the session checkout agent-router created (the `$WORKDIR` directory) — the daemon only reads the bundle from there, never from a clone you made elsewhere. In `$WORKDIR`, create the bundle with `git bundle create ./push-bundle.bundle <base>..<branch>` (use `origin/<base>` if that ref exists in your checkout), then call this tool with the branch name. The daemon verifies the bundle, rejects workflow (.github) changes and protected branches, and pushes from a daemon-owned repository with credentials the agent never sees.',
     inputSchema: {
       type: 'object',
       properties: {

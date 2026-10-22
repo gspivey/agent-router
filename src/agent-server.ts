@@ -41,6 +41,7 @@ import type { GitHubClient, TokenResolver } from './github.js';
 import type { Database } from './db.js';
 import type { SessionFiles } from './session-files.js';
 import type { GithubForwardAllowEntry } from './config.js';
+import { sessionWorkDir } from './worktree-manager.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -291,6 +292,12 @@ export interface AgentServerDeps {
   allowList?: GithubForwardAllowEntry[];
   /** Base dir for per-session clones (push_branch bundle source). */
   worktreeBase: string;
+  /**
+   * Session layout the daemon created (must match the worktree manager's).
+   * true: bundle read from `<base>/<sid>/work`; false: from `<base>/<sid>`.
+   * Default false.
+   */
+  useWorkerUid?: boolean;
   /** Daemon's canonical bare clone resolver, keyed by `owner/repo`. */
   bareClonePathFor?: (repo: string) => string | undefined;
   /** Base branch PRs target. Default `development`. */
@@ -347,6 +354,7 @@ export function createAgentServer(deps: AgentServerDeps): AgentServer {
   const reportOutcomeSink = deps.reportOutcomeSink;
   const allowList = deps.allowList ?? DEFAULT_GITHUB_FORWARD_ALLOWLIST;
   const worktreeBase = deps.worktreeBase;
+  const useWorkerUid = deps.useWorkerUid ?? false;
   const baseBranch = deps.baseBranch ?? 'development';
   const fetchImpl = deps.fetchImpl ?? fetch;
   const execFileImpl = deps.execFileImpl ?? execFileAsync;
@@ -506,7 +514,7 @@ export function createAgentServer(deps: AgentServerDeps): AgentServer {
     if (sessionRepo === undefined) return { error: 'Session has no bound repo' };
 
     // Read the agent-written bundle (O_NOFOLLOW|O_NONBLOCK guards against FIFO/symlink).
-    const bundleSrc = path.join(worktreeBase, sessionId, 'work', 'push-bundle.bundle');
+    const bundleSrc = path.join(sessionWorkDir(worktreeBase, sessionId, useWorkerUid), 'push-bundle.bundle');
     let buf: Buffer;
     try {
       const fd = fs.openSync(

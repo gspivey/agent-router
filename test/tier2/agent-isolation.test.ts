@@ -486,6 +486,7 @@ describe('agent-server PAT source fails closed without a stored token (FR-2 / AC
       tokenResolver: credentialTokenResolver(store),
       log: silentLog,
       worktreeBase: path.join(tmpDir, 'worktrees'),
+      useWorkerUid: true,
       baseBranch: 'development',
       fetchImpl,
       // Defined so Fix 3's .github guard does not short-circuit first.

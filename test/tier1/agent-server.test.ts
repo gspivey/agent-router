@@ -98,6 +98,8 @@ async function startServer(opts: {
   sessionMgr?: SessionManager;
   fetchImpl?: typeof fetch;
   bareClonePathFor?: (repo: string) => string | undefined;
+  /** Session layout. Default true (bundle in `<base>/<sid>/work`). */
+  useWorkerUid?: boolean;
 } = {}): Promise<Harness> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-sock-'));
   const socketPath = path.join(tmpDir, 'agent.sock');
@@ -129,6 +131,7 @@ async function startServer(opts: {
     tokenResolver,
     log: silentLog,
     worktreeBase: path.join(tmpDir, 'worktrees'),
+    useWorkerUid: opts.useWorkerUid ?? true,
     baseBranch: 'development',
     fetchImpl: opts.fetchImpl ?? okFetch,
     bareClonePathFor,
@@ -350,6 +353,41 @@ describe('agent socket server (item 85)', () => {
     expect(h.execCalls.some((c) => c.args.includes('push'))).toBe(true);
   });
 
+  // --- push_branch bundle location follows the session layout ---
+
+  it('non-isolation mode reads the bundle from the session worktree root', async () => {
+    h = await startServer({ useWorkerUid: false });
+    const workDir = path.join(h.tmpDir, 'worktrees', SESSION_ID);
+    fs.mkdirSync(workDir, { recursive: true });
+    fs.writeFileSync(path.join(workDir, 'push-bundle.bundle'), Buffer.from('stub-bundle'));
+
+    const resp = await roundTrip(h.socketPath, {
+      op: 'push_branch',
+      session_id: SESSION_ID,
+      cap_token: CAP_TOKEN,
+      branch: 'agent/fix',
+    });
+    expect(resp['error']).toBeUndefined();
+    expect(resp['ok']).toBe(true);
+    expect(h.execCalls.some((c) => c.args.includes('push'))).toBe(true);
+  });
+
+  it('non-isolation mode ignores a bundle left in the isolation work/ dir', async () => {
+    h = await startServer({ useWorkerUid: false });
+    const workDir = path.join(h.tmpDir, 'worktrees', SESSION_ID, 'work');
+    fs.mkdirSync(workDir, { recursive: true });
+    fs.writeFileSync(path.join(workDir, 'push-bundle.bundle'), Buffer.from('stub-bundle'));
+
+    const resp = await roundTrip(h.socketPath, {
+      op: 'push_branch',
+      session_id: SESSION_ID,
+      cap_token: CAP_TOKEN,
+      branch: 'agent/fix',
+    });
+    expect(resp['error']).toBe('Invalid bundle file');
+    expect(h.execCalls.some((c) => c.args.includes('push'))).toBe(false);
+  });
+
   // --- push_branch .github/ guard fails closed (FR-3 / AC-4, AC-5) ---
 
   it('push_branch fails closed when the bare clone is not configured', async () => {
@@ -396,6 +434,7 @@ describe('agent socket server (item 85)', () => {
       tokenResolver,
       log: silentLog,
       worktreeBase: path.join(tmpDir, 'worktrees'),
+      useWorkerUid: true,
       baseBranch: 'development',
       fetchImpl: okFetch,
       bareClonePathFor: (): string | undefined => path.join(tmpDir, 'bare-clone'),
@@ -459,6 +498,7 @@ describe('push_branch git auth env — buildGitAuthEnv fallback', () => {
       tokenResolver,
       log: silentLog,
       worktreeBase: path.join(tmpDir, 'worktrees'),
+      useWorkerUid: true,
       baseBranch: 'development',
       fetchImpl: okFetch,
       bareClonePathFor: (_repo: string): string | undefined => path.join(tmpDir, 'bare-clone'),
