@@ -814,6 +814,7 @@ async function main(): Promise<void> {
     db,
     sessionFiles,
     worktreeBase: config.worktreeBase ?? path.join(rootDir, 'worktrees'),
+    useWorkerUid: config.useWorkerUid ?? false,
     bareClonePathFor: (repo: string) => {
       const slash = repo.indexOf('/');
       if (slash < 1 || slash === repo.length - 1) return undefined;

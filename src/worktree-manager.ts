@@ -85,6 +85,19 @@ export function worktreePath(worktreeBase: string, sessionId: string): string {
   return path.join(worktreeBase, sessionId);
 }
 
+/**
+ * Resolve the agent's working checkout for a session — the directory the
+ * daemon hands the agent as `WORKDIR`, and where `push_branch` reads
+ * `push-bundle.bundle` from.
+ *
+ * - Isolation model (useWorkerUid): `<base>/<sid>/work` (agentworker-owned clone).
+ * - Non-isolation model: `<base>/<sid>` (git worktree of the canonical clone).
+ */
+export function sessionWorkDir(worktreeBase: string, sessionId: string, useWorkerUid: boolean): string {
+  const sessionDir = worktreePath(worktreeBase, sessionId);
+  return useWorkerUid ? path.join(sessionDir, 'work') : sessionDir;
+}
+
 export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManager {
   const { rootDir, log } = deps;
   const git = deps.gitBin ?? 'git';
@@ -106,11 +119,16 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
     const cloneDir = canonicalClonePath(rootDir, owner, name);
 
     if (fs.existsSync(path.join(cloneDir, 'HEAD'))) {
-      // Bare clone exists — fetch latest. cwd is the daemon's OWN bare clone,
-      // never the agent work/ dir. DAEMON_GIT_WORKDIR_AUDITED: cwd is the
-      // daemon-owned canonical bare clone (mode 700), not any session work/.
+      // Bare clone exists — fetch latest. A `clone --bare` has no
+      // remote.origin.fetch refspec, so a bare `fetch --all` updates nothing
+      // and the clone's branches stay frozen at clone time. Fetch heads
+      // explicitly so session seeds/worktrees and the push_branch base (bundle
+      // prerequisites, .github guard) track GitHub. No --prune: it would delete
+      // local session/<sid> branches that live worktrees have checked out.
       try {
-        run(git, ['fetch', '--all', '--prune'], { cwd: cloneDir, stdio: 'pipe' });
+        // DAEMON_GIT_WORKDIR_AUDITED: cwd is the daemon-owned canonical bare
+        // clone (mode 700), never the agent work/ dir.
+        run(git, ['fetch', 'origin', '+refs/heads/*:refs/heads/*'], { cwd: cloneDir, stdio: 'pipe' });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         log.warn('Failed to fetch canonical clone, proceeding with stale data', {
@@ -149,7 +167,7 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
   /** Isolation model: standalone agentworker-owned clone seeded from a bundle. */
   function ensureIsolatedClone(cloneDir: string, sessionId: string): string {
     const sessionDir = worktreePath(worktreeBase, sessionId);
-    const workDir = path.join(sessionDir, 'work');
+    const workDir = sessionWorkDir(worktreeBase, sessionId, true);
     const bundlePath = path.join(sessionDir, 'seed.bundle');
 
     // Create {sid}/ (mode 0750). The setgid parent gives it the agentworker
@@ -191,7 +209,7 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
         return ensureIsolatedClone(cloneDir, sessionId);
       }
 
-      const wtPath = worktreePath(worktreeBase, sessionId);
+      const wtPath = sessionWorkDir(worktreeBase, sessionId, false);
       const branch = `session/${sessionId}`;
       const base = defaultBranch(cloneDir);
 
