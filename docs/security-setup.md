@@ -15,8 +15,8 @@ and [`design.md`](../.kiro/specs/agent-process-isolation/design.md).
 By default the daemon and every agent session run as the **same** Unix user. A prompt-injected
 agent can therefore:
 
-- read your project PATs from `$ROOTDIR/tokens.json` and the daemon bearer token from
-  `$ROOTDIR/daemon-token`;
+- read your project PATs from the daemon's environment (its `GITHUB_TOKEN` and the per-repo
+  `ENV:` values) and the daemon bearer token from `$ROOTDIR/daemon-token`;
 - make arbitrary outbound network requests with those credentials;
 - call unrestricted GitHub API endpoints via the MCP tools.
 
@@ -51,26 +51,23 @@ falls back to `$ROOTDIR/agent.sock`) so the per-session MCP relay works in both 
 - `ufw` must **not** be active — it conflicts with the egress rules. The setup script aborts
   if ufw is running. Disable ufw or add equivalent egress rules by hand.
 
-## `tokens.json` is required for agent-socket PAT operations
+## Project PATs have one source: `config.json` `repos[].token`
 
-The agent-socket relays that need a GitHub PAT — `push_branch`, `pr_create`, `pr_view`, and
-authenticated `github_http_forward` — resolve the credential **only** through the credential
-token store (`$ROOTDIR/tokens.json`), with **no** environment fallback. A repo that is not
-listed in any `tokens.json` project cannot be pushed to or have a PR opened for it: the relay
-fails closed with `No token configured for repo <owner>/<repo>` rather than silently falling
-back to the daemon's ambient `GITHUB_TOKEN`.
+Every GitHub PAT the daemon uses comes from the repo's `token` field in `config.json`, normally
+an `ENV:` reference resolved from the daemon's environment file (e.g.
+`"token": "ENV:GITHUB_TOKEN_LIBBY_MCP"`). The same value is used for the session spawn
+(`GITHUB_TOKEN` in non-isolated mode), the agent-socket relays (`push_branch`, `pr_create`,
+`pr_view`, authenticated `github_http_forward`), webhook status comments, and
+`agent-router tokens status`. Rotate a token by updating the environment file and restarting
+the daemon.
 
-Practical consequence: **every repo an agent operates on must appear in a project's `repos`
-array in `tokens.json`.** This holds regardless of `useWorkerUid`. In `_fallback` mode (no
-`tokens.json`, only `GITHUB_TOKEN` set) those operations are unavailable, and the daemon logs
-an advisory WARNING at startup:
+Each repo resolves **only its own** token. A repo with no `token` fails closed with
+`No token configured for repo <owner>/<repo>`; there is no fallback to `defaultGithubToken` or
+the daemon's ambient `GITHUB_TOKEN`. The daemon logs a startup warning listing any configured
+repos without a token.
 
-```
-tokens.json not found — agent-socket PAT operations (push_branch, pr_create, pr_view)
-require a tokens.json with project-scoped credentials
-```
-
-Create a `tokens.json` with project-scoped PATs to enable these operations.
+`$ROOTDIR/tokens.json` is **not read**. If it exists the daemon logs that it is ignored; delete
+it to avoid confusion.
 
 ## Setup
 

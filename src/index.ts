@@ -54,9 +54,8 @@ import { buildChildEnv, DEFAULT_CHILD_ENV_ALLOWLIST } from './acp.js';
 import { resolveMcpServerCommand } from './mcp-resolver.js';
 import { warnOnConflictingMcpConfig } from './mcp-config-check.js';
 import { createRestartRequiredState } from './restart-required.js';
-import { createTokenStore } from './token-store.js';
+import { createConfigTokenStore } from './config-token-store.js';
 import type { TokenStore } from './token-store.js';
-import { validateTokenStoreStartup, checkAgentSocketTokenSource } from './token-store-startup.js';
 import { credentialTokenResolver } from './token-resolver.js';
 import { createReaper } from './reaper.js';
 import type { Reaper } from './reaper.js';
@@ -599,33 +598,43 @@ async function main(): Promise<void> {
 
   // ---- Credential Token_Store startup ----
 
-  // Create credential TokenStore for project-scoped PAT management.
-  // Path: $AGENT_ROUTER_HOME/tokens.json (per spec Requirement 1.1)
-  const tokensFilePath = path.join(rootDir, 'tokens.json');
-  const githubTokenEnv = process.env['GITHUB_TOKEN'];
-  const credentialTokenStore = createTokenStore(
-    githubTokenEnv !== undefined
-      ? { tokensFilePath, log, fallbackToken: githubTokenEnv }
-      : { tokensFilePath, log }
-  );
+  // Project PATs have ONE source: config `repos[].token` (ENV: references into
+  // the daemon's environment file). The credential store is derived from it, so
+  // the agent-socket relays, webhook status comments and `tokens status` use the
+  // same per-repo token the session spawn path injects. tokens.json is not read.
+  const credentialTokenStore = createConfigTokenStore(() => config.repos);
 
-  // Validate: cannot use MCP credential mode with fallback (single GITHUB_TOKEN)
-  validateTokenStoreStartup(credentialTokenStore, config.credentialMode);
+  // Repos without a token fail closed for push_branch / pr_create / pr_view.
+  const reposWithoutToken = config.repos
+    .filter((r) => typeof r.token !== 'string' || r.token.length === 0)
+    .map((r) => `${r.owner}/${r.name}`);
+  // MCP credential mode serves every session's PAT from this store, so every
+  // configured repo needs its own token (replaces the old "tokens.json required").
+  if (config.credentialMode === 'mcp' && reposWithoutToken.length > 0) {
+    throw new FatalError(
+      `credentialMode "mcp" requires a token for every configured repo (config.json repos[].token); ` +
+      `missing: ${reposWithoutToken.join(', ')}. Add the tokens or set credentialMode to "env".`,
+    );
+  }
+  if (reposWithoutToken.length > 0) {
+    log.warn('Repos without a configured token: agent push/PR operations will fail closed', {
+      repos: reposWithoutToken,
+    });
+  }
+  if (fs.existsSync(path.join(rootDir, 'tokens.json'))) {
+    log.warn('tokens.json is ignored — project PATs come from config repos[].token only', {
+      path: path.join(rootDir, 'tokens.json'),
+    });
+  }
 
-  // Advisory: in `_fallback` mode the agent-socket PAT operations fail closed
-  // because `credentialTokenResolver` has no env fallback (security-isolation-fix
-  // FR-2.4). Warn operators that a tokens.json is required for those ops.
-  checkAgentSocketTokenSource(credentialTokenStore, log);
-
-  // Register SIGHUP handler for manual token reload (Requirement 2.1)
+  // SIGHUP re-derives the store from the current config.
   process.on('SIGHUP', () => {
     log.info('SIGHUP received — reloading token store');
     credentialTokenStore.reload();
   });
-
-  // Start file watching (fs.watch + 30s polling) for automatic reload (Requirement 2.2)
-  credentialTokenStore.startWatching();
-  log.info('Credential token store initialized', { tokensFilePath });
+  log.info('Credential token store initialized from config', {
+    repos: credentialTokenStore.getTokenMap().repoIndex.size,
+  });
 
   // ---- Task 19.1b: Session infrastructure startup ----
 
@@ -1018,6 +1027,11 @@ async function main(): Promise<void> {
     // Update config holder
     configHolder.current = next;
     config = next;
+
+    // Re-derive project PATs from the new config (rotated tokens take effect).
+    if (credentialTokenStore.reload()) {
+      log.info('Credential token store reloaded from config');
+    }
 
     log.info('Config reloaded', { reloadable: changes.reloadable, restartRequired: changes.restartRequired });
   }, (err) => {
