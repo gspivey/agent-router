@@ -169,7 +169,7 @@ Alerts fire on daemon startup and every 24 hours. If `notifyOnSessionEnd` is con
 ## Security Setup (agent process isolation)
 
 By default, agent sessions run as the same Unix user as the daemon, so a prompt-injected
-agent could read your project PATs from `tokens.json` and the daemon bearer token. The
+agent could read your project PATs from the daemon's environment and the daemon bearer token. The
 `scripts/setup-agent-user.sh` script provisions an isolation substrate so agent subprocesses
 run as an unprivileged `agentworker` user with no access to those secrets and no direct
 network egress except through a hostname-filtering proxy. Enable it by setting
@@ -178,14 +178,12 @@ network egress except through a hostname-filtering proxy. Enable it by setting
 This is **opt-in and Linux-only**. With `useWorkerUid: false` (the default) the daemon runs
 exactly as before and the setup script is not required.
 
-> **`tokens.json` is required for agent-socket PAT operations.** The relays that need a
-> GitHub PAT — `push_branch`, `pr_create`, `pr_view`, and authenticated
-> `github_http_forward` — resolve credentials **only** through `tokens.json` (no
-> `GITHUB_TOKEN` env fallback). Every repo an agent operates on must appear in a project's
-> `repos` array; otherwise those relays fail closed with `No token configured for repo
-> <owner>/<repo>`. In `_fallback` mode (no `tokens.json`) the daemon logs a startup WARNING
-> and those operations are unavailable. This holds regardless of `useWorkerUid`. See
-> [`docs/security-setup.md`](docs/security-setup.md).
+> **Project PATs have one source: `config.json` `repos[].token`** (an `ENV:` reference into
+> the daemon's environment file). Session spawns, the agent-socket relays (`push_branch`,
+> `pr_create`, `pr_view`, authenticated `github_http_forward`), webhook status comments and
+> `agent-router tokens status` all use that per-repo value. A repo without a `token` fails
+> closed with `No token configured for repo <owner>/<repo>` (no `GITHUB_TOKEN` fallback).
+> `tokens.json` is not read. See [`docs/security-setup.md`](docs/security-setup.md).
 
 ### Prerequisites
 
