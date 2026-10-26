@@ -27,6 +27,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { Logger } from './log.js';
+import type { TokenResolver } from './github.js';
 
 export interface WorktreeManager {
   /**
@@ -64,6 +65,29 @@ export interface WorktreeManagerDeps {
   rmSessionBin?: string;
   /** Override execFileSync (testing). */
   execFileSyncImpl?: typeof execFileSync;
+  /**
+   * Per-repo PAT for the canonical clone's `clone`/`fetch` (the same config
+   * `repos[].token` source as session spawn and push_branch). Without it, git
+   * falls back to the user's ambient credential helper.
+   */
+  tokenResolver?: TokenResolver;
+}
+
+/**
+ * Git env that authenticates github.com with `pat` and disables every other
+ * credential helper, so an ambient `GITHUB_TOKEN` / `gh` login is never used.
+ * Same mechanism as agent-server's push path; the token stays out of argv.
+ */
+export function repoTokenGitEnv(pat: string): Record<string, string> {
+  const basic = Buffer.from(`x-access-token:${pat}`).toString('base64');
+  return {
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'credential.helper',
+    GIT_CONFIG_VALUE_0: '',
+    GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
+    GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${basic}`,
+  };
 }
 
 const DEFAULT_SEED_CLONE_BIN = '/usr/local/libexec/agent-router-seed-clone';
@@ -115,8 +139,23 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
     return { owner: repo.slice(0, slash), name: repo.slice(slash + 1) };
   }
 
+  /** Env for clone/fetch: the repo's own PAT, or undefined (ambient git auth). */
+  function remoteGitEnv(owner: string, name: string): NodeJS.ProcessEnv | undefined {
+    if (deps.tokenResolver === undefined) return undefined;
+    try {
+      return { ...process.env, ...repoTokenGitEnv(deps.tokenResolver(owner, name)) };
+    } catch (err: unknown) {
+      log.warn('No repo token for canonical clone; using ambient git credentials', {
+        repo: `${owner}/${name}`,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return undefined;
+    }
+  }
+
   function ensureCanonicalClone(owner: string, name: string): string {
     const cloneDir = canonicalClonePath(rootDir, owner, name);
+    const env = remoteGitEnv(owner, name);
 
     if (fs.existsSync(path.join(cloneDir, 'HEAD'))) {
       // Bare clone exists — fetch latest. A `clone --bare` has no
@@ -128,7 +167,11 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
       try {
         // DAEMON_GIT_WORKDIR_AUDITED: cwd is the daemon-owned canonical bare
         // clone (mode 700), never the agent work/ dir.
-        run(git, ['fetch', 'origin', '+refs/heads/*:refs/heads/*'], { cwd: cloneDir, stdio: 'pipe' });
+        run(git, ['fetch', 'origin', '+refs/heads/*:refs/heads/*'], {
+          cwd: cloneDir,
+          stdio: 'pipe',
+          ...(env !== undefined ? { env } : {}),
+        });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         log.warn('Failed to fetch canonical clone, proceeding with stale data', {
@@ -142,7 +185,7 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
     // Create the canonical bare clone (no cwd — operates on a URL).
     fs.mkdirSync(path.dirname(cloneDir), { recursive: true });
     const url = `https://github.com/${owner}/${name}.git`;
-    run(git, ['clone', '--bare', url, cloneDir], { stdio: 'pipe' });
+    run(git, ['clone', '--bare', url, cloneDir], { stdio: 'pipe', ...(env !== undefined ? { env } : {}) });
     log.info('Created canonical bare clone', { repo: `${owner}/${name}`, path: cloneDir });
     return cloneDir;
   }
