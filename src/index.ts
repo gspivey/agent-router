@@ -684,6 +684,7 @@ async function main(): Promise<void> {
     log,
     ...(config.worktreeBase !== undefined ? { worktreeBase: config.worktreeBase } : {}),
     useWorkerUid: config.useWorkerUid ?? false,
+    tokenResolver: credentialTokenResolver(credentialTokenStore),
   });
   log.info('Worktree manager initialized', { rootDir, useWorkerUid: config.useWorkerUid ?? false });
 
