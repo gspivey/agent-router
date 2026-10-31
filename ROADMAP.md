@@ -1106,3 +1106,28 @@ item 90 (merge conflict on `src/index.ts` and `src/isolation-startup.ts`).
 
 ---
 
+
+### 92. Continuous mode — core runner and session-mgr wiring
+
+Read `.kiro/specs/continuous-mode/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1.1`, `1.2`, `1.3`, `1.4`, `1.5`, `1.6`, `1.7`. Adds config fields
+(`continuous`, `baseBranch`), the `ContinuousRunner` module, `onSessionEnded` callback to
+session-mgr (fires at registry removal, not meta-write), cron handler integration, and
+Tier 1 + T2-CONT-1/2 tests.
+
+- Spec: `.kiro/specs/continuous-mode/` · tasks `1.1`–`1.7`
+- [ ] Complete
+
+---
+
+### 93. Continuous mode — CLI surface and remaining tests
+
+Read `.kiro/specs/continuous-mode/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `2.1`, `2.2`, `2.3`, `2.4`, `2.6`, `2.7`. Adds `stop_continuous` CLI
+server op, `stop-continuous` CLI subcommand, `ls` display enhancements, and T2-CONT-3/6/7
+tests. Depends on item 92.
+
+- Spec: `.kiro/specs/continuous-mode/` · tasks `2.1`–`2.4`, `2.6`, `2.7`
+- [ ] Complete
+
+---
