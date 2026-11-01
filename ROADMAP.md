@@ -1145,22 +1145,6 @@ second test for the askpass-present path. Fixes a CI-breaking environment depend
 
 ---
 
-### 99. Annotate completed BACKLOG items as done
-
-Update `BACKLOG.md` to add `✅ DONE (PR #<n>)` annotations to all items whose ROADMAP entries
-have merged but that were never marked done in BACKLOG.md: P1.2 (PR #70), P1.3 (PR #51),
-P1.5 (PR #49), P1.7 (PR #60), P1.8 (PR #41), P1.9 (PR #43), P2.0 (PR #52), P2.2 (PR #50),
-P2.5 (PR #47), P2.7 (PR #44), P2.8 (PR #46), P2.11 (PR #45), P2.12 (PR #48), P2.13 (PR #37),
-P2.14 (PR #85), P2.15 (PR #88), P2.16 (PR #93), P2.17 (PR #94), P2.18 (PR #95), P2.21
-(PR #168), P3.2 (PR #53). Also annotate P2.19 (session recovery) as done — it was implemented
-by ROADMAP item 48 / PR #96 (spec-backed via `.kiro/specs/session-recovery/`) without a BACKLOG
-reference, but the BACKLOG entry was never updated. Documentation-only: no code, no tests.
-
-- Spec: `BACKLOG.md § P1.2`, `P1.3`, `P1.5`, `P1.7`, `P1.8`, `P1.9`, `P2.0`, `P2.2`, `P2.5`, `P2.7`, `P2.8`, `P2.11`, `P2.12`, `P2.13`, `P2.14`, `P2.15`, `P2.16`, `P2.17`, `P2.18`, `P2.19`, `P2.21`, `P3.2`
-- [ ] Complete · PR: —
-
----
-
 ## Completed
 
 ### 95. Mark BACKLOG.md § P2.20 as complete (server-side waiting-for shipped in PR #100)
@@ -1212,3 +1196,15 @@ task checkboxes are already `[x]`; only the sub-tasks are stale. Same pattern as
 
 - Spec: `BACKLOG.md § P2.23`
 - [x] Complete · PR: #172
+
+### 99. Annotate completed BACKLOG items as done
+
+Update `BACKLOG.md` to add `✅ DONE (PR #<n>)` annotations to all items whose ROADMAP entries
+have merged but that were never marked done in BACKLOG.md: P1.2 (PR #70), P1.3 (PR #51),
+P1.5 (PR #49), P1.7 (PR #60), P1.8 (PR #41), P1.9 (PR #43), P2.0 (PR #52), P2.2 (PR #50),
+P2.5 (PR #47), P2.7 (PR #44), P2.8 (PR #46), P2.11 (PR #45), P2.12 (PR #48), P2.13 (PR #37),
+P2.14 (PR #85), P2.15 (PR #88), P2.16 (PR #93), P2.17 (PR #94), P2.18 (PR #95), P2.19
+(PR #96), P2.21 (PR #168), P3.2 (PR #53). Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P1.2`, `P1.3`, `P1.5`, `P1.7`, `P1.8`, `P1.9`, `P2.0`, `P2.2`, `P2.5`, `P2.7`, `P2.8`, `P2.11`, `P2.12`, `P2.13`, `P2.14`, `P2.15`, `P2.16`, `P2.17`, `P2.18`, `P2.19`, `P2.21`, `P3.2`
+- [x] Complete · PR: #173
