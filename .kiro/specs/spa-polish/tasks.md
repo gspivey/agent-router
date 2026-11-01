@@ -17,41 +17,41 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
 ## Group 1 — ROADMAP item 87: backend endpoint, shared primitives, layout & overflow
 
 - [x] 1. Add CSS tokens and the app-version build define
-  - [ ] 1.1 Add `--accent: #388bfd`, `--muted: #8b949e`, and
+  - [x] 1.1 Add `--accent: #388bfd`, `--muted: #8b949e`, and
     `--header-bg: rgb(13 17 23 / 0.9)` (the `--bg` hex `#0d1117` as RGB channels + 90%
     alpha) to `:root` in `client/src/app.css`. `--header-bg` MUST be RGB-channel form so
     the header can use `bg-[var(--header-bg)]` (Tailwind 3 opacity modifiers do not work
     on hex-valued vars). (Req 8.1, 8.2)
-  - [ ] 1.2 Add `define: { __APP_VERSION__: JSON.stringify(pkg.version) }` to
+  - [x] 1.2 Add `define: { __APP_VERSION__: JSON.stringify(pkg.version) }` to
     `client/vite.config.ts`, reading the version from `client/package.json` (import
     assertion, or `readFileSync` fallback). (Req 7.1)
-  - [ ] 1.3 Declare `declare const __APP_VERSION__: string;` in
+  - [x] 1.3 Declare `declare const __APP_VERSION__: string;` in
     `client/src/vite-env.d.ts`. (Req 7.2)
 
 - [x] 2. Implement the `GET /api/overview` backend endpoint
-  - [ ] 2.1 Read `src/web-routes.ts` fully (factory deps, existing guarded handlers,
+  - [x] 2.1 Read `src/web-routes.ts` fully (factory deps, existing guarded handlers,
     `groupSessionsByRepo`, cron-state access) before editing.
-  - [ ] 2.2 Add exported pure helper `computeHealth(input)` returning
+  - [x] 2.2 Add exported pure helper `computeHealth(input)` returning
     `'healthy' | 'degraded'` (no `'error'`, no `pollerDown` input) per Req 1.6:
     `degraded` if any cron state is `'paused'` OR `'error'`, OR any active session
     `created_at < now - 7200s`; else `healthy`. A crashed daemon stops responding
     (observed client-side as a failed fetch), so there is no runtime `'error'` health
     value. (Req 1.6)
-  - [ ] 2.3 Add exported pure helper `buildCronSummary(cronConfig, cronStates)`
+  - [x] 2.3 Add exported pure helper `buildCronSummary(cronConfig, cronStates)`
     mapping each cron to `{ name, repo, schedule, state, next_fire }`, deriving `state`
     error-first (identical to Req 1.5/13.3):
     `IF last_status === 'failed' THEN 'error' ELSE IF paused THEN 'paused' ELSE 'active'`.
     Source fields are the cron state table columns (`last_status`, `paused`). No
     `last_run_failed` or `enabled` field is used. (Req 1.5)
-  - [ ] 2.4 Add `computeQueueDepth()` counting `tasks` rows with `state = 'queued'` in
+  - [x] 2.4 Add `computeQueueDepth()` counting `tasks` rows with `state = 'queued'` in
     the task DB when present, else returning `0`; MUST NOT parse `ROADMAP.md` at request
     time. (Req 1.4)
-  - [ ] 2.5 Add `collectRecentPrs(sessions)` shaping `{ title, repo, url, state,
+  - [x] 2.5 Add `collectRecentPrs(sessions)` shaping `{ title, repo, url, state,
     opened_at }` from session PR registrations (`state` = `'merged'` when `merged_at`
     set, else `'open'`; derive a stable `title` without fabricating data).
-  - [ ] 2.6 Cache the daemon `package.json` version in the factory closure; capture
+  - [x] 2.6 Cache the daemon `package.json` version in the factory closure; capture
     `startedAt` once for `uptime_s`. (Req 1.7)
-  - [ ] 2.7 Register `app.get('/overview', …)` (NOT `/api/overview` — existing routes
+  - [x] 2.7 Register `app.get('/overview', …)` (NOT `/api/overview` — existing routes
     are unprefixed and the Vite proxy adds `/api`; the public URL is `/api/overview`)
     assembling `OverviewResponse`; ALWAYS return HTTP `200` with zero/empty fallback
     values (`0`, empty arrays) when a data source is unavailable (no `503`/
@@ -60,32 +60,32 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
     handler read-only. (Req 1.1, 1.2, 1.3, 1.8, 1.9, 1.10)
 
 - [x] 3. Add client `OverviewResponse` type and API method
-  - [ ] 3.1 Add `OverviewRecentPr`, `OverviewCronSummary`, `OverviewResponse` to
+  - [x] 3.1 Add `OverviewRecentPr`, `OverviewCronSummary`, `OverviewResponse` to
     `client/src/lib/types.ts` (client-owns-types, by value). (Req 2.1)
-  - [ ] 3.2 Add `getOverview(): Promise<OverviewResponse>` to `client/src/lib/api.ts`
+  - [x] 3.2 Add `getOverview(): Promise<OverviewResponse>` to `client/src/lib/api.ts`
     using the existing fetch wrapper / `AuthError` handling. (Req 2.2)
 
 - [x] 4. Build shared presentational primitives
-  - [ ] 4.1 Create `client/src/components/StatusBadge.svelte` (dot + label for
+  - [x] 4.1 Create `client/src/components/StatusBadge.svelte` (dot + label for
     `active`/`paused`/`error`; dot `aria-hidden`; tokenized colors). (Req 3.1–3.3)
-  - [ ] 4.2 Create `client/src/components/Card.svelte`
+  - [x] 4.2 Create `client/src/components/Card.svelte`
     (`rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4`, default
     slot). (Req 4.1)
-  - [ ] 4.3 Create `client/src/components/PageHeader.svelte` (`<h1>` + optional
+  - [x] 4.3 Create `client/src/components/PageHeader.svelte` (`<h1>` + optional
     subtitle). (Req 4.2)
 
 - [x] 5. Add layout margins
-  - [ ] 5.1 Create `client/src/components/PageLayout.svelte` with a `width:
+  - [x] 5.1 Create `client/src/components/PageLayout.svelte` with a `width:
     'wide' | 'narrow'` prop. `wide` → `max-w-6xl mx-auto px-4 py-6 sm:px-6 lg:px-8`;
     `narrow` → `max-w-4xl mx-auto px-4 sm:px-6 lg:px-8` with NO vertical padding (no
     `py-6`), so the chat composer is not pushed below the fold. (Req 5.2, 5.3)
-  - [ ] 5.2 Wrap each routed view in `App.svelte` with `PageLayout` (`wide` for list
+  - [x] 5.2 Wrap each routed view in `App.svelte` with `PageLayout` (`wide` for list
     and config; `narrow` for the `detail`/chat view). Change `ChatView.svelte` height
     from `h-[100dvh]` to `h-[calc(100dvh-3.5rem)]` (`3.5rem` = the `h-14`/56px sticky
     header) so the chat column fits exactly below the header. (Req 5.1, 5.2)
 
 - [x] 6. Fix session-list horizontal overflow
-  - [ ] 6.1 Identify and reproduce the horizontal overflow bug using a REAL browser
+  - [x] 6.1 Identify and reproduce the horizontal overflow bug using a REAL browser
     (not jsdom — jsdom does not lay out). The fix SHALL target the specific element
     that actually causes the overflow; likely candidates are the `RepoGroup` header
     row, a long session-ID display, or a badge with `whitespace-nowrap`. After
@@ -94,23 +94,23 @@ ROADMAP items map as: **87** = Group 1, **88** = Group 2, **89** = Group 3.
     repo/title line; add inline `overflow-wrap: anywhere;` to multi-line text. The
     acceptance criterion is a MANUAL browser check at a 320px viewport showing no
     horizontal overflow. (Req 6.1, 6.2, 6.3, 6.5)
-  - [ ] 6.2 Add `overflow-x-hidden` to the `SessionList.svelte` container as a
+  - [x] 6.2 Add `overflow-x-hidden` to the `SessionList.svelte` container as a
     backstop. (Req 6.4)
 
 - [x] 7. Item 87 tests (vitest)
-  - [ ] 7.1 Pure: `computeHealth` (healthy / degraded via paused cron / degraded via
+  - [x] 7.1 Pure: `computeHealth` (healthy / degraded via paused cron / degraded via
     error cron / degraded via stale active session at the 2h boundary). Only
     `'healthy' | 'degraded'` outcomes — no `'error'`/poller-down case. (Req 1.6)
-  - [ ] 7.2 Pure: `buildCronSummary` error-first state derivation: `last_status ===
+  - [x] 7.2 Pure: `buildCronSummary` error-first state derivation: `last_status ===
     'failed'` → error; `paused` → paused; else → active. (Req 1.5)
-  - [ ] 7.3 Backend handler shape test from stubbed deps asserting the
+  - [x] 7.3 Backend handler shape test from stubbed deps asserting the
     `OverviewResponse` fields AND that the handler returns `200` with zero/empty
     fallback values when optional data sources are absent (there is no `503`/
     `not_configured` path). (Req 1.1, 1.2, 1.8)
-  - [ ] 7.4 Component: `StatusBadge` label + dot token per state, dot `aria-hidden`.
+  - [x] 7.4 Component: `StatusBadge` label + dot token per state, dot `aria-hidden`.
     (Req 3)
-  - [ ] 7.5 Component: `Card` / `PageHeader` render slot / heading / subtitle. (Req 4)
-  - [ ] 7.6 Component: `SessionCard` has `min-w-0` on the row and `break-words` +
+  - [x] 7.5 Component: `Card` / `PageHeader` render slot / heading / subtitle. (Req 4)
+  - [x] 7.6 Component: `SessionCard` has `min-w-0` on the row and `break-words` +
     `overflow-wrap`/`line-clamp-2` on the subtitle, `truncate` on the title;
     `SessionList` container has `overflow-x-hidden`. NOTE: vitest/jsdom does NOT verify
     the 320px no-overflow guarantee (jsdom does not lay out); the 320px check is the
