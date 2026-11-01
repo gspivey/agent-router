@@ -158,14 +158,16 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.4 — Session cleanup cron
+### P1.4 — Session cleanup cron ✅ DONE (PR #176)
 
 **Maps to PRODUCT.md Phase 1: "Session cleanup: archive sessions older than 30 days."**
 
 **Mini spec.**
 
-- `/etc/systemd/system/agent-router-cleanup.service` runs the prune find command.
-- `/etc/systemd/system/agent-router-cleanup.timer` runs daily.
+- `agent-router prune-sessions [--retention-days N] [--dry-run] [--verbose]` CLI subcommand.
+  Queries daemon IPC for active session IDs; falls back to `meta.json` when daemon is offline.
+  Removes terminal session directories older than the retention window.
+- `scripts/agent-router-cleanup.service` + `scripts/agent-router-cleanup.timer` for daily automation.
 - Default retention: 30 days.
 - Skip directories of currently-active sessions (read from daemon DB, not just mtime).
 

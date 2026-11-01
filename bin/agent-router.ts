@@ -12,6 +12,7 @@
  *   ls [--all] [--full] [--limit N]                   List sessions
  *   tail <session_id> [--raw] [--prompts]    Tail session output
  *   terminate <session_id>                   Terminate a session
+ *   prune-sessions [--retention-days N]      Prune old terminal session directories
  *
  * Connects to the daemon's Unix domain socket at <AGENT_ROUTER_HOME>/sock.
  */
@@ -24,6 +25,8 @@ import * as readline from 'node:readline';
 import { selectVisibleSessions, DEFAULT_LS_LIMIT } from '../src/ls-pagination.js';
 import { resolveSessionId } from '../src/session-id.js';
 import { prettyPrint, type StreamEntryLike } from '../src/pretty-print.js';
+import { selectSessionsToPrune, type SessionDirEntry } from '../src/prune-sessions.js';
+import type { SessionMeta } from '../src/session-files.js';
 
 // ---------------------------------------------------------------------------
 // ANSI color helpers
@@ -927,6 +930,210 @@ async function cmdStopContinuous(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: prune-sessions
+// ---------------------------------------------------------------------------
+
+const DEFAULT_RETENTION_DAYS = 30;
+
+/**
+ * Read all session directories under `sessionsDir` and return entries with
+ * their modification time (from meta.json if present, else directory mtime).
+ */
+function readSessionDirEntries(sessionsDir: string): SessionDirEntry[] {
+  if (!fs.existsSync(sessionsDir)) return [];
+
+  let dirents: fs.Dirent[];
+  try {
+    dirents = fs.readdirSync(sessionsDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const entries: SessionDirEntry[] = [];
+  for (const d of dirents) {
+    if (!d.isDirectory()) continue;
+    const sessionId = d.name;
+    const metaPath = path.join(sessionsDir, sessionId, 'meta.json');
+
+    // Use meta.json mtime if available, otherwise directory mtime.
+    let modifiedAt: number;
+    try {
+      const stat = fs.statSync(metaPath);
+      modifiedAt = Math.floor(stat.mtimeMs / 1000);
+    } catch {
+      try {
+        const stat = fs.statSync(path.join(sessionsDir, sessionId));
+        modifiedAt = Math.floor(stat.mtimeMs / 1000);
+      } catch {
+        continue; // unreadable — skip
+      }
+    }
+    entries.push({ sessionId, modifiedAt });
+  }
+  return entries;
+}
+
+/**
+ * Read session metadata from disk (best-effort; missing meta returns undefined).
+ */
+function readSessionMetasFromDisk(
+  sessionsDir: string,
+  sessionIds: string[],
+): Map<string, SessionMeta> {
+  const result = new Map<string, SessionMeta>();
+  for (const sessionId of sessionIds) {
+    const metaPath = path.join(sessionsDir, sessionId, 'meta.json');
+    try {
+      const raw = fs.readFileSync(metaPath, 'utf-8');
+      const meta = JSON.parse(raw) as SessionMeta;
+      result.set(sessionId, meta);
+    } catch {
+      // No meta or unreadable — skip; selectSessionsToPrune handles missing meta.
+    }
+  }
+  return result;
+}
+
+async function cmdPruneSessions(args: string[]): Promise<void> {
+  let retentionDays = DEFAULT_RETENTION_DAYS;
+  let dryRun = false;
+  let verbose = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--dry-run') {
+      dryRun = true;
+    } else if (arg === '--verbose') {
+      verbose = true;
+    } else if (arg === '--retention-days') {
+      const val = Number(args[++i]);
+      if (!Number.isFinite(val) || val <= 0) {
+        process.stderr.write('Error: --retention-days must be a positive integer\n');
+        process.exit(1);
+      }
+      retentionDays = Math.floor(val);
+    }
+  }
+
+  const sessionsDir = resolveSessionsDir();
+  const socketPath = resolveSocketPath();
+  const retentionSeconds = retentionDays * 24 * 60 * 60;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  // Step 1: Get active session IDs from the daemon (best-effort — if daemon is
+  // not running, fall back to relying on meta.json status field only).
+  let activeIds = new Set<string>();
+  try {
+    const result = await sendToDaemon(socketPath, { op: 'list_sessions' });
+    const sessions = result['sessions'] as Array<{ session_id: string; status: string }>;
+    for (const s of sessions) {
+      if (s.status === 'active') {
+        activeIds.add(s.session_id);
+      }
+    }
+    if (verbose) {
+      process.stderr.write(
+        `daemon: found ${activeIds.size} active session(s)\n`,
+      );
+    }
+  } catch {
+    process.stderr.write(
+      'Warning: daemon is not running; relying on meta.json status for active session detection\n',
+    );
+  }
+
+  // Step 2: Discover session directories and read metadata.
+  const entries = readSessionDirEntries(sessionsDir);
+  const sessionIds = entries.map((e) => e.sessionId);
+  const metas = readSessionMetasFromDisk(sessionsDir, sessionIds);
+
+  // Belt-and-suspenders: also mark sessions with meta.status === 'active' as active
+  // even if daemon didn't list them.
+  for (const [id, meta] of metas) {
+    if (meta.status === 'active') {
+      activeIds.add(id);
+    }
+  }
+
+  // Step 3: Select candidates.
+  const { toPrune, skippedActive, skippedTooNew, skippedNoMeta } = selectSessionsToPrune({
+    entries,
+    activeIds,
+    metas,
+    nowSeconds,
+    retentionSeconds,
+  });
+
+  if (verbose || dryRun) {
+    process.stderr.write(
+      `Scanned: ${entries.length}  ` +
+      `Skipped active: ${skippedActive}  ` +
+      `Skipped too new: ${skippedTooNew}  ` +
+      `Skipped no-terminal-at: ${skippedNoMeta}  ` +
+      `To prune: ${toPrune.length}\n`,
+    );
+  }
+
+  if (toPrune.length === 0) {
+    process.stdout.write('No sessions to prune.\n');
+    return;
+  }
+
+  // Step 4: Prune (or report).
+  let pruned = 0;
+  let errors = 0;
+
+  for (const candidate of toPrune) {
+    const sessionDir = path.join(sessionsDir, candidate.sessionId);
+    const ageDays = Math.floor(candidate.reason.ageSeconds / 86400);
+    const source = candidate.reason.ageSource === 'terminal_at' ? 'terminal_at' : 'dir_mtime';
+
+    if (dryRun) {
+      process.stdout.write(
+        `[dry-run] would prune ${candidate.sessionId} ` +
+        `(${ageDays}d old, age from ${source})\n`,
+      );
+      pruned++;
+      continue;
+    }
+
+    if (!fs.existsSync(sessionDir)) {
+      if (verbose) {
+        process.stderr.write(`Already deleted: ${candidate.sessionId}\n`);
+      }
+      continue;
+    }
+
+    try {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+      if (verbose) {
+        process.stdout.write(
+          `Pruned: ${candidate.sessionId} ` +
+          `(${ageDays}d old, age from ${source})\n`,
+        );
+      }
+      pruned++;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`Error pruning ${candidate.sessionId}: ${msg}\n`);
+      errors++;
+    }
+  }
+
+  if (dryRun) {
+    process.stdout.write(`Would prune ${pruned} session(s) (dry run — no files deleted).\n`);
+  } else {
+    process.stdout.write(
+      `Pruned ${pruned} session(s)${errors > 0 ? `, ${errors} error(s)` : ''}.\n`,
+    );
+  }
+
+  if (errors > 0) {
+    process.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatch
 // ---------------------------------------------------------------------------
 
@@ -946,6 +1153,10 @@ Commands:
   stop-continuous --repo <owner/repo>      Stop a continuous run after the current item
   cron [list|pause <name>|resume <name>]   Manage cron schedules
   tokens status [--check]                  Show token health and expiry status
+  prune-sessions [--retention-days N] [--dry-run] [--verbose]
+                                           Prune session directories older than N days
+                                           (default: 30). Skips active sessions by
+                                           querying the daemon; falls back to meta.json.
 `);
 }
 
@@ -987,6 +1198,9 @@ async function main(): Promise<void> {
       break;
     case 'tokens':
       await cmdTokens(subArgs);
+      break;
+    case 'prune-sessions':
+      await cmdPruneSessions(subArgs);
       break;
     default:
       process.stderr.write(`Unknown command: ${command}\n`);

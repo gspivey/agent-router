@@ -1,0 +1,22 @@
+[Unit]
+Description=Agent Router session cleanup
+Documentation=https://github.com/gspivey/agent-router
+# Run after the network is available so the daemon (if running) can be queried.
+After=network.target
+# If the daemon unit is present, wait for it to start first so prune-sessions
+# can contact it via IPC socket to get the list of active session IDs.
+Wants=agent-router.service
+
+[Service]
+Type=oneshot
+# Replace AGENT_ROUTER_PATH with the absolute path to the agent-router CLI
+# (e.g. /usr/local/bin/agent-router or the path from `which agent-router`).
+ExecStart=/usr/local/bin/agent-router prune-sessions --retention-days 30
+# Standard output and errors are captured by the journal.
+StandardOutput=journal
+StandardError=journal
+# Run as the agent-router operator user.
+# Replace with your actual daemon user if different.
+User=agentrouter
+# Fail the unit if the command exits non-zero (some prune errors occurred).
+# The timer will still re-fire on the next scheduled tick.

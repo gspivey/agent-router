@@ -1,0 +1,16 @@
+[Unit]
+Description=Agent Router session cleanup timer
+Documentation=https://github.com/gspivey/agent-router
+
+[Timer]
+# Fire once per day at 03:00 local time.
+OnCalendar=*-*-* 03:00:00
+# Run immediately at boot if the last scheduled run was missed (e.g. machine was off).
+Persistent=true
+# Randomize start time up to ±15 minutes to avoid thundering-herd if many instances run.
+RandomizedDelaySec=15min
+# The service unit to activate.
+Unit=agent-router-cleanup.service
+
+[Install]
+WantedBy=timers.target

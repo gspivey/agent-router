@@ -490,13 +490,46 @@ Tests skip gracefully if the required environment variables are not set. Tier 3 
 
 ## Maintenance
 
-**Session cleanup.** Session directories accumulate under `~/.agent-router/sessions/`. To prune sessions older than 30 days:
+**Session cleanup.** Session directories accumulate under `~/.agent-router/sessions/`. The
+`prune-sessions` subcommand removes terminal session directories older than the retention window
+while skipping active sessions. It queries the daemon's IPC socket for currently-active session
+IDs (accurate DB-backed list) and falls back to checking `meta.json` if the daemon is offline:
 
 ```bash
-find ~/.agent-router/sessions -maxdepth 1 -mtime +30 -exec rm -rf {} +
+# Preview what would be deleted (no changes made)
+agent-router prune-sessions --dry-run
+
+# Prune sessions older than 30 days (default)
+agent-router prune-sessions
+
+# Prune sessions older than 14 days
+agent-router prune-sessions --retention-days 14
+
+# Verbose output (shows per-session detail)
+agent-router prune-sessions --verbose
 ```
 
-Run periodically via cron. Active sessions are not affected — only directories whose modification time is older than 30 days are removed.
+**Automated cleanup with systemd.** Copy the bundled unit files to schedule daily pruning:
+
+```bash
+# Install the unit files
+sudo cp scripts/agent-router-cleanup.service /etc/systemd/system/
+sudo cp scripts/agent-router-cleanup.timer   /etc/systemd/system/
+
+# Edit the service to set the correct CLI path and User
+sudo systemctl edit --full agent-router-cleanup.service
+
+# Enable and start the timer (fires at 03:00 daily)
+sudo systemctl daemon-reload
+sudo systemctl enable --now agent-router-cleanup.timer
+
+# Verify the timer is scheduled
+systemctl list-timers agent-router-cleanup.timer
+```
+
+The daemon's in-process reaper (configured via `reaper` in `config.json`) also runs continuously
+and handles cleanup automatically when a session terminates. The systemd cron is belt-and-suspenders
+for sessions whose cleanup the daemon may have missed (e.g. after an unclean shutdown).
 
 **Database.** SQLite at `~/.agent-router/agent-router.db`, WAL mode. No manual maintenance required. The daemon checkpoints WAL on graceful shutdown.
 

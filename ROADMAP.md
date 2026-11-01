@@ -1147,6 +1147,19 @@ second test for the askpass-present path. Fixes a CI-breaking environment depend
 
 ## Completed
 
+### 102. Session cleanup cron — `prune-sessions` CLI subcommand and systemd units
+
+Add `agent-router prune-sessions [--retention-days N] [--dry-run] [--verbose]` subcommand that
+queries the daemon's IPC socket for currently-active session IDs (accurate DB-backed list),
+falls back to `meta.json` status when the daemon is offline, and removes terminal session
+directories older than the retention window. Ships with systemd service + timer unit files in
+`scripts/` for automated daily cleanup. Updates README Maintenance section.
+
+- Spec: `BACKLOG.md § P1.4`
+- [x] Complete · PR: #176
+
+---
+
 ### 101. Log rotation documentation
 
 Document the daemon's logging and log rotation strategy in README.md. The daemon logs
