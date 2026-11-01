@@ -1116,7 +1116,7 @@ session-mgr (fires at registry removal, not meta-write), cron handler integratio
 Tier 1 + T2-CONT-1/2 tests.
 
 - Spec: `.kiro/specs/continuous-mode/` · tasks `1.1`–`1.7`
-- [ ] Complete
+- [x] Complete · PR: #166
 
 ---
 

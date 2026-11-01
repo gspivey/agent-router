@@ -26,7 +26,7 @@ core runner has end-to-end test coverage before the CLI surface is added.
 - `validateConfig` passes with `continuous: true` and `baseBranch: "development"` present.
 - `validateConfig` throws `FatalError` on `continuous: 42` or `baseBranch: ""`.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -50,7 +50,7 @@ core runner has end-to-end test coverage before the CLI surface is added.
   confirms the method returns decoded file text on success, throws on 404, and throws on
   oversized files (encoding: 'none').
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -104,7 +104,7 @@ from the session manager. It MUST never throw (wrap body in try/catch and log).
 - Tier 1 tests (see Task 1.6) pass.
 - Tier 2 tests T2-CONT-1 and T2-CONT-2 (moved to PR A) pass.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -152,7 +152,7 @@ from the session manager. It MUST never throw (wrap body in try/catch and log).
 - Existing Tier 1 and Tier 2 tests still pass (callback is optional; no existing tests provide it).
 - The callback fires ONCE per session, after the process is killed, not when meta is written.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -224,7 +224,7 @@ from the session manager. It MUST never throw (wrap body in try/catch and log).
 - `npm run typecheck` passes.
 - Daemon starts without error on a config with and without `continuous: true`.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -266,7 +266,7 @@ Runner unit tests (use a minimal stub for `sessionMgr`, `github`, `sessionFiles`
 **Acceptance:**
 - All tests pass with `vitest run --project tier1`.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -309,7 +309,7 @@ Test:
 **Acceptance:**
 - Tests pass with `vitest run --project tier2`.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
