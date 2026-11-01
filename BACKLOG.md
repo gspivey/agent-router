@@ -282,9 +282,9 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 **Acceptance.** Daemon configured with `token_expires_at: 2027-04-25` logs a warn entry every 24h starting 2027-04-11, an error entry starting 2027-04-23, and continues to error daily after expiry.
 
-### P2.1 — Session persistence across daemon restarts
+### P2.1 — Session persistence across daemon restarts ✅ DONE (PR #59)
 
-> **Folded into `.kiro/specs/operator-controls/` (group 3, tasks 3.1/3.2) and ROADMAP item 19.** This mini-spec is retained for history; work it from the Kiro spec, not from here.
+> **Folded into `.kiro/specs/operator-controls/` (group 3, tasks 3.1/3.2) and ROADMAP item 19.** Implemented and merged as PR #59. This mini-spec is retained for history.
 
 **Maps to PRODUCT.md "Open Questions": "Session resumption across daemon restarts."** Pulled forward to P2 because we hit this twice tonight.
 
@@ -338,7 +338,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.4 — `config.ts:130` template literal bug
+### P2.4 — `config.ts:130` template literal bug ✅ DONE (never shipped — bug was not present)
 
 **New (cosmetic).**
 
@@ -603,6 +603,25 @@ AssertionError: expected '/usr/local/libexec/agent-router-askpass' to be undefin
 **Fix.** Add an optional `askpassHelperExists?: () => boolean` field to `AgentServerDeps`. Thread it into `buildGitAuthEnv` inside `createAgentServer`. The default (when the dep is absent) is `() => fs.existsSync(ASKPASS_HELPER)`, preserving production behavior. The test passes `askpassHelperExists: () => false` to simulate the absent path, and a second test can pass `askpassHelperExists: () => true` to verify the ASKPASS path.
 
 **Acceptance.** `npm test` passes on all machines regardless of whether the askpass helper is installed. The test that was failing is now environment-independent. Both the askpass-present path and the extraheader fallback path have explicit Tier 1 test coverage.
+
+---
+
+### P2.24 — Fix stale agent-router spec task checkboxes ✅ DONE (PR #174)
+
+**Problem.** `.kiro/specs/agent-router/tasks.md` has 6 non-optional unchecked tasks that are fully implemented in the codebase:
+
+- `8.6` — Tier 2 test sending each wakeable event type through fake GitHub (implemented in `test/tier2/routing-matrix.test.ts`)
+- `14.1b` — JSON-RPC 2.0 framing layer (`src/acp.ts` lines 161–185 implement newline-delimited read/write and request/response correlation)
+- `15.5c` — Failure detection and timeout enforcement (`src/session-mgr.ts` implements non-zero-exit → `status: 'failed'` and the inactivity/lifetime timers)
+- `16.1b` — Mutation CLI IPC ops `new_session`, `inject_prompt`, `terminate_session` (all present in `src/cli-server.ts`)
+- `17.1b` — MCP mutation tools `register_pr` and `complete_session` (both present in `src/mcp-server.ts`)
+- `19.1c` — Server surfaces startup (HTTP server, CLI IPC server, cron jobs all started in `src/index.ts`)
+
+Additionally, BACKLOG items P2.1 (session persistence — shipped as ROADMAP item 19, PR #59) and P2.4 (config.ts template literal bug — was never present in the codebase) need DONE annotations.
+
+**Fix.** Tick the 6 unchecked tasks to `[x]` in `.kiro/specs/agent-router/tasks.md`. Annotate P2.1 and P2.4 in BACKLOG.md. Documentation-only; no code, no tests.
+
+**Acceptance.** Zero non-optional `- [ ]` lines remain in `.kiro/specs/agent-router/tasks.md` (optional tasks marked with `*` may remain). P2.1 and P2.4 in BACKLOG.md carry `✅ DONE` annotations.
 
 ---
 

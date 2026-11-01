@@ -1147,6 +1147,17 @@ second test for the askpass-present path. Fixes a CI-breaking environment depend
 
 ## Completed
 
+### 100. Fix stale agent-router spec task checkboxes
+
+Tick the 6 non-optional unchecked tasks in `.kiro/specs/agent-router/tasks.md` that are fully
+implemented in the codebase but whose checkboxes were never ticked: `8.6`, `14.1b`, `15.5c`,
+`16.1b`, `17.1b`, `19.1c`. Also annotate BACKLOG items `P2.1` (shipped as ROADMAP item 19,
+PR #59) and `P2.4` (template literal fix — bug was never present in the codebase) as done.
+Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.24`
+- [x] Complete · PR: #174
+
 ### 95. Mark BACKLOG.md § P2.20 as complete (server-side waiting-for shipped in PR #100)
 
 Update `BACKLOG.md` to annotate P2.20 as done. The server-side waiting-for computation
