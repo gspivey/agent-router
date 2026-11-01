@@ -129,7 +129,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.2 — Agent picks features dynamically from roadmap
+### P1.2 — Agent picks features dynamically from roadmap ✅ DONE (PR #70)
 
 **New refinement.** Original dpdk prompt has this partially; needs explicit guidance.
 
@@ -143,7 +143,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.3 — Notification on session completion
+### P1.3 — Notification on session completion ✅ DONE (PR #51)
 
 **New (not in PRODUCT.md).** Needed because cron-mode operates without anyone watching.
 
@@ -173,7 +173,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.5 — Daemon health check endpoint
+### P1.5 — Daemon health check endpoint ✅ DONE (PR #49)
 
 **Maps to PRODUCT.md Phase 1: "daemon health check endpoint."**
 
@@ -201,7 +201,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.7 — Git worktrees per session (replaces P0.4)
+### P1.7 — Git worktrees per session (replaces P0.4) ✅ DONE (PR #60)
 
 **Maps to PRODUCT.md Phase 1: "Git worktree per feature: agent works in isolated checkout, not main branch."**
 
@@ -222,7 +222,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.8 — Cron guard: allow re-fire after an abandoned session
+### P1.8 — Cron guard: allow re-fire after an abandoned session ✅ DONE (PR #41)
 
 **New (surfaced 2026-06; blocks unattended cron recovery).**
 
@@ -239,7 +239,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.9 — Rate-limit queues (delays) wake delivery instead of dropping
+### P1.9 — Rate-limit queues (delays) wake delivery instead of dropping ✅ DONE (PR #43)
 
 **New (surfaced 2026-06; breaks the core wake loop under cron — high severity).**
 
@@ -265,7 +265,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ## Priority 2: Quality and bug fixes
 
-### P2.0 — Token expiry alerting
+### P2.0 — Token expiry alerting ✅ DONE (PR #52)
 
 **Moved from P0.5.** Useful but not blocking cron mode — PAT expiry is months away and can be monitored manually until this ships.
 
@@ -305,7 +305,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.2 — Daemon-recorded merge tracking
+### P2.2 — Daemon-recorded merge tracking ✅ DONE (PR #50)
 
 **New (operational).**
 
@@ -353,7 +353,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.5 — `agent-router kill` subcommand
+### P2.5 — `agent-router kill` subcommand ✅ DONE (PR #47)
 
 **New (operational).**
 
@@ -382,7 +382,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.8 — Session ID UX: prefix matching + `--full` flag
+### P2.8 — Session ID UX: prefix matching + `--full` flag ✅ DONE (PR #46)
 
 **New (operational friction caught while debugging session 21cf8ac8).**
 
@@ -402,7 +402,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.7 — Webhook content-type handling
+### P2.7 — Webhook content-type handling ✅ DONE (PR #44)
 
 **Maps to PRODUCT.md Phase 1: "Verify webhook content-type handling (reject non-JSON gracefully)."**
 
@@ -439,7 +439,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.11 — `ls` pagination
+### P2.11 — `ls` pagination ✅ DONE (PR #45)
 
 **New (surfaced 2026-06; operational friction once many sessions accumulate).**
 
@@ -456,7 +456,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.12 — `tail` renders agent text
+### P2.12 — `tail` renders agent text ✅ DONE (PR #48)
 
 **New (surfaced 2026-06; the default tail view is missing the agent's output).**
 
@@ -471,7 +471,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.13 — `registerPR` upsert (routing bug)
+### P2.13 — `registerPR` upsert (routing bug) ✅ DONE (PR #37)
 
 **New (surfaced 2026-06; correctness bug, hit on dpdk PR #72).**
 
@@ -487,7 +487,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.14 — Fix CI `pull_request` trigger to target `development`
+### P2.14 — Fix CI `pull_request` trigger to target `development` ✅ DONE (PR #85)
 
 **Surfaced 2026-08-16 (Claude Ultrathink analysis).**
 
@@ -503,7 +503,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.15 — Fix Reaper double-initialization
+### P2.15 — Fix Reaper double-initialization ✅ DONE (PR #88)
 
 **Surfaced 2026-08-16 (Claude Ultrathink analysis).**
 
@@ -519,7 +519,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.16 — Extract `SessionState` type from `session-mgr.ts`
+### P2.16 — Extract `SessionState` type from `session-mgr.ts` ✅ DONE (PR #93)
 
 **Surfaced 2026-08-16 (Claude Ultrathink analysis).**
 
@@ -536,7 +536,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.17 — Add `writeWorktreeReapedAt` to `SessionFiles`
+### P2.17 — Add `writeWorktreeReapedAt` to `SessionFiles` ✅ DONE (PR #94)
 
 **Surfaced 2026-08-16 (Claude Ultrathink analysis).**
 
@@ -552,7 +552,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.18 — Add deadline to `verify()` call in inactivity timer
+### P2.18 — Add deadline to `verify()` call in inactivity timer ✅ DONE (PR #95)
 
 **Surfaced 2026-08-16 (Claude Ultrathink analysis).**
 
@@ -569,7 +569,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.19 — Session recovery on daemon restart
+### P2.19 — Session recovery on daemon restart ✅ DONE (PR #96)
 
 **Surfaced 2026-08-21 (Gerard). Spec: `.kiro/specs/session-recovery/`**
 
@@ -592,7 +592,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.21 — Fix `buildGitAuthEnv` test isolation (make askpass check injectable)
+### P2.21 — Fix `buildGitAuthEnv` test isolation (make askpass check injectable) ✅ DONE (PR #168)
 
 **Problem.** `buildGitAuthEnv` in `src/agent-server.ts` calls `fs.existsSync('/usr/local/libexec/agent-router-askpass')` directly, checking the real filesystem. The Tier 1 test `'uses GIT_CONFIG extraheader when askpass helper is absent'` expects this file to be absent — but on production machines where `setup-agent-user.sh` has been run, the file exists, making the test fail with:
 
@@ -662,7 +662,7 @@ Context files: src/token-store.ts, src/github.ts, src/mcp-server.ts, src/cli-ser
 
 ---
 
-### P3.2 — Permissive wake policy with prompt-injection guards
+### P3.2 — Permissive wake policy with prompt-injection guards ✅ DONE (PR #53)
 
 **Maps to PRODUCT.md Phase 1 implicitly.** Trust-tier wake policy now exists; missing piece is prompt-composition hygiene against injection.
 
