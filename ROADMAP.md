@@ -35,6 +35,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 102. Session cleanup cron — `prune-sessions` CLI subcommand and systemd units
+
+Add `agent-router prune-sessions [--retention-days N] [--dry-run] [--verbose]` subcommand that
+queries the daemon's IPC socket for currently-active session IDs (accurate DB-backed list),
+falls back to `meta.json` status when the daemon is offline, and removes terminal session
+directories older than the retention window. Ships with systemd service + timer unit files in
+`scripts/` for automated daily cleanup. Updates README Maintenance section.
+
+- Spec: `BACKLOG.md § P1.4`
+- [ ] Complete · PR: —
+
+---
+
 
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
