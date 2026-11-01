@@ -35,18 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 95. Mark BACKLOG.md § P2.20 as complete (server-side waiting-for shipped in PR #100)
-
-Update `BACKLOG.md` to annotate P2.20 as done. The server-side waiting-for computation
-(`waitingForFn` → `paginateSessions`) shipped in PR #100 (item 51) alongside the
-web-ui-sessions-by-repo backend work, but BACKLOG.md was never updated to reflect that.
-This is a documentation-only housekeeping item.
-
-- Spec: `BACKLOG.md § P2.20`
-- [ ] Complete · PR: —
-
----
-
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -1153,3 +1141,19 @@ second test for the askpass-present path. Fixes a CI-breaking environment depend
 
 - Spec: `BACKLOG.md § P2.21`
 - [x] Complete · PR: #168
+
+---
+
+## Completed
+
+### 95. Mark BACKLOG.md § P2.20 as complete (server-side waiting-for shipped in PR #100)
+
+Update `BACKLOG.md` to annotate P2.20 as done. The server-side waiting-for computation
+(`waitingForFn` → `paginateSessions`) shipped in PR #100 (item 51) alongside the
+web-ui-sessions-by-repo backend work, but BACKLOG.md was never updated to reflect that.
+This is a documentation-only housekeeping item. Also fixes a pre-existing typecheck failure:
+`vitest.config.ts` used `maxWorkers` (not valid in vitest 3.2.4's `ThreadsOptions`);
+renamed to `maxThreads`.
+
+- Spec: `BACKLOG.md § P2.20`
+- [x] Complete · PR: #169
