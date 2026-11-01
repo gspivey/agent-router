@@ -606,7 +606,7 @@ AssertionError: expected '/usr/local/libexec/agent-router-askpass' to be undefin
 
 ---
 
-### P2.24 — Fix stale agent-router spec task checkboxes
+### P2.24 — Fix stale agent-router spec task checkboxes ✅ DONE (PR #174)
 
 **Problem.** `.kiro/specs/agent-router/tasks.md` has 6 non-optional unchecked tasks that are fully implemented in the codebase:
 
