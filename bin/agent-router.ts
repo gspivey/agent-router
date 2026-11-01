@@ -334,6 +334,17 @@ interface SessionMetaLike {
   original_prompt: string;
 }
 
+/** DTO for continuous run entries returned by list_sessions. */
+interface ContinuousRunDTOLike {
+  repo: string;
+  status: 'running' | 'stopped';
+  stop_reason?: string;
+  items_completed: number;
+  current_session_id: string | null;
+  started_at: number;
+  stopped_at?: number;
+}
+
 function formatAge(createdAt: number): string {
   const diffSec = Math.floor(Date.now() / 1000) - createdAt;
   if (diffSec < 60) return `${diffSec}s`;
@@ -342,9 +353,47 @@ function formatAge(createdAt: number): string {
   return `${Math.floor(diffSec / 86400)}d`;
 }
 
+/** Format a Unix-second timestamp as HH:MM local time. */
+function formatTime(unixSeconds: number): string {
+  const d = new Date(unixSeconds * 1000);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
 function truncate(s: string, maxLen: number): string {
   if (s.length <= maxLen) return s;
   return s.slice(0, maxLen - 3) + '...';
+}
+
+/** Render continuous runs section above the session list. */
+function renderContinuousRuns(runs: ContinuousRunDTOLike[]): void {
+  if (runs.length === 0) return;
+  process.stdout.write('Continuous runs:\n');
+  for (const run of runs) {
+    const statusLabel = run.status === 'running' ? 'RUNNING' : 'STOPPED';
+    const itemsLabel = `${run.items_completed} item${run.items_completed === 1 ? '' : 's'} completed`;
+    const sessionLabel = run.current_session_id !== null
+      ? `session ${run.current_session_id.slice(0, 8)}`
+      : '';
+    const timeLabel = run.status === 'running'
+      ? `since ${formatTime(run.started_at)}`
+      : run.stopped_at !== undefined
+        ? `stopped ${formatTime(run.stopped_at)}`
+        : '';
+    const stopReasonLabel = run.stop_reason !== undefined ? `  ${run.stop_reason}` : '';
+
+    const parts = [
+      `  ${run.repo.padEnd(30)}`,
+      statusLabel.padEnd(10),
+      stopReasonLabel.padEnd(24),
+      itemsLabel.padEnd(22),
+      sessionLabel.padEnd(20),
+      timeLabel,
+    ].join(' ').trimEnd();
+    process.stdout.write(parts + '\n');
+  }
+  process.stdout.write('\n');
 }
 
 async function cmdLs(args: string[]): Promise<void> {
@@ -380,6 +429,17 @@ async function cmdLs(args: string[]): Promise<void> {
     process.exit(1);
   }
 
+  // Render continuous runs section first (REQ-4.2, REQ-4.3)
+  const continuousRuns = (result['continuous_runs'] ?? []) as ContinuousRunDTOLike[];
+  renderContinuousRuns(continuousRuns);
+
+  // Build a set of session IDs that are currently serving a continuous run
+  const contSessionIds = new Set<string>(
+    continuousRuns
+      .map((r) => r.current_session_id)
+      .filter((id): id is string => id !== null),
+  );
+
   const sessions = result['sessions'] as SessionMetaLike[];
   if (sessions.length === 0) {
     process.stdout.write('No sessions.\n');
@@ -395,7 +455,9 @@ async function cmdLs(args: string[]): Promise<void> {
   process.stdout.write('-'.repeat(header.length) + '\n');
 
   for (const s of visible) {
-    const id = full ? s.session_id : s.session_id.slice(0, 8);
+    const rawId = full ? s.session_id : s.session_id.slice(0, 8);
+    // Append [CONT] badge when this session is the active session of a continuous run
+    const id = contSessionIds.has(s.session_id) ? `${rawId} [CONT]` : rawId;
     const status = s.status;
     const age = formatAge(s.created_at);
     const prs = s.prs.length > 0
@@ -828,6 +890,43 @@ async function cmdCron(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: stop-continuous
+// ---------------------------------------------------------------------------
+
+async function cmdStopContinuous(args: string[]): Promise<void> {
+  let repo: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--repo') {
+      repo = args[++i];
+    }
+  }
+
+  if (repo === undefined || repo.length === 0) {
+    process.stderr.write('Usage: agent-router stop-continuous --repo <owner/repo>\n');
+    process.exit(1);
+  }
+
+  // Validate format: must contain exactly one '/'
+  const slashCount = (repo.match(/\//g) ?? []).length;
+  if (slashCount !== 1 || repo.startsWith('/') || repo.endsWith('/')) {
+    process.stderr.write(`Error: --repo must be in "owner/name" format, got "${repo}"\n`);
+    process.exit(1);
+  }
+
+  const socketPath = resolveSocketPath();
+  const result = await sendToDaemon(socketPath, { op: 'stop_continuous', repo });
+
+  if (result['error'] !== undefined) {
+    process.stderr.write(`Error: ${result['error'] as string}\n`);
+    process.exit(1);
+  }
+
+  process.stdout.write(`Continuous run for ${repo} will stop after the current item completes.\n`);
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatch
 // ---------------------------------------------------------------------------
 
@@ -844,6 +943,7 @@ Commands:
   kill <session_id> [--reason <reason>]    Kill a session (default: killed_by_operator)
   complete-session --session-id <id> --reason <reason>
                                            Signal session completion
+  stop-continuous --repo <owner/repo>      Stop a continuous run after the current item
   cron [list|pause <name>|resume <name>]   Manage cron schedules
   tokens status [--check]                  Show token health and expiry status
 `);
@@ -878,6 +978,9 @@ async function main(): Promise<void> {
       break;
     case 'complete-session':
       await cmdCompleteSession(subArgs);
+      break;
+    case 'stop-continuous':
+      await cmdStopContinuous(subArgs);
       break;
     case 'cron':
       await cmdCron(subArgs);
