@@ -469,7 +469,10 @@ describe('push_branch git auth env — buildGitAuthEnv fallback', () => {
     env?: Record<string, string | undefined>;
   }
 
-  async function startServerCapEnv(opts: { sessionMgr?: SessionManager } = {}): Promise<{
+  async function startServerCapEnv(opts: {
+    sessionMgr?: SessionManager;
+    askpassHelperExists?: () => boolean;
+  } = {}): Promise<{
     server: AgentServer;
     socketPath: string;
     tmpDir: string;
@@ -503,13 +506,18 @@ describe('push_branch git auth env — buildGitAuthEnv fallback', () => {
       fetchImpl: okFetch,
       bareClonePathFor: (_repo: string): string | undefined => path.join(tmpDir, 'bare-clone'),
       execFileImpl: execFileImpl as unknown as NonNullable<AgentServerDeps['execFileImpl']>,
+      ...(opts.askpassHelperExists !== undefined
+        ? { askpassHelperExists: opts.askpassHelperExists }
+        : {}),
     });
     await server.start();
     return { server, socketPath, tmpDir, execCalls };
   }
 
   it('uses GIT_CONFIG extraheader when askpass helper is absent (useWorkerUid=false path)', async () => {
-    const h2 = await startServerCapEnv();
+    // Pass askpassHelperExists: () => false so the test is environment-independent
+    // regardless of whether the helper is installed on the host machine.
+    const h2 = await startServerCapEnv({ askpassHelperExists: () => false });
     try {
       // Write a stub bundle.
       const workDir = path.join(h2.tmpDir, 'worktrees', SESSION_ID, 'work');
@@ -544,6 +552,41 @@ describe('push_branch git auth env — buildGitAuthEnv fallback', () => {
       // credential.helper must be cleared.
       expect(pushCall?.env?.['GIT_CONFIG_KEY_0']).toBe('credential.helper');
       expect(pushCall?.env?.['GIT_CONFIG_VALUE_0']).toBe('');
+    } finally {
+      await h2.server.shutdown();
+      fs.rmSync(h2.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses GIT_ASKPASS when askpass helper is present (useWorkerUid=true path)', async () => {
+    // Pass askpassHelperExists: () => true so the test exercises the askpass
+    // code path regardless of whether the helper is installed on the host.
+    const h2 = await startServerCapEnv({ askpassHelperExists: () => true });
+    try {
+      // Write a stub bundle.
+      const workDir = path.join(h2.tmpDir, 'worktrees', SESSION_ID, 'work');
+      fs.mkdirSync(workDir, { recursive: true });
+      fs.writeFileSync(path.join(workDir, 'push-bundle.bundle'), Buffer.from('stub-bundle'));
+
+      const resp = await roundTrip(h2.socketPath, {
+        op: 'push_branch',
+        session_id: SESSION_ID,
+        cap_token: CAP_TOKEN,
+        branch: 'agent/fix',
+      });
+      expect(resp['error']).toBeUndefined();
+
+      // Find the push exec call.
+      const pushCall = h2.execCalls.find((c) => c.args.includes('push'));
+      expect(pushCall).toBeDefined();
+
+      // The askpass approach must be used: GIT_ASKPASS points at the helper.
+      expect(pushCall?.env?.['GIT_ASKPASS']).toBe('/usr/local/libexec/agent-router-askpass');
+      // GIT_ASKPASS_PASSWORD carries the PAT.
+      expect(pushCall?.env?.['GIT_ASKPASS_PASSWORD']).toBe('ghp_dummy_token');
+
+      // The extraheader env vars must NOT appear.
+      expect(pushCall?.env?.['GIT_CONFIG_COUNT']).toBeUndefined();
     } finally {
       await h2.server.shutdown();
       fs.rmSync(h2.tmpDir, { recursive: true, force: true });
