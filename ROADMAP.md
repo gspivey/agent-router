@@ -35,6 +35,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 97. Fix stale spec task checkboxes across active specs
+
+Fix unchecked parent task checkboxes in non-deprecated spec `tasks.md` files where all
+sub-tasks are done and the corresponding ROADMAP items have merged. Affected specs:
+`task-attempt-outcome` (task 11), `web-client` (task 4), `security-isolation-fix` (items
+90/91 templates), `agent-process-isolation` (items 83–86 templates), `continuous-mode`
+(pre-merge completion checklist). Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.22`
+- [ ] Complete · PR: —
+
+---
+
 
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 

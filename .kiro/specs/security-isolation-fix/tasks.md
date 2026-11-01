@@ -182,7 +182,7 @@ credential token store (no env fallback), and makes the `push_branch` `.github/`
 closed. Depends on items 83–86.
 
 - Spec: `.kiro/specs/security-isolation-fix/` · tasks `90.1`–`90.9`
-- [ ] Complete
+- [x] Complete · PR: #160
 
 ### 91. Security isolation fix — provisioning (usermod step, agentworker startup check, iptables chain rename, docs)
 
@@ -193,5 +193,5 @@ missing, renames the tinyproxy chain to `TINYPROXY_OUT`, and documents the setup
 item 90.
 
 - Spec: `.kiro/specs/security-isolation-fix/` · tasks `91.1`–`91.8`
-- [ ] Complete
+- [x] Complete · PR: #161
 ```
