@@ -35,20 +35,6 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-### 103. Cron timer for agent-router — systemd template units and README setup guide
-
-Add `scripts/agent-router-cron@.service` and `scripts/agent-router-cron@.timer` (systemd
-templated unit files) for scheduling agent sessions via OS-level cron as an alternative to the
-daemon's built-in `cron` config. The service uses `flock -n` (BACKLOG.md § P1.6 lockfile
-pattern) to skip if a prior fire is still running. The timer fires daily at 06:00 by default.
-Updates README with an "OS-level cron via systemd timer" sub-section under "Cron sessions".
-Marks BACKLOG.md § P1.1 and § P1.6 as done.
-
-- Spec: `BACKLOG.md § P1.1`
-- [ ] Complete · PR: —
-
----
-
 
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
@@ -1160,6 +1146,20 @@ second test for the askpass-present path. Fixes a CI-breaking environment depend
 ---
 
 ## Completed
+
+### 103. Cron timer for agent-router — systemd template units and README setup guide
+
+Add `scripts/agent-router-cron@.service` and `scripts/agent-router-cron@.timer` (systemd
+templated unit files) for scheduling agent sessions via OS-level cron as an alternative to the
+daemon's built-in `cron` config. The service uses `flock -n` (BACKLOG.md § P1.6 lockfile
+pattern) to skip if a prior fire is still running. The timer fires daily at 06:00 by default.
+Updates README with an "OS-level cron via systemd timer" sub-section under "Cron sessions".
+Marks BACKLOG.md § P1.1 and § P1.6 as done.
+
+- Spec: `BACKLOG.md § P1.1`
+- [x] Complete · PR: #177
+
+---
 
 ### 102. Session cleanup cron — `prune-sessions` CLI subcommand and systemd units
 
