@@ -1128,6 +1128,6 @@ server op, `stop-continuous` CLI subcommand, `ls` display enhancements, and T2-C
 tests. Depends on item 92.
 
 - Spec: `.kiro/specs/continuous-mode/` · tasks `2.1`–`2.4`, `2.6`, `2.7`
-- [ ] Complete
+- [x] Complete · PR: #167
 
 ---

@@ -339,13 +339,14 @@ The same prompt is used on every cron fire. The prompt file can be updated at an
 ## Day-to-day commands
 
 ```bash
-agent-router ls                          # List sessions
+agent-router ls                          # List sessions (and any active continuous runs)
 agent-router tail <session_id>           # Follow session output (pretty)
 agent-router tail <session_id> --raw     # Raw NDJSON stream
 agent-router tail <session_id> --prompts # Follow prompts log
+agent-router stop-continuous --repo <owner/repo>  # Stop a continuous run after current item
 ```
 
-`agent-router ls` truncates session IDs to their first 8 characters for column width. Other commands accept the truncated form as a prefix when there's no ambiguity.
+`agent-router ls` truncates session IDs to their first 8 characters for column width. Other commands accept the truncated form as a prefix when there's no ambiguity. When a continuous run is active for a repo, `ls` shows a `Continuous runs:` section above the session table with status, items completed, and the active session ID. Sessions belonging to a continuous run show a `[CONT]` badge in the ID column.
 
 ## How it works
 

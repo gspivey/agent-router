@@ -351,7 +351,7 @@ Test:
 - `npm run typecheck` passes.
 - Existing `list_sessions` tests still pass (no `continuousRunner` provided → empty array).
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -373,7 +373,7 @@ Test:
 - `agent-router stop-continuous --repo owner/name` compiles and exits 0 when daemon responds `{ ok: true }`.
 - Missing `--repo` prints usage and exits 1.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -400,7 +400,7 @@ Test:
   both rows under the header.
 - Session rows for sessions matching a continuous run show `[CONT]`.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -420,7 +420,7 @@ Test:
 **Acceptance:**
 - Test passes with `vitest run --project tier2`.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -446,7 +446,7 @@ Test:
 **Acceptance:**
 - Test passes with `vitest run --project tier2`.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
@@ -462,7 +462,7 @@ Test:
 **Acceptance:**
 - Test passes with `vitest run --project tier2`.
 
-- [ ] Complete
+- [x] Complete
 
 ---
 
