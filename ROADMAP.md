@@ -1147,6 +1147,20 @@ second test for the askpass-present path. Fixes a CI-breaking environment depend
 
 ## Completed
 
+### 101. Log rotation documentation
+
+Document the daemon's logging and log rotation strategy in README.md. The daemon logs
+structured NDJSON to stdout, captured by systemd journal in production; journal handles
+rotation automatically. Per-session `stream.log` files are scoped to a session lifetime and
+cleaned up by the existing session cleanup cron (P1.4). Documents the path for adding
+`logrotate` support if file-based `daemon.log` logging is added in the future.
+Documentation-only: no code changes, no tests.
+
+- Spec: `BACKLOG.md § P2.6`
+- [x] Complete · PR: #175
+
+---
+
 ### 100. Fix stale agent-router spec task checkboxes
 
 Tick the 6 non-optional unchecked tasks in `.kiro/specs/agent-router/tasks.md` that are fully

@@ -502,6 +502,29 @@ Run periodically via cron. Active sessions are not affected — only directories
 
 **Logs.** The daemon logs structured NDJSON to stdout, captured by systemd journal in production. Per-session logs live in the session directory and are cleaned up alongside the session.
 
+**Log rotation.** In the default configuration the daemon writes to stdout only — there is no `daemon.log` file on disk. The systemd journal captures all output and handles rotation automatically based on the system's `journald.conf` (`SystemMaxUse`, `SystemKeepFree`, etc.). No manual `logrotate` configuration is needed.
+
+Per-session logs (`stream.log`, `prompts.log`) accumulate under `~/.agent-router/sessions/`. These are append-only NDJSON files scoped to a single session's lifetime. The session cleanup cron (see above) removes entire session directories after 30 days, which prunes the per-session log files alongside the session metadata.
+
+If you later add file-based daemon logging (e.g. via a `daemon.log` sidecar or by redirecting stdout to a file), add a `/etc/logrotate.d/agent-router` entry:
+
+```
+/var/log/agent-router/daemon.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    postrotate
+        # Daemon writes to stdout; signal it only if you have configured file output
+        systemctl reload agent-router 2>/dev/null || true
+    endscript
+}
+```
+
+For now this is documented but unused — the daemon's stdout-to-journal path does not need it.
+
 ## Where things are going
 
 - **`PRODUCT.md`** — what the product is and the open architecture questions.

@@ -368,7 +368,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.6 — Log rotation for daemon
+### P2.6 — Log rotation for daemon ✅ DONE (PR #175)
 
 **Maps to PRODUCT.md Phase 1: "Log rotation for daemon.log."**
 
