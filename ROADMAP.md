@@ -1140,4 +1140,4 @@ unchanged). Update the failing test to pass `askpassHelperExists: () => false`, 
 second test for the askpass-present path. Fixes a CI-breaking environment dependency.
 
 - Spec: `BACKLOG.md § P2.21`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #168
