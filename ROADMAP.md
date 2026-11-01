@@ -35,6 +35,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 104. Optional property tests — config (resolveEnvValues) and prompt composers
+
+Add Tier 1 property-based tests (fast-check, 100 runs each) for the config and
+prompt modules, covering optional spec tasks 3.4, 3.5, 5.2a–5.2d that were
+deferred during the original implementation. Pure test additions; no behavior
+changes. Two new test files: `test/tier1/config-property.test.ts` (11 tests)
+and `test/tier1/prompt-property.test.ts` (21 tests).
+
+- Spec: `.kiro/specs/agent-router/` · tasks `3.4`, `3.5`, `5.2a`, `5.2b`, `5.2c`, `5.2d`
+- [ ] Complete · PR: —
+
+---
+
 
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 

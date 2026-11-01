@@ -653,6 +653,42 @@ Additionally, BACKLOG items P2.1 (session persistence — shipped as ROADMAP ite
 
 ---
 
+### P2.25 — Optional property tests for config and prompt modules ✅ DONE (PR: TBD)
+
+**Problem.** When the original agent-router spec was implemented, the optional (`*`) property
+tests for the config and prompt modules were deferred. These are tasks 3.4, 3.5, 5.2a–5.2d in
+`.kiro/specs/agent-router/tasks.md`. The deterministic unit tests in `resolve-env-values.test.ts`,
+`validate-config.test.ts`, and `prompt.test.ts` cover discrete cases, but property-based coverage
+with `fast-check` (100+ iterations each) would surface edge cases under arbitrary inputs.
+
+**Mini spec.**
+
+- Create `test/tier1/config-property.test.ts` with:
+  - Property 1 (task 3.4): `resolveEnvValues` — non-ENV: scalars pass through unchanged,
+    ENV: values resolve and trim whitespace (including newlines from systemd EnvironmentFile),
+    strings containing but not starting with "ENV:" are unchanged, nested ENV: values resolve,
+    missing env var always throws `FatalError` with var name.
+  - Property 12 (task 3.5): `validateConfig` — valid config (valid port, non-empty secret,
+    valid kiroPath, valid repo) always passes; out-of-range port always fails; empty webhookSecret
+    always fails; repo with empty owner or name always fails.
+- Create `test/tier1/prompt-property.test.ts` with:
+  - Task 5.2a: `composeCheckRunPrompt` — output always starts with PREAMBLE, contains repo,
+    contains `#<prNumber>`, contains check run name, wraps summary in UNTRUSTED_INPUT markers,
+    null conclusion always produces "conclusion: unknown".
+  - Task 5.2b: `composeReviewCommentPrompt` — output always starts with PREAMBLE, contains repo,
+    contains `#<prNumber>`, produces exactly 2 closing UNTRUSTED_INPUT markers (for diff_hunk and body).
+  - Task 5.2c: `composeCommandTriggerPrompt` — output always starts with PREAMBLE, contains repo,
+    contains `#<prNumber>`, `/agent ` prefix is stripped from non-preamble portion, `/agent` alone is
+    stripped, output wraps command in UNTRUSTED_INPUT markers.
+  - Task 5.2d: `composeCronPrompt` — output always contains repo, trimmed prompt content, starts
+    with "Scheduled cron session.", never contains UNTRUSTED_INPUT markers (trusted input), trims
+    leading/trailing whitespace from prompt content.
+
+**Acceptance.** 32 new property tests (11 config + 21 prompt) pass. All 100+ iterations per test.
+Full test suite (`npm test`) still passes with no regressions.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2)
