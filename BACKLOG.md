@@ -113,7 +113,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ## Priority 1: Supports cron mode
 
-### P1.1 — Cron timer for agent-router itself
+### P1.1 — Cron timer for agent-router itself ✅ DONE (PR #177)
 
 **Maps to PRODUCT.md Phase 1: "Cron-triggered sessions pick work from roadmap and execute."**
 
@@ -190,7 +190,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.6 — Cron lockfile pattern
+### P1.6 — Cron lockfile pattern ✅ DONE (PR #177)
 
 **New (not in PRODUCT.md).** Belt-and-suspenders for cron mode even with P0.4 in place.
 
