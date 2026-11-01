@@ -1186,3 +1186,13 @@ sub-tasks are done and the corresponding ROADMAP items have merged. Affected spe
 
 - Spec: `BACKLOG.md § P2.22`
 - [x] Complete · PR: #171
+
+### 98. Fix stale spa-polish spec sub-task checkboxes
+
+Tick the 25 unchecked sub-task checkboxes in `.kiro/specs/spa-polish/tasks.md` that were
+left behind when ROADMAP items 87, 88, 89 (PRs #156, #158, #159) merged. All 16 parent
+task checkboxes are already `[x]`; only the sub-tasks are stale. Same pattern as P2.22
+(item 97). Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.23`
+- [x] Complete · PR: #172

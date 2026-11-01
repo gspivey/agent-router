@@ -606,6 +606,16 @@ AssertionError: expected '/usr/local/libexec/agent-router-askpass' to be undefin
 
 ---
 
+### P2.23 — Fix stale spa-polish spec sub-task checkboxes ✅ DONE (PR #172)
+
+**Problem.** `.kiro/specs/spa-polish/tasks.md` has 16 parent task checkboxes all marked `[x]` (items 1–16), but 25 sub-task checkboxes remain `[ ]` unchecked. The corresponding ROADMAP items (87, 88, 89 — PRs #156, #158, #159) have all merged and CI was green. This is the same stale-checkbox pattern fixed for other specs in ROADMAP item 97 / P2.22 (PR #171), except spa-polish was not included in that batch.
+
+**Fix.** Tick the 25 unchecked sub-tasks to match the actual merged state. Documentation-only; no code, no tests.
+
+**Acceptance.** Zero `- [ ]` lines remain in `.kiro/specs/spa-polish/tasks.md`.
+
+---
+
 ### P2.22 — Fix stale spec task checkboxes across active specs ✅ DONE (PR #171)
 
 **Problem.** Several active (non-deprecated) spec `tasks.md` files have unchecked parent task checkboxes (`- [ ]`) where all sub-tasks are already marked done and the corresponding ROADMAP items have merged. This creates a misleading picture of spec completion when reading the tasks files. The affected files are:
