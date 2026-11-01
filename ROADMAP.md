@@ -35,6 +35,21 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 96. Task/attempt/outcome — missing Tier 2 tests (task-lifecycle, cancel-cleanup)
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `11.4` and `11.5`. These two HIGH-9 Tier 2 tests were specified but never
+implemented. Task 11.4 adds `test/tier2/task-lifecycle.test.ts` covering the full lifecycle
+(queued → running → heartbeat → report_outcome(succeeded) → attempt.ended → task.succeeded,
+with hasDiff via WorktreeOps mock). Task 11.5 adds `test/tier2/cancel-cleanup.test.ts`
+covering cancel of a running attempt (cancelled_by_api, worktree removed) and cancel of a
+non-running task (task.cancelled without attempt.ended).
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `11.4`, `11.5`
+- [ ] Complete · PR: —
+
+---
+
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
 Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
