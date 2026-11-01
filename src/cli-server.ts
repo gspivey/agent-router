@@ -33,7 +33,8 @@ export interface CliRequest {
     | 'get_token'
     | 'tokens_status'
     | 'register_worktree'
-    | 'report_outcome';
+    | 'report_outcome'
+    | 'stop_continuous';
   [key: string]: unknown;
 }
 
@@ -77,8 +78,10 @@ export function createCliServer(deps: {
   tokenStore?: TokenStore;
   agentRunsDir?: string;
   attemptOutcomeSink?: AttemptOutcomeSink;
+  continuousRunner?: import('./continuous-runner.js').ContinuousRunner;
 }): CliServer {
   const { socketPath, sessionMgr, sessionFiles, log, db, cronTasks, cronEntries, tokenStore, agentRunsDir, attemptOutcomeSink } = deps;
+  const continuousRunner = deps.continuousRunner;
 
   let server: net.Server | null = null;
   const activeConnections = new Set<net.Socket>();
@@ -88,7 +91,20 @@ export function createCliServer(deps: {
   const handlers: Record<string, OpHandler> = {
     async list_sessions(): Promise<Record<string, unknown>> {
       const sessions = sessionFiles.listSessions();
-      return { sessions };
+      const continuous_runs = continuousRunner?.listRuns() ?? [];
+      return { sessions, continuous_runs };
+    },
+
+    async stop_continuous(req: CliRequest): Promise<Record<string, unknown>> {
+      const repo = req['repo'];
+      if (typeof repo !== 'string' || repo.length === 0) {
+        throw new Error('Missing or empty "repo" parameter');
+      }
+      if (!continuousRunner) {
+        throw new Error('Continuous runner not configured');
+      }
+      continuousRunner.requestStop(repo);
+      return { ok: true };
     },
 
     async new_session(req: CliRequest): Promise<Record<string, unknown>> {

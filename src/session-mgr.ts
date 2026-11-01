@@ -478,6 +478,8 @@ export function createSessionManager(deps: {
   verify?: VerifySessionFn;
   /** Best-effort callback fired after a session reaches terminal state. */
   onSessionEnd?: (sessionId: string) => void;
+  /** Best-effort callback fired when a session leaves the registry (after process is killed). */
+  onSessionEnded?: (sessionId: string, repo: string | undefined, reason: string) => void;
   /** Optional worktree manager for isolated per-session working directories. */
   worktreeManager?: WorktreeManager;
   /** Optional Token_Store for project-scoped credential resolution. */
@@ -515,6 +517,7 @@ export function createSessionManager(deps: {
   const github = deps.github;
   const verify = deps.verify;
   const onSessionEnd = deps.onSessionEnd;
+  const onSessionEnded = deps.onSessionEnded;
   const worktreeManager = deps.worktreeManager;
   const tokenStore = deps.tokenStore;
   const credentialMode = deps.credentialMode ?? 'env';
@@ -531,6 +534,22 @@ export function createSessionManager(deps: {
   const maxLifetimeMs = timeout.maxLifetimeMinutes * 60 * 1000;
   const gracePeriodMs = timeout.gracePeriodAfterMergeSeconds * 1000;
   const registry = createSessionRegistry();
+
+  /**
+   * Fire the `onSessionEnded` callback just before removing from the registry.
+   * Never throws — logs and swallows any error from the callback.
+   */
+  function fireOnSessionEnded(sessionId: string, repo: string | undefined, reason: string): void {
+    if (onSessionEnded === undefined) return;
+    try {
+      onSessionEnded(sessionId, repo, reason);
+    } catch (e: unknown) {
+      log.error('onSessionEnded callback threw', {
+        sessionId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
 
   // Log MCP wiring state once at construction (active vs degraded).
   const mcpWiringActive = daemonSocket !== undefined && mcpServerCommand !== undefined;
@@ -790,6 +809,12 @@ export function createSessionManager(deps: {
         }
 
         // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
+        // Fire onSessionEnded before removing so the callback can see final meta
+        const inactivityHandle = registry.get(sessionId);
+        const inactivityReason = (() => {
+          try { return sessionFiles.readMeta(sessionId).termination_reason ?? 'timeout_inactivity'; } catch { return 'timeout_inactivity'; }
+        })();
+        fireOnSessionEnded(sessionId, inactivityHandle?.repo ?? undefined, inactivityReason);
         registry.remove(sessionId);
         clearSessionTimers(sessionId);
         clearPendingWakesForSession(sessionId);
@@ -895,6 +920,8 @@ export function createSessionManager(deps: {
           const meta = sessionFiles.readMeta(sessionId);
           if (meta.status !== 'active') {
             // Already in terminal state
+            const alreadyTerminalHandle = registry.get(sessionId);
+            fireOnSessionEnded(sessionId, alreadyTerminalHandle?.repo ?? undefined, meta.termination_reason ?? 'unknown');
             registry.remove(sessionId);
             return;
           }
@@ -936,6 +963,12 @@ export function createSessionManager(deps: {
         sessionStates.delete(sessionId);
         clearPendingWakesForSession(sessionId);
         removeSessionWorktree(sessionId);
+        // Fire callback before registry removal so it sees the session is gone
+        const normalExitHandle = registry.get(sessionId);
+        const normalExitReason = (() => {
+          try { return sessionFiles.readMeta(sessionId).termination_reason ?? 'unknown'; } catch { return 'unknown'; }
+        })();
+        fireOnSessionEnded(sessionId, normalExitHandle?.repo ?? undefined, normalExitReason);
         registry.remove(sessionId);
         markTerminalAndNotifyReaper(sessionId);
         onSessionEnd?.(sessionId);
@@ -981,6 +1014,8 @@ export function createSessionManager(deps: {
       }
 
       // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
+      const maxLifetimeHandle = registry.get(sessionId);
+      fireOnSessionEnded(sessionId, maxLifetimeHandle?.repo ?? undefined, 'timeout_max_lifetime');
       registry.remove(sessionId);
       clearSessionTimers(sessionId);
       clearPendingWakesForSession(sessionId);
@@ -1345,6 +1380,10 @@ export function createSessionManager(deps: {
         log.info('Grace period expired, terminating session', { sessionId });
 
         // Remove from registry before kill to prevent monitorSubprocessExit from overwriting
+        const graceReason = (() => {
+          try { return sessionFiles.readMeta(sessionId).termination_reason ?? 'unknown'; } catch { return 'unknown'; }
+        })();
+        fireOnSessionEnded(sessionId, handle.repo ?? undefined, graceReason);
         registry.remove(sessionId);
         clearSessionTimers(sessionId);
         removeSessionWorktree(sessionId);
@@ -1375,6 +1414,7 @@ export function createSessionManager(deps: {
       removeSessionWorktree(sessionId);
 
       // Remove from registry first to prevent monitorSubprocessExit from double-updating
+      fireOnSessionEnded(sessionId, handle.repo ?? undefined, reason);
       registry.remove(sessionId);
       sessionStates.delete(sessionId);
 
@@ -1611,6 +1651,7 @@ export function createSessionManager(deps: {
       const idlePromises: Promise<void>[] = [];
       for (const handle of idle) {
         const { sessionId } = handle;
+        fireOnSessionEnded(sessionId, handle.repo ?? undefined, 'shutdown');
         registry.remove(sessionId);
         sessionStates.delete(sessionId);
         cleanupIsolationState(sessionId);
@@ -1688,6 +1729,14 @@ export function createSessionManager(deps: {
       const busyPromises: Promise<void>[] = [];
       for (const handle of busy) {
         const { sessionId } = handle;
+        // Determine the termination reason for the callback
+        const busyShutdownReason = (() => {
+          try {
+            const m = sessionFiles.readMeta(sessionId);
+            return m.termination_reason ?? 'daemon_shutdown';
+          } catch { return 'daemon_shutdown'; }
+        })();
+        fireOnSessionEnded(sessionId, handle.repo ?? undefined, busyShutdownReason);
         registry.remove(sessionId);
         sessionStates.delete(sessionId);
         cleanupIsolationState(sessionId);

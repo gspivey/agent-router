@@ -100,6 +100,9 @@ function createFakeGitHub(): FakeGitHubClient {
     async getCheckRunsForRef(): Promise<never[]> {
       return [];
     },
+    async getFileContents(): Promise<string> {
+      throw new Error('fake: getFileContents not used by verifier tests');
+    },
   };
 }
 

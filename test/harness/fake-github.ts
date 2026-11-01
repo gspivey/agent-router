@@ -71,6 +71,12 @@ export class FakeGitHubBackend implements GitHubBackend {
   private requiredAuthToken: string | null = null;
   /** Canned responses keyed by `METHOD:pathname`. Override default routing for specific paths. */
   private cannedResponses: Map<string, CannedResponse> = new Map();
+  /**
+   * File contents keyed by `"owner/repo:ref:filePath"`. Used by
+   * `getFileContents` in the GitHubClient to serve ROADMAP file content for
+   * continuous-mode tests.
+   */
+  private fileContents: Map<string, string> = new Map();
 
   constructor(webhookSecret: string) {
     this.webhookSecret = webhookSecret;
@@ -116,6 +122,8 @@ export class FakeGitHubBackend implements GitHubBackend {
     this.apiCalls = [];
     this.requiredAuthToken = null;
     this.cannedResponses.clear();
+    this.fileContents.clear();
+    this._fileContentQueues = new Map();
     this.copyFixture();
   }
 
@@ -151,6 +159,28 @@ export class FakeGitHubBackend implements GitHubBackend {
    */
   clearCannedResponses(): void {
     this.cannedResponses.clear();
+  }
+
+  /**
+   * Register file contents to be returned by `GET /repos/:owner/:repo/contents/:path?ref=:ref`.
+   * The key is `"owner/repo:ref:filePath"`. Call multiple times to return different content
+   * on successive calls (a dequeue — each call is consumed once). If only one entry is set,
+   * it is returned on every call. Pass `null` to simulate a 404.
+   */
+  setFileContents(repo: string, ref: string, filePath: string, content: string | null): void {
+    const key = `${repo}:${ref}:${filePath}`;
+    this.fileContents.set(key, content ?? '\0NOT_FOUND');
+  }
+
+  /**
+   * Set up a sequence of file contents responses. Each `getFileContents` call consumes one
+   * entry; the last entry is reused once the queue is exhausted.
+   */
+  private _fileContentQueues: Map<string, string[]> = new Map();
+
+  setFileContentsSequence(repo: string, ref: string, filePath: string, contents: (string | null)[]): void {
+    const key = `${repo}:${ref}:${filePath}`;
+    this._fileContentQueues.set(key, contents.map((c) => c ?? '\0NOT_FOUND'));
   }
 
   /**
@@ -480,6 +510,37 @@ export class FakeGitHubBackend implements GitHubBackend {
           conclusion: cr.conclusion,
         })),
       }));
+      return;
+    }
+
+    // GET /repos/:owner/:repo/contents/:path?ref=:ref (for getFileContents)
+    const contentsMatch = subPath.match(/^\/contents\/(.+)$/);
+    if (method === 'GET' && contentsMatch) {
+      const filePath = decodeURIComponent(contentsMatch[1]!);
+      const url = new URL(req.url ?? '/', `http://localhost`);
+      const refParam = url.searchParams.get('ref') ?? 'HEAD';
+      const key = `${repoName}:${refParam}:${filePath}`;
+
+      // Check sequence queue first
+      const queue = this._fileContentQueues.get(key);
+      let content: string | undefined;
+      if (queue !== undefined && queue.length > 0) {
+        // Dequeue first entry; if only one remains, keep it (reuse last)
+        content = queue.length > 1 ? queue.shift()! : queue[0]!;
+      } else {
+        content = this.fileContents.get(key);
+      }
+
+      if (content === undefined) {
+        res.writeHead(404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ message: 'Not Found' }));
+        return;
+      }
+      if (content === '\0NOT_FOUND') {
+        res.writeHead(404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ message: 'Not Found' }));
+        return;
+      }
+      // Return raw text (mimics Accept: application/vnd.github.raw)
+      res.writeHead(200, { 'Content-Type': 'text/plain' }).end(content);
       return;
     }
 
