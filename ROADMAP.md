@@ -1145,6 +1145,8 @@ second test for the askpass-present path. Fixes a CI-breaking environment depend
 
 ---
 
+## Completed
+
 ### 101. Log rotation documentation
 
 Document the daemon's logging and log rotation strategy in README.md. The daemon logs
@@ -1155,11 +1157,9 @@ cleaned up by the existing session cleanup cron (P1.4). Documents the path for a
 Documentation-only: no code changes, no tests.
 
 - Spec: `BACKLOG.md § P2.6`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #175
 
 ---
-
-## Completed
 
 ### 100. Fix stale agent-router spec task checkboxes
 
