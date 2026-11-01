@@ -1173,3 +1173,16 @@ non-running task (task.cancelled without attempt.ended).
 
 - Spec: `.kiro/specs/task-attempt-outcome/` · tasks `11.4`, `11.5`
 - [x] Complete · PR: #170
+
+---
+
+### 97. Fix stale spec task checkboxes across active specs
+
+Fix unchecked parent task checkboxes in non-deprecated spec `tasks.md` files where all
+sub-tasks are done and the corresponding ROADMAP items have merged. Affected specs:
+`task-attempt-outcome` (task 11), `web-client` (task 4), `security-isolation-fix` (items
+90/91 templates), `agent-process-isolation` (items 83–86 templates), `continuous-mode`
+(pre-merge completion checklist). Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.22`
+- [x] Complete · PR: #171

@@ -68,7 +68,7 @@ should NOT be re-implemented. The agent must read this note before touching any 
       spinner.
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-- [ ] 4. SSE hardening for Cloudflare / mobile
+- [x] 4. SSE hardening for Cloudflare / mobile
   - [x] 4.1a Server SSE id/heartbeat (shipped)
     - SSE `id:` per event and configurable heartbeat implemented in PRs #92–107.
     - _Requirements: 3.4_

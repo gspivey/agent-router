@@ -364,7 +364,7 @@ Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `ta
 full, then implement tasks `83.1`, `83.2`, `83.3`, `83.4`.
 
 - Spec: `.kiro/specs/agent-process-isolation/` · tasks `83.1–83.4`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #149
 
 ---
 
@@ -375,7 +375,7 @@ full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7
 Depends on item 83 (user, socket dir, worktree dir must exist).
 
 - Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.16`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #150
 
 ---
 
@@ -386,7 +386,7 @@ full, then implement tasks `85.1`, `85.2`, `85.3`, `85.4`, `85.5`, `85.6`. Depen
 (agent socket and cap_token in place).
 
 - Spec: `.kiro/specs/agent-process-isolation/` · tasks `85.1–85.6`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #151
 
 ---
 
@@ -396,5 +396,5 @@ Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `ta
 full, then implement tasks `86.1`, `86.2`, `86.3`, `86.4`. Depends on items 83, 84, 85.
 
 - Spec: `.kiro/specs/agent-process-isolation/` · tasks `86.1–86.4`
-- [ ] Complete · PR: --
+- [x] Complete · PR: #152
 ```

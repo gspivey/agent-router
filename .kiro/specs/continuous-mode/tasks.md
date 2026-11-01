@@ -469,21 +469,21 @@ Test:
 ## Completion checklist
 
 Before opening PR A:
-- [ ] `npm run typecheck` passes on the PR branch.
-- [ ] `npm test` (Tier 1 + Tier 2) passes, including T2-CONT-1 and T2-CONT-2.
-- [ ] `continuous-runner.ts` has no `any` types, no `as` casts except for narrowing.
-- [ ] All new log calls use the structured `Logger`, not `console.log`.
-- [ ] `onSessionEnded` fires at `registry.remove` sites, NOT at meta-write sites.
-- [ ] `startRun` is async and handles `createSession` failure.
-- [ ] `_continueRun` re-checks `stopRequested`/`shuttingDown` at entry, after fetch, before spawn.
-- [ ] `no_progress` detection is implemented (compare unchecked counts).
-- [ ] `shutdown` is async and awaits in-flight continuations.
+- [x] `npm run typecheck` passes on the PR branch.
+- [x] `npm test` (Tier 1 + Tier 2) passes, including T2-CONT-1 and T2-CONT-2.
+- [x] `continuous-runner.ts` has no `any` types, no `as` casts except for narrowing.
+- [x] All new log calls use the structured `Logger`, not `console.log`.
+- [x] `onSessionEnded` fires at `registry.remove` sites, NOT at meta-write sites.
+- [x] `startRun` is async and handles `createSession` failure.
+- [x] `_continueRun` re-checks `stopRequested`/`shuttingDown` at entry, after fetch, before spawn.
+- [x] `no_progress` detection is implemented (compare unchecked counts).
+- [x] `shutdown` is async and awaits in-flight continuations.
 
 Before opening PR B:
-- [ ] `npm run typecheck` passes.
-- [ ] `npm test` passes including new Tier 2 tests (T2-CONT-3 through T2-CONT-7).
-- [ ] `agent-router stop-continuous --help` (or equivalent usage) prints without crashing.
+- [x] `npm run typecheck` passes.
+- [x] `npm test` passes including new Tier 2 tests (T2-CONT-3 through T2-CONT-7).
+- [x] `agent-router stop-continuous --help` (or equivalent usage) prints without crashing.
 
 Before merging each PR:
-- [ ] ROADMAP item ticked with PR number.
-- [ ] README updated if any operator-visible behaviour changed (config fields, new subcommand).
+- [x] ROADMAP item ticked with PR number.
+- [x] README updated if any operator-visible behaviour changed (config fields, new subcommand).

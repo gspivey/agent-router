@@ -606,6 +606,22 @@ AssertionError: expected '/usr/local/libexec/agent-router-askpass' to be undefin
 
 ---
 
+### P2.22 — Fix stale spec task checkboxes across active specs ✅ DONE (PR #171)
+
+**Problem.** Several active (non-deprecated) spec `tasks.md` files have unchecked parent task checkboxes (`- [ ]`) where all sub-tasks are already marked done and the corresponding ROADMAP items have merged. This creates a misleading picture of spec completion when reading the tasks files. The affected files are:
+
+- `.kiro/specs/task-attempt-outcome/tasks.md`: task 11 parent unchecked, but sub-tasks 11.1–11.5 all done (ROADMAP items 69 and 96, PRs #127/#170)
+- `.kiro/specs/web-client/tasks.md`: task 4 parent unchecked, but sub-tasks 4.1a, 4.1b, 4.2 all done (ROADMAP items 29/58, PRs #69/#110)
+- `.kiro/specs/security-isolation-fix/tasks.md`: embedded ROADMAP entries 90 and 91 show `- [ ] Complete` but both merged as PRs #160 and #161
+- `.kiro/specs/agent-process-isolation/tasks.md`: embedded ROADMAP entries 83–86 show `- [ ] Complete · PR: --` but all merged as PRs #149–#152
+- `.kiro/specs/continuous-mode/tasks.md`: pre-merge completion checklist items unchecked; both PRs (items 92/93, #166/#167) have merged and CI was green
+
+**Fix.** Tick each stale checkbox to match the actual merged state. Documentation-only change; no code, no tests.
+
+**Acceptance.** Zero `- [ ]` lines remain in the five named spec files (excluding the deprecated `auth-credential-proxy` and `browser-test-harness` specs, whose unchecked items are intentionally left as historical artifacts with deprecation notices).
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2)
