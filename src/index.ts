@@ -59,6 +59,8 @@ import type { TokenStore } from './token-store.js';
 import { credentialTokenResolver } from './token-resolver.js';
 import { createReaper } from './reaper.js';
 import type { Reaper } from './reaper.js';
+import { createContinuousRunner } from './continuous-runner.js';
+import type { ContinuousRunner } from './continuous-runner.js';
 import { initTaskDatabase } from './task-db.js';
 import type { TaskDatabase } from './task-db.js';
 import { TaskService } from './task-service.js';
@@ -227,9 +229,10 @@ function setupCronJobs(deps: {
   db: Database;
   sessionMgr: SessionManager;
   sessionFiles: ReturnType<typeof import('./session-files.js').createSessionFiles>;
+  continuousRunner: ContinuousRunner;
   log: Logger;
 }): cron.ScheduledTask[] {
-  const { config, db, sessionMgr, sessionFiles, log } = deps;
+  const { config, db, sessionMgr, sessionFiles, continuousRunner, log } = deps;
   const tasks: cron.ScheduledTask[] = [];
 
   for (const cronEntry of config.cron) {
@@ -237,7 +240,7 @@ function setupCronJobs(deps: {
     const paused = state !== null && state.paused;
 
     const task = cron.schedule(cronEntry.schedule, () => {
-      void handleCronFire(cronEntry, sessionMgr, sessionFiles, log);
+      void handleCronFire(cronEntry, config, sessionMgr, sessionFiles, continuousRunner, log);
     }, { scheduled: !paused });
     tasks.push(task);
     log.info('Cron job registered', { name: cronEntry.name, schedule: cronEntry.schedule, repo: cronEntry.repo, paused });
@@ -252,8 +255,10 @@ import { reconcileCronJobs } from './cron-reconcile.js';
 
 async function handleCronFire(
   cronEntry: AgentRouterConfig['cron'][number],
+  config: AgentRouterConfig,
   sessionMgr: SessionManager,
   sessionFiles: ReturnType<typeof import('./session-files.js').createSessionFiles>,
+  continuousRunner: ContinuousRunner,
   log: Logger,
 ): Promise<void> {
   const cronLog = log.child({ cron_name: cronEntry.name, repo: cronEntry.repo });
@@ -292,13 +297,29 @@ async function handleCronFire(
     return;
   }
 
-  const prompt = composeCronPrompt(promptContent, cronEntry.repo);
-  try {
-    const handle = await sessionMgr.createSession(prompt, cronEntry.repo);
-    cronLog.info('Cron session created', { session_id: handle.sessionId, promptFile: cronEntry.promptFile });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    cronLog.error('Failed to create cron session', { error: msg });
+  // Branch on continuous mode
+  const repoConfig = config.repos.find((r) => `${r.owner}/${r.name}` === cronEntry.repo);
+
+  if (repoConfig?.continuous === true) {
+    // Delegate session creation to the continuous runner
+    try {
+      await continuousRunner.startRun(cronEntry, repoConfig);
+      cronLog.info('Continuous run initiated', { cronName: cronEntry.name, repo: cronEntry.repo });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      cronLog.error('Continuous run failed to start', { cronName: cronEntry.name, error: msg });
+      // Run is already stopped with 'item_failed' inside startRun
+    }
+  } else {
+    // Existing one-shot path
+    const prompt = composeCronPrompt(promptContent, cronEntry.repo);
+    try {
+      const handle = await sessionMgr.createSession(prompt, cronEntry.repo);
+      cronLog.info('Cron session created', { session_id: handle.sessionId, promptFile: cronEntry.promptFile });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      cronLog.error('Failed to create cron session', { error: msg });
+    }
   }
 }
 
@@ -319,6 +340,7 @@ interface DaemonState {
   configWatcher: ConfigWatcher | null;
   credentialTokenStore: TokenStore | null;
   sessionMgr: SessionManager | null;
+  continuousRunner: ContinuousRunner | null;
   db: Database | null;
   taskEventBroker: TaskEventBroker | null;
   transcriptSweeper: TranscriptRetentionSweeper | null;
@@ -422,6 +444,12 @@ function installShutdownHandlers(state: DaemonState): void {
 
       // 6. Shutdown session manager (drain busy sessions, then terminate)
       if (state.sessionMgr) {
+        // Shut down the continuous runner first so it doesn't spawn new sessions
+        // while the session manager is draining.
+        if (state.continuousRunner) {
+          await state.continuousRunner.shutdown();
+          state.log.info('Continuous runner shut down');
+        }
         await state.sessionMgr.shutdown();
         state.log.info('Session manager shut down');
       }
@@ -737,6 +765,11 @@ async function main(): Promise<void> {
     });
   }
 
+  // Forward-reference for continuous runner: sessionMgr needs onSessionEnded which
+  // calls continuousRunner, but continuousRunner needs sessionMgr. Solve with a
+  // let variable assigned after both are created.
+  let continuousRunner: ContinuousRunner;
+
   sessionMgr = createSessionManager({
     db,
     sessionFiles,
@@ -803,9 +836,22 @@ async function main(): Promise<void> {
         void sendSessionEndNotification({ config: config.notifyOnSessionEnd!, meta, log });
       }
     },
+    onSessionEnded: (sessionId: string, repo: string | undefined, reason: string) => {
+      // Forward to continuous runner (assigned after this call, but closured)
+      continuousRunner.notifySessionEnded(sessionId, repo, reason);
+    },
     ...(reaper !== undefined ? { reaper } : {}),
   });
   log.info('Session manager initialized');
+
+  // Create the continuous runner now that sessionMgr exists
+  continuousRunner = createContinuousRunner({
+    config,
+    sessionMgr,
+    github,
+    log,
+  });
+  log.info('Continuous runner initialized');
 
   // ---- Agent-only socket (agent process isolation, FR-4) ----
   // Always start the agent server (both modes): the per-session MCP relay uses
@@ -921,7 +967,7 @@ async function main(): Promise<void> {
   log.info('HTTP server listening', { port: config.port });
 
   // ---- Task 19.3: Register cron jobs ----
-  let cronTasks = setupCronJobs({ config, db, sessionMgr, sessionFiles, log });
+  let cronTasks = setupCronJobs({ config, db, sessionMgr, sessionFiles, continuousRunner, log });
 
   // Start CLI IPC server on Unix socket (reuses the single socketPath computed
   // before the session manager — no second, divergent computation).
@@ -935,6 +981,7 @@ async function main(): Promise<void> {
     cronEntries: config.cron,
     tokenStore: credentialTokenStore,
     agentRunsDir: config.reaper.agentRunsDir,
+    continuousRunner,
   });
   await cliServer.start();
   log.info('CLI IPC server listening', { socketPath });
@@ -1019,7 +1066,7 @@ async function main(): Promise<void> {
       sessionMgr,
       sessionFiles,
       log,
-      handleCronFire: (entry) => { void handleCronFire(entry, sessionMgr, sessionFiles, log); },
+      handleCronFire: (entry) => { void handleCronFire(entry, configHolder.current, sessionMgr, sessionFiles, continuousRunner, log); },
     });
 
     // Rebuild adapter map (new sessions pick up adapter changes; active sessions unaffected)
@@ -1054,6 +1101,7 @@ async function main(): Promise<void> {
     configWatcher,
     credentialTokenStore,
     sessionMgr,
+    continuousRunner,
     db,
     taskEventBroker,
     transcriptSweeper,

@@ -150,6 +150,16 @@ export interface RepoConfig {
   concurrency?: number;
   /** Optional per-repo circuit-breaker configuration (task-attempt-outcome Requirement 12.4). */
   circuitBreaker?: RepoCircuitBreakerConfig;
+  /**
+   * Enable continuous mode: on merge, immediately start the next ROADMAP item.
+   * Default: false.
+   */
+  continuous?: boolean;
+  /**
+   * Branch the daemon reads the ROADMAP from when picking the next item in
+   * continuous mode. Default: "development".
+   */
+  baseBranch?: string;
 }
 
 export interface CronConfig {
@@ -360,6 +370,20 @@ export function validateConfig(config: unknown): AgentRouterConfig {
         timeoutSeconds = val;
       }
       entry.circuitBreaker = { failureThreshold, timeoutSeconds };
+    }
+    if (repo['continuous'] !== undefined) {
+      if (typeof repo['continuous'] !== 'boolean') {
+        throw new FatalError(
+          `Invalid "repos[${i}].continuous": must be a boolean, got ${JSON.stringify(repo['continuous'])}`
+        );
+      }
+      entry.continuous = repo['continuous'];
+    }
+    if (repo['baseBranch'] !== undefined) {
+      if (typeof repo['baseBranch'] !== 'string' || repo['baseBranch'].length === 0) {
+        throw new FatalError(`Invalid "repos[${i}].baseBranch": must be a non-empty string`);
+      }
+      entry.baseBranch = repo['baseBranch'];
     }
     repos.push(entry);
   }

@@ -59,6 +59,9 @@ function createFakeGitHubClient(): FakeGitHubClient {
     async getCheckRunsForRef(): Promise<never[]> {
       return [];
     },
+    async getFileContents(): Promise<string> {
+      throw new Error('fake: getFileContents not used in these tests');
+    },
   } satisfies FakeGitHubClient;
   return self;
 }

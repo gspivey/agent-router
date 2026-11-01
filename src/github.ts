@@ -49,6 +49,11 @@ export interface GitHubClient {
     options?: { commitTitle?: string; commitMessage?: string },
   ): Promise<MergeResult>;
   getCheckRunsForRef(owner: string, repo: string, ref: string): Promise<CheckRunSummary[]>;
+  /**
+   * Fetch the raw text content of a file from a repo at a given ref.
+   * Throws if the file is not found, is too large, or the request fails.
+   */
+  getFileContents(owner: string, name: string, filePath: string, ref: string): Promise<string>;
 }
 
 export type TokenResolver = (owner: string, repo: string) => string;
@@ -297,6 +302,72 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
         status: (cr['status'] as CheckRunSummary['status']) ?? 'queued',
         conclusion: typeof cr['conclusion'] === 'string' ? cr['conclusion'] : null,
       }));
+    },
+
+    async getFileContents(owner, name, filePath, ref): Promise<string> {
+      const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+      const encodedRef = encodeURIComponent(ref);
+      const path = `/repos/${owner}/${name}/contents/${encodedPath}?ref=${encodedRef}`;
+      const token = tokenResolver(owner, name);
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.raw',
+        'X-GitHub-Api-Version': '2022-11-28',
+      };
+
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), requestTimeoutMs);
+
+      let res: Response;
+      try {
+        res = await fetchImpl(`${baseUrl}${path}`, {
+          method: 'GET',
+          headers,
+          signal: ac.signal,
+        });
+      } catch (err: unknown) {
+        const errName = err instanceof Error ? err.name : '';
+        if (errName === 'AbortError') {
+          throw new GitHubApiError(`GitHub API GET ${path} timeout after ${requestTimeoutMs}ms`, 0, '');
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new GitHubApiError(
+          `GitHub API GET ${path} failed: ${res.status} ${res.statusText}`,
+          res.status,
+          body,
+        );
+      }
+
+      // When Accept: application/vnd.github.raw is used GitHub returns raw text directly
+      const contentType = res.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        // Fallback: JSON response — check encoding
+        const text = await res.text();
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(text) as Record<string, unknown>;
+        } catch {
+          throw new Error(`GitHub API GET ${path} returned non-JSON body: ${text.slice(0, 200)}`);
+        }
+        if (data['type'] !== 'file') {
+          throw new Error(`GitHub API GET ${path}: not a file (type=${String(data['type'])})`);
+        }
+        if (data['encoding'] === 'none') {
+          throw new Error(`File too large for contents API: ${filePath}`);
+        }
+        if (data['encoding'] !== 'base64' || typeof data['content'] !== 'string') {
+          throw new Error(`GitHub API GET ${path}: unexpected encoding=${String(data['encoding'])}`);
+        }
+        return Buffer.from(data['content'].replace(/\n/g, ''), 'base64').toString('utf-8');
+      }
+
+      return await res.text();
     },
   };
   return client;

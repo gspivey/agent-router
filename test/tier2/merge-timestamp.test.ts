@@ -37,6 +37,9 @@ function createFakeGitHubClient() {
     async getCheckRunsForRef(): Promise<never[]> {
       return [];
     },
+    async getFileContents(): Promise<string> {
+      throw new Error('not used');
+    },
   } satisfies GitHubClient & { setPRState: (r: string, n: number, s: PullState) => void };
 }
 
