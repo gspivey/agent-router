@@ -606,7 +606,7 @@ AssertionError: expected '/usr/local/libexec/agent-router-askpass' to be undefin
 
 ---
 
-### P2.22 — Fix stale spec task checkboxes across active specs
+### P2.22 — Fix stale spec task checkboxes across active specs ✅ DONE (PR #171)
 
 **Problem.** Several active (non-deprecated) spec `tasks.md` files have unchecked parent task checkboxes (`- [ ]`) where all sub-tasks are already marked done and the corresponding ROADMAP items have merged. This creates a misleading picture of spec completion when reading the tasks files. The affected files are:
 
