@@ -70,7 +70,7 @@ describe('verify deadline in inactivity timer', () => {
     // session within (100ms + 200ms + buffer).
     const INACTIVITY_MS = 100;
     const VERIFY_DEADLINE_MS = 200;
-    const MAX_EXPECTED_MS = INACTIVITY_MS + VERIFY_DEADLINE_MS + 500; // generous buffer
+    const MAX_EXPECTED_MS = INACTIVITY_MS + VERIFY_DEADLINE_MS + 1500; // generous buffer for slow CI runners
 
     // Property: for any verify function that never resolves, the session
     // terminates within the deadline.

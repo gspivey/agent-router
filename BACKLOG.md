@@ -602,6 +602,20 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P2.21 — Fix `buildGitAuthEnv` test isolation (make askpass check injectable)
+
+**Problem.** `buildGitAuthEnv` in `src/agent-server.ts` calls `fs.existsSync('/usr/local/libexec/agent-router-askpass')` directly, checking the real filesystem. The Tier 1 test `'uses GIT_CONFIG extraheader when askpass helper is absent'` expects this file to be absent — but on production machines where `setup-agent-user.sh` has been run, the file exists, making the test fail with:
+
+```
+AssertionError: expected '/usr/local/libexec/agent-router-askpass' to be undefined
+```
+
+**Fix.** Add an optional `askpassHelperExists?: () => boolean` field to `AgentServerDeps`. Thread it into `buildGitAuthEnv` inside `createAgentServer`. The default (when the dep is absent) is `() => fs.existsSync(ASKPASS_HELPER)`, preserving production behavior. The test passes `askpassHelperExists: () => false` to simulate the absent path, and a second test can pass `askpassHelperExists: () => true` to verify the ASKPASS path.
+
+**Acceptance.** `npm test` passes on all machines regardless of whether the askpass helper is installed. The test that was failing is now environment-independent. Both the askpass-present path and the extraheader fallback path have explicit Tier 1 test coverage.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2)

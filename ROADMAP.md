@@ -1131,3 +1131,13 @@ tests. Depends on item 92.
 - [x] Complete · PR: #167
 
 ---
+
+### 94. Fix `buildGitAuthEnv` test isolation
+
+Add an optional `askpassHelperExists?: () => boolean` dep to `AgentServerDeps` and thread it
+into `buildGitAuthEnv`. Default is `() => fs.existsSync(ASKPASS_HELPER)` (production behavior
+unchanged). Update the failing test to pass `askpassHelperExists: () => false`, and add a
+second test for the askpass-present path. Fixes a CI-breaking environment dependency.
+
+- Spec: `BACKLOG.md § P2.21`
+- [x] Complete · PR: #168

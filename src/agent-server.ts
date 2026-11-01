@@ -306,6 +306,14 @@ export interface AgentServerDeps {
   fetchImpl?: typeof fetch;
   /** Override execFile (for tests). */
   execFileImpl?: typeof execFileAsync;
+  /**
+   * Override the askpass-helper existence check (for tests).
+   * Default: `() => fs.existsSync(ASKPASS_HELPER)`.
+   * Pass `() => false` in tests that exercise the extraheader fallback path,
+   * and `() => true` in tests that exercise the askpass path, so the test
+   * result is independent of whether the helper is installed on the host.
+   */
+  askpassHelperExists?: () => boolean;
 }
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB (FR-5.3 step 7)
@@ -321,9 +329,12 @@ const CLEAN_GIT_ENV = { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null'
  * before.  When it does not exist (useWorkerUid=false), use the
  * GIT_CONFIG_COUNT env-config approach to attach the PAT as an HTTP
  * Authorization header — no binary required, no token in argv.
+ *
+ * @param pat - The personal access token to use for authentication.
+ * @param askpassExists - Predicate for whether the askpass helper is present.
  */
-function buildGitAuthEnv(pat: string): Record<string, string> {
-  if (fs.existsSync(ASKPASS_HELPER)) {
+function buildGitAuthEnv(pat: string, askpassExists: () => boolean): Record<string, string> {
+  if (askpassExists()) {
     return {
       GIT_ASKPASS: ASKPASS_HELPER,
       GIT_ASKPASS_PASSWORD: pat,
@@ -358,6 +369,7 @@ export function createAgentServer(deps: AgentServerDeps): AgentServer {
   const baseBranch = deps.baseBranch ?? 'development';
   const fetchImpl = deps.fetchImpl ?? fetch;
   const execFileImpl = deps.execFileImpl ?? execFileAsync;
+  const askpassHelperExists = deps.askpassHelperExists ?? (() => fs.existsSync(ASKPASS_HELPER));
 
   let server: net.Server | null = null;
   const activeConnections = new Set<net.Socket>();
@@ -610,7 +622,7 @@ export function createAgentServer(deps: AgentServerDeps): AgentServer {
           env: {
             ...CLEAN_GIT_ENV,
             GIT_TERMINAL_PROMPT: '0',
-            ...buildGitAuthEnv(pat),
+            ...buildGitAuthEnv(pat, askpassHelperExists),
           },
         },
       );
