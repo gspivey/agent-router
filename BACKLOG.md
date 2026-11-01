@@ -158,7 +158,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P1.4 — Session cleanup cron
+### P1.4 — Session cleanup cron ✅ DONE (PR #176)
 
 **Maps to PRODUCT.md Phase 1: "Session cleanup: archive sessions older than 30 days."**
 
