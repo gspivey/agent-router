@@ -1,0 +1,22 @@
+[Unit]
+Description=Agent Router cron timer — %i
+Documentation=https://github.com/gspivey/agent-router
+
+[Timer]
+# Fire once per day at 06:00 local time.
+# Adjust OnCalendar to your preferred schedule.
+# Examples:
+#   *-*-* 06:00:00   — daily at 06:00
+#   Mon..Fri *-*-* 09:00:00  — weekdays at 09:00
+#   *-*-1,15 06:00:00  — 1st and 15th of each month
+OnCalendar=*-*-* 06:00:00
+# Run immediately at boot if the last scheduled run was missed (e.g. machine was off).
+Persistent=true
+# Randomize start time up to ±5 minutes to avoid load spikes if you enable
+# multiple instances at once.
+RandomizedDelaySec=5min
+# The service unit to activate (uses the same template instance).
+Unit=agent-router-cron@%i.service
+
+[Install]
+WantedBy=timers.target

@@ -336,6 +336,50 @@ The same prompt is used on every cron fire. The prompt file can be updated at an
 
 **Manual re-trigger:** If a session ends in a non-clean state (failed, abandoned, killed), the cron will not auto-restart. Fix whatever caused the failure, then start a session manually with `agent-router prompt --new` or via the web UI. Once a clean session completes, the cron resumes on its normal schedule.
 
+### OS-level cron via systemd timer
+
+The daemon's built-in cron (above) is the recommended approach. For cases where you want the OS scheduler to own the firing — for example, if the daemon is not always running or you prefer systemd's `OnCalendar` syntax — the repo ships a pair of systemd template unit files in `scripts/`:
+
+| File | Purpose |
+|---|---|
+| `scripts/agent-router-cron@.service` | Oneshot service that fires `agent-router prompt --new --quiet` with a `flock` guard |
+| `scripts/agent-router-cron@.timer` | Systemd timer that fires the service on a schedule (default: daily at 06:00) |
+
+The `@` makes these *templated units*: the instance name (the part after `@`) is a short identifier for your prompt, typically the repo slug (e.g. `myrepo`). The service reads the prompt from `/etc/agent-router/prompts/<instance>.md`.
+
+**Setup:**
+
+```bash
+# 1. Create a prompt file
+sudo mkdir -p /etc/agent-router/prompts
+sudo tee /etc/agent-router/prompts/myrepo.md > /dev/null << 'EOF'
+Read ROADMAP.md, pick the first unchecked item, implement it, and open a PR.
+EOF
+
+# 2. Install the unit files
+sudo cp scripts/agent-router-cron@.service /etc/systemd/system/
+sudo cp scripts/agent-router-cron@.timer   /etc/systemd/system/
+
+# 3. (Optional) Adjust the CLI path and user in the service file
+#    Default User=agentrouter; default CLI path=/usr/local/bin/agent-router
+sudo systemctl edit --full agent-router-cron@.service
+
+# 4. (Optional) Adjust the schedule in the timer file
+#    Default: daily at 06:00 local time
+sudo systemctl edit --full agent-router-cron@.timer
+
+# 5. Reload, enable, and start the timer for your instance
+sudo systemctl daemon-reload
+sudo systemctl enable --now agent-router-cron@myrepo.timer
+
+# 6. Verify the timer is scheduled
+systemctl list-timers agent-router-cron@myrepo.timer
+```
+
+The `flock -n` guard in the service ensures that if the previous timer fire is still running (i.e. a session is active), the new fire exits immediately with `SuccessExitStatus=1` — the timer's next scheduled fire is unaffected. This is belt-and-suspenders on top of the daemon's own session-collision check.
+
+To disable a timer: `sudo systemctl disable --now agent-router-cron@myrepo.timer`.
+
 ## Day-to-day commands
 
 ```bash
