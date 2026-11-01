@@ -12,7 +12,7 @@ export default defineConfig({
     pool: 'vmThreads',
     poolOptions: {
       vmThreads: {
-        maxWorkers: 4,
+        maxThreads: 4,
       },
     },
     projects: [

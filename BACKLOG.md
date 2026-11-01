@@ -586,19 +586,9 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.20 — Web UI: server-side waiting-for aggregation (kill the N+1)
+### P2.20 — Web UI: server-side waiting-for aggregation (kill the N+1) ✅ DONE (PR #100)
 
-**Context.** `web-client` spec task 2.2 shipped in PRs #92–107: the client now issues a single `/sessions` request and renders from it; the per-row `fetchWaitingFor` loop was deleted. But task 2.1 (server-side aggregation) was NOT shipped, so the waiting-for column is blank in the list view — the server doesn't return that field yet.
-
-**Mini spec.**
-
-- Extend the `/sessions` list handler (`src/web-routes.ts`) so each item already includes the waiting-for summary computed server-side from the session's last stream entry.
-- Add real pagination: bounded default page size (20–50), active sessions always included, `limit`/`offset` params, replacing the `limit=500` path.
-- Keep the wire shape backward-compatible (additive fields only).
-- Remove the `limit=500` path once pagination is in place.
-- Tier 1: pure pagination logic (default cap, `--all`, `--limit`, active-always). Tier 2: list response includes waiting-for, single request, zero per-row follow-ups.
-
-**Acceptance.** List view renders the waiting-for column without any per-row `GET /sessions/<id>` requests. Pagination controls appear. Existing client still works against an old server that omits the new fields (graceful degradation).
+**Context.** `web-client` spec task 2.2 shipped in PRs #92–107: the client now issues a single `/sessions` request and renders from it; the per-row `fetchWaitingFor` loop was deleted. Task 2.1 (server-side aggregation) shipped in PR #100 alongside the web-ui-sessions-by-repo backend — `paginateSessions` and `groupSessionsByRepo` in `src/web-routes.ts` both accept a `waitingForFn` callback that reads the last stream entry and populates `waiting_for` in each `SessionSummary`. The BACKLOG note claiming it was "NOT shipped" was written before PR #100 landed.
 
 ---
 
