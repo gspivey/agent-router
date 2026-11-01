@@ -124,7 +124,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [ ]* 8.5 Write property test for PR number resolution
     - **Property 7: PR Number Resolution**
     - **Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5**
-  - [ ] 8.6 Tier 2 test sending each wakeable event type through fake GitHub
+  - [x] 8.6 Tier 2 test sending each wakeable event type through fake GitHub
     - _Requirements: 6.1, 6.2, 6.3, 24.6_
 
 - [x] 9. SQLite database layer (`db.ts`)
@@ -213,7 +213,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
 - [x] 14. ACP client (`acp.ts`)
   - [x] 14.1a Implement subprocess wrapper — `spawnACPClient` wrapping `child_process.spawn` with stdio `['pipe', 'pipe', 'inherit']`, stderr line capture, process-level `close()` and `kill()` primitives
     - _Requirements: 10.1, 10.3, 10.9_
-  - [ ] 14.1b Implement JSON-RPC 2.0 framing layer — newline-delimited read/write over subprocess stdio, request/response correlation by id, expose notifications as `AsyncIterable<ACPNotification>`
+  - [x] 14.1b Implement JSON-RPC 2.0 framing layer — newline-delimited read/write over subprocess stdio, request/response correlation by id, expose notifications as `AsyncIterable<ACPNotification>`
     - _Requirements: 10.7_
   - [x] 14.2 Implement `initialize` — send ACP `initialize` request with `protocolVersion: 1` and client capabilities `['fs.readTextFile', 'fs.writeTextFile', 'terminal']`; handle version mismatch by closing subprocess
     - _Requirements: 10.2, 10.4_
@@ -246,7 +246,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 10.8, 19.1_
   - [x] 15.5b Implement completion detection — subprocess exit 0 after `complete_session` MCP call → update meta.json to status: "completed"
     - _Requirements: 20.4_
-  - [ ] 15.5c Implement failure detection and timeout enforcement — subprocess crash/non-zero exit → status: "failed"; 10-minute max wake duration, on expiry SIGTERM → 5s → SIGKILL
+  - [x] 15.5c Implement failure detection and timeout enforcement — subprocess crash/non-zero exit → status: "failed"; 10-minute max wake duration, on expiry SIGTERM → 5s → SIGKILL
     - _Requirements: 10.11, 10.12, 20.5_
   - [x] 15.6 Implement `shutdown` — update all active sessions' `meta.json` to `status: "abandoned"`, terminate subprocesses
     - _Requirements: 16.7_
@@ -256,7 +256,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
 - [x] 16. CLI IPC server (`cli-server.ts`)
   - [x] 16.1a Implement socket listener and NDJSON request framing — Unix domain socket at `<root>/sock`, accept one connection at a time, parse NDJSON requests; implement read-only op `list_sessions`
     - _Requirements: 21.1, 21.2, 21.4_
-  - [ ] 16.1b Implement mutation ops — `new_session`, `inject_prompt`, `terminate_session`
+  - [x] 16.1b Implement mutation ops — `new_session`, `inject_prompt`, `terminate_session`
     - _Requirements: 21.3, 21.5, 21.7_
   - [ ]* 16.2 Write unit tests for CLI IPC ops
     - Test new_session returns session_id and paths
@@ -270,7 +270,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
 - [x] 17. MCP server (`mcp-server.ts`)
   - [x] 17.1a Implement MCP server plumbing and read-only tool — read `AGENT_ROUTER_SESSION_ID` from env, connect to daemon socket, implement MCP JSON-RPC handler, expose `session_status` tool
     - _Requirements: 21.1_
-  - [ ] 17.1b Implement mutation tools — `register_pr` and `complete_session`
+  - [x] 17.1b Implement mutation tools — `register_pr` and `complete_session`
     - _Requirements: 20.3, 20.4_
   - [ ]* 17.2 Write unit tests for MCP tool dispatch
     - Test register_pr, session_status, complete_session return expected results
@@ -306,7 +306,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 1.1, 5.3, 12.1, 12.2, 12.3_
   - [x] 19.1b Implement session infrastructure startup — create session files root → create session manager → wire per-session event queue factory
     - _Requirements: 18.1, 18.2_
-  - [ ] 19.1c Implement server surfaces startup — bind Hono HTTP server → start CLI IPC server on Unix socket → register cron jobs if retained
+  - [x] 19.1c Implement server surfaces startup — bind Hono HTTP server → start CLI IPC server on Unix socket → register cron jobs if retained
     - _Requirements: 1.1, 13.1, 13.2, 21.1_
   - [x] 19.2 Wire webhook event processing: on dequeue, run `evaluateWakePolicy` → if wake, compose prompt → call `sessionMgr.injectPrompt` → update event row with `processed_at` and `wake_triggered`
     - _Requirements: 3.4, 4.3, 6.4, 8.3, 9.4, 10.7_
