@@ -655,7 +655,7 @@ Additionally, BACKLOG items P2.1 (session persistence — shipped as ROADMAP ite
 
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
-### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2)
+### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)
 
 **Context.** The original auth-credential-proxy spec (PRs #71–80) shipped the Token_Store infrastructure (project-scoped PATs, env injection, MCP tools). A post-ship security review found three issues in the MCP tool surface that need to be fixed via a new spec:
 

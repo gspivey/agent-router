@@ -35,6 +35,17 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+### 104. Annotate BACKLOG.md § P3.1 as done
+
+Update `BACKLOG.md` to add `✅ DONE (PRs #115, #118)` annotation to P3.1
+(auth-credential-proxy-v2), which was fully implemented in ROADMAP items 61 and 62
+but whose BACKLOG entry was never marked done. Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P3.1`
+- [ ] Complete · PR: —
+
+---
+
 
 ### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
 
