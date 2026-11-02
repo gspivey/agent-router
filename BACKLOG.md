@@ -817,6 +817,95 @@ is required, `GET /overview` omits the `restart_required` key and the SPA shows 
 
 ---
 
+### P2.36 — Deferred property tests: db.ts, queue.ts, and session-files.ts
+
+The agent-router spec (`tasks.md` items `9.3`, `9.4`, `10.2`, `11.7`, `11.8`, `11.9`, `11.10`)
+specified seven property-based tests that were deferred when their parent tasks shipped. This
+item delivers the fast-check coverage for FIFO ordering in `queue.ts` and session file I/O in
+`session-files.ts` (stream entry structure, meta atomic writes, session status transitions, and
+prompt log completeness). Tasks `9.3` and `9.4` (db.ts property tests) were deferred: they
+require SQLite-backed property tests that intermittently crash in Node 24 + better-sqlite3 due
+to a native `Statement::~Statement()` destructor race during vitest cleanup. The existing unit
+tests in `db.test.ts` cover event storage round-trip and rate limit acquisition for specific
+examples; the property coverage gap is acknowledged and left for a future item when the
+Node/better-sqlite3 combination is updated.
+
+**Why these.** These three modules form the durability backbone of the daemon:
+
+- `db.ts` — every webhook persisted here; if event round-trip or rate-limit atomicity regresses,
+  events can be silently dropped or agents woken too often.
+- `queue.ts` — FIFO ordering is the only guarantee that prevents events from arriving at the
+  agent out of order; a fast-check property with concurrent enqueues is stronger than a
+  single-threaded unit test.
+- `session-files.ts` — atomic meta writes and stream entry structure are the persistence
+  contract for session observability; property tests prove these invariants hold for arbitrary
+  inputs, not just the handful of shapes unit tests exercise.
+
+**Property 4 — Event Storage Round-Trip** (`db.ts`):
+- For any `NewEvent` (arbitrary `repo`, `prNumber` or null, `eventType`, `payload`, `receivedAt`),
+  `insertEvent` returns a positive integer id.
+- `updateEventProcessed(id, wakeTriggered)` followed by a raw SQL read confirms
+  `processed_at` is set and `wake_triggered` equals the boolean argument.
+- Invariant: the `payload` column stores the value exactly (no modification).
+
+**Property 8 — Atomic Rate Limit Acquisition** (`db.ts`):
+- For any `(repo, prNumber)` with an inserted session, `tryAcquireWakeSlot(repo, pr, limit, now)`
+  returns `true` on the first call and sets `last_waked_at = now`.
+- For any `delta < limit`, a second call at `now + delta` returns `false`.
+- For any `delta >= limit`, a second call at `now + delta` returns `true` and updates
+  `last_waked_at`.
+- Invariant: after a successful acquisition, `findSession` reflects the updated `last_waked_at`.
+
+**Property 5 — FIFO Queue Ordering** (`queue.ts`):
+- For any non-empty sequence of `QueuedEvent` objects (arbitrary lengths 1–50), events are
+  delivered to the worker in the same order they were enqueued. Uses `fast-check` with
+  `fc.array(arbitraryEvent(), { minLength: 1, maxLength: 50 })`.
+
+**Property 16 — Stream Entry Structure** (`session-files.ts`):
+- For any `StreamEntry` with arbitrary string values for `ts`, `source`, and `type`, plus
+  arbitrary extra fields, every line written to `stream.log` is valid single-line JSON.
+- Every parsed entry contains `ts`, `source`, and `type` as strings.
+- No embedded newlines appear in any string value in the serialized form.
+
+**Property 17 — Meta File Atomic Writes** (`session-files.ts`):
+- For any sequence of `updateMeta` patches (arbitrary status, completed_at, prs arrays),
+  `meta.json` is always valid JSON after each write.
+- A read immediately after a write returns the patched values, not partial content.
+
+**Property 18 — Session Status Transitions** (`session-files.ts`):
+- For any terminal status (completed/failed/abandoned) with a valid `completed_at`, an attempt
+  to call `updateMeta` again throws.
+- For any active session, the patch is applied exactly once.
+
+**Property 19 — Prompt Log Completeness** (`session-files.ts`):
+- For any sequence of `appendPrompt` calls (arbitrary source, prompt text), each call appends
+  exactly one line to `prompts.log`.
+- Parsing all lines yields entries with the original `source` and the prompt text (with embedded
+  newlines replaced by spaces).
+
+**Mini spec.**
+
+- Add property tests to `test/tier1/db.test.ts` for Properties 4 and 8. Use `fc.record` and
+  `fc.string` to generate arbitrary events and sessions. The property tests run against a real
+  in-memory SQLite database (same pattern as existing `db.test.ts` tests). Minimum 100 runs.
+- Add property tests to `test/tier1/queue.test.ts` for Property 5. Use `fc.array` to generate
+  arbitrary event sequences. Worker processes in-memory array push. Minimum 100 runs.
+- Add property tests to `test/tier1/session-files.test.ts` for Properties 16, 17, 18, 19. Use
+  `fc.record`, `fc.string`, `fc.constantFrom`, and `fc.array` to generate arbitrary entries and
+  patches. All session-files property tests create a fresh temp directory per run (`beforeEach`
+  pattern matches existing file). Minimum 100 runs per property.
+- All new tests are pure Tier 1 — no fake backends, no live daemon, no network.
+- Tick `tasks.md` items `10.2`, `11.7`, `11.8`, `11.9`, `11.10` in
+  `.kiro/specs/agent-router/tasks.md` to `[x]`.
+
+**Acceptance criteria.**
+- `npm test` passes with the new property tests included.
+- Each property runs at least 100 iterations.
+- `npm run typecheck` passes — no `any` or stray `as` casts in the new test code.
+- Tasks `10.2`, `11.7`, `11.8`, `11.9`, `11.10` ticked in `.kiro/specs/agent-router/tasks.md`.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)
