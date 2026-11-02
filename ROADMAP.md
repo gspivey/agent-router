@@ -33,6 +33,11 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+
+## Completed
+
 ### 107. Add BACKLOG.md entries for KiroAdapter.installHooks and second-adapter implementation
 
 Add two missing `BACKLOG.md` entries that were specified in the `agent-adapter-completion`
@@ -43,12 +48,9 @@ to implement a second `AgentAdapter` (Claude Code or OpenCode) to validate the a
 abstraction introduced in that spec. Documentation-only: no code, no tests.
 
 - Spec: `.kiro/specs/agent-adapter-completion/` · tasks `7.1`, `7.2`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #182
 
 ---
-
-
-## Completed
 
 ### 106. Self-dogfooding: tier3 in CI on PRs against agent-router
 
