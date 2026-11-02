@@ -36,64 +36,244 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 ---
 
 
-### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
+## Completed
 
-Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `10.1`, `10.2`, `10.3`, `10.4`, `11`. Depends on item 61.
+### 104. ROADMAP housekeeping — archive completed items to Completed section
 
-- Spec: `.kiro/specs/auth-credential-proxy-v2/` · tasks `10.1`, `10.2`, `10.3`, `10.4`, `11`
-- [x] Complete · PR: #118
+Move all 94 completed items from `## Active Roadmap` to `## Completed`, leaving the Active
+Roadmap queue empty and ready for the next unchecked item. Documentation-only: no code, no tests.
 
-### 61. Auth credential proxy v2 — path/repo cross-check security fix
-
-Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `9.1`, `9.2`, `9.3`, `9.4`.
-
-- Spec: `.kiro/specs/auth-credential-proxy-v2/` · tasks `9.1`, `9.2`, `9.3`, `9.4`
-- [x] Complete · PR: #115
+- Spec: `BACKLOG.md § P2.25`
+- [x] Complete · PR: #179
 
 ---
 
-### 60. Browser test harness v2 — housekeeping (update stale v1 spec headers, record backoff defect note)
+### 103. Cron timer for agent-router — systemd template units and README setup guide
 
-Read `.kiro/specs/browser-test-harness-v2/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `G2`, `G3`. G2 is documentation-only — add a code comment in `src/web-ui.ts`
-near `connectSSE` noting the reset behavior; do NOT change the backoff logic (Req 6.2 requires
-fixed 1000ms first retry). Depends on item 59.
+Add `scripts/agent-router-cron@.service` and `scripts/agent-router-cron@.timer` (systemd
+templated unit files) for scheduling agent sessions via OS-level cron as an alternative to the
+daemon's built-in `cron` config. The service uses `flock -n` (BACKLOG.md § P1.6 lockfile
+pattern) to skip if a prior fire is still running. The timer fires daily at 06:00 by default.
+Updates README with an "OS-level cron via systemd timer" sub-section under "Cron sessions".
+Marks BACKLOG.md § P1.1 and § P1.6 as done.
 
-- Spec: `.kiro/specs/browser-test-harness-v2/` · tasks `G2`, `G3`
-- [x] Complete · PR: #113
-
----
-
-### 59. Browser test harness v2 — missing tests (Last-Event-ID header, fetch timeout budget, stale test.fail marks)
-
-Read `.kiro/specs/browser-test-harness-v2/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `8.2`, `14.5`, `G4`.
-
-- Spec: `.kiro/specs/browser-test-harness-v2/` · tasks `8.2`, `14.5`, `G4`
-- [x] Complete · PR: #112
+- Spec: `BACKLOG.md § P1.1`
+- [x] Complete · PR: #177
 
 ---
 
-### 58. Web client: SSE anti-buffering headers and initial flush
+### 102. Session cleanup cron — `prune-sessions` CLI subcommand and systemd units
 
-Read `.kiro/specs/web-client/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement task `4.1b`.
+Add `agent-router prune-sessions [--retention-days N] [--dry-run] [--verbose]` subcommand that
+queries the daemon's IPC socket for currently-active session IDs (accurate DB-backed list),
+falls back to `meta.json` status when the daemon is offline, and removes terminal session
+directories older than the retention window. Ships with systemd service + timer unit files in
+`scripts/` for automated daily cleanup. Updates README Maintenance section.
 
-- Spec: `.kiro/specs/web-client/` · task `4.1b`
-- [x] Complete · PR: #110
+- Spec: `BACKLOG.md § P1.4`
+- [x] Complete · PR: #176
 
-Items move here after they merge to `development`.
+---
 
-### 84. Agent process isolation — config, agent socket, spawn change, cap-token, worktree base
+### 101. Log rotation documentation
+
+Document the daemon's logging and log rotation strategy in README.md. The daemon logs
+structured NDJSON to stdout, captured by systemd journal in production; journal handles
+rotation automatically. Per-session `stream.log` files are scoped to a session lifetime and
+cleaned up by the existing session cleanup cron (P1.4). Documents the path for adding
+`logrotate` support if file-based `daemon.log` logging is added in the future.
+Documentation-only: no code changes, no tests.
+
+- Spec: `BACKLOG.md § P2.6`
+- [x] Complete · PR: #175
+
+---
+
+### 100. Fix stale agent-router spec task checkboxes
+
+Tick the 6 non-optional unchecked tasks in `.kiro/specs/agent-router/tasks.md` that are fully
+implemented in the codebase but whose checkboxes were never ticked: `8.6`, `14.1b`, `15.5c`,
+`16.1b`, `17.1b`, `19.1c`. Also annotate BACKLOG items `P2.1` (shipped as ROADMAP item 19,
+PR #59) and `P2.4` (template literal fix — bug was never present in the codebase) as done.
+Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.24`
+- [x] Complete · PR: #174
+
+---
+
+### 99. Annotate completed BACKLOG items as done
+
+Update `BACKLOG.md` to add `✅ DONE (PR #<n>)` annotations to all items whose ROADMAP entries
+have merged but that were never marked done in BACKLOG.md: P1.2 (PR #70), P1.3 (PR #51),
+P1.5 (PR #49), P1.7 (PR #60), P1.8 (PR #41), P1.9 (PR #43), P2.0 (PR #52), P2.2 (PR #50),
+P2.5 (PR #47), P2.7 (PR #44), P2.8 (PR #46), P2.11 (PR #45), P2.12 (PR #48), P2.13 (PR #37),
+P2.14 (PR #85), P2.15 (PR #88), P2.16 (PR #93), P2.17 (PR #94), P2.18 (PR #95), P2.19
+(PR #96), P2.21 (PR #168), P3.2 (PR #53). Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P1.2`, `P1.3`, `P1.5`, `P1.7`, `P1.8`, `P1.9`, `P2.0`, `P2.2`, `P2.5`, `P2.7`, `P2.8`, `P2.11`, `P2.12`, `P2.13`, `P2.14`, `P2.15`, `P2.16`, `P2.17`, `P2.18`, `P2.19`, `P2.21`, `P3.2`
+- [x] Complete · PR: #173
+
+---
+
+### 98. Fix stale spa-polish spec sub-task checkboxes
+
+Tick the 25 unchecked sub-task checkboxes in `.kiro/specs/spa-polish/tasks.md` that were
+left behind when ROADMAP items 87, 88, 89 (PRs #156, #158, #159) merged. All 16 parent
+task checkboxes are already `[x]`; only the sub-tasks are stale. Same pattern as P2.22
+(item 97). Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.23`
+- [x] Complete · PR: #172
+
+---
+
+### 97. Fix stale spec task checkboxes across active specs
+
+Fix unchecked parent task checkboxes in non-deprecated spec `tasks.md` files where all
+sub-tasks are done and the corresponding ROADMAP items have merged. Affected specs:
+`task-attempt-outcome` (task 11), `web-client` (task 4), `security-isolation-fix` (items
+90/91 templates), `agent-process-isolation` (items 83–86 templates), `continuous-mode`
+(pre-merge completion checklist). Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.22`
+- [x] Complete · PR: #171
+
+---
+
+### 96. Task/attempt/outcome — missing Tier 2 tests (task-lifecycle, cancel-cleanup)
+
+Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `11.4` and `11.5`. These two HIGH-9 Tier 2 tests were specified but never
+implemented. Task 11.4 adds `test/tier2/task-lifecycle.test.ts` covering the full lifecycle
+(queued → running → heartbeat → report_outcome(succeeded) → attempt.ended → task.succeeded,
+with hasDiff via WorktreeOps mock). Task 11.5 adds `test/tier2/cancel-cleanup.test.ts`
+covering cancel of a running attempt (cancelled_by_api, worktree removed) and cancel of a
+non-running task (task.cancelled without attempt.ended).
+
+- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `11.4`, `11.5`
+- [x] Complete · PR: #170
+
+---
+
+### 95. Mark BACKLOG.md § P2.20 as complete (server-side waiting-for shipped in PR #100)
+
+Update `BACKLOG.md` to annotate P2.20 as done. The server-side waiting-for computation
+(`waitingForFn` → `paginateSessions`) shipped in PR #100 (item 51) alongside the
+web-ui-sessions-by-repo backend work, but BACKLOG.md was never updated to reflect that.
+This is a documentation-only housekeeping item. Also fixes a pre-existing typecheck failure:
+`vitest.config.ts` used `maxWorkers` (not valid in vitest 3.2.4's `ThreadsOptions`);
+renamed to `maxThreads`.
+
+- Spec: `BACKLOG.md § P2.20`
+- [x] Complete · PR: #169
+
+---
+
+### 94. Fix `buildGitAuthEnv` test isolation
+
+Add an optional `askpassHelperExists?: () => boolean` dep to `AgentServerDeps` and thread it
+into `buildGitAuthEnv`. Default is `() => fs.existsSync(ASKPASS_HELPER)` (production behavior
+unchanged). Update the failing test to pass `askpassHelperExists: () => false`, and add a
+second test for the askpass-present path. Fixes a CI-breaking environment dependency.
+
+- Spec: `BACKLOG.md § P2.21`
+- [x] Complete · PR: #168
+
+---
+
+### 93. Continuous mode — CLI surface and remaining tests
+
+Read `.kiro/specs/continuous-mode/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `2.1`, `2.2`, `2.3`, `2.4`, `2.6`, `2.7`. Adds `stop_continuous` CLI
+server op, `stop-continuous` CLI subcommand, `ls` display enhancements, and T2-CONT-3/6/7
+tests. Depends on item 92.
+
+- Spec: `.kiro/specs/continuous-mode/` · tasks `2.1`–`2.4`, `2.6`, `2.7`
+- [x] Complete · PR: #167
+
+---
+
+### 92. Continuous mode — core runner and session-mgr wiring
+
+Read `.kiro/specs/continuous-mode/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1.1`, `1.2`, `1.3`, `1.4`, `1.5`, `1.6`, `1.7`. Adds config fields
+(`continuous`, `baseBranch`), the `ContinuousRunner` module, `onSessionEnded` callback to
+session-mgr (fires at registry removal, not meta-write), cron handler integration, and
+Tier 1 + T2-CONT-1/2 tests.
+
+- Spec: `.kiro/specs/continuous-mode/` · tasks `1.1`–`1.7`
+- [x] Complete · PR: #166
+
+---
+
+### 91. Security isolation fix — provisioning (usermod step, iptables chain rename, docs)
+
+Read `.kiro/specs/security-isolation-fix/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `91.1`–`91.8`. Adds `usermod -aG "$WORKER_USER" "$DAEMON_USER"` to
+`setup-agent-user.sh`, renames the tinyproxy iptables chain from `TPROXY_SSRF_BLOCK` to
+`TINYPROXY_OUT` in the script and docs, and documents the provisioning prerequisites. Depends on
+item 90 (merge conflict on `src/index.ts` and `src/isolation-startup.ts`).
+
+- Spec: `.kiro/specs/security-isolation-fix/` · tasks `91.1`–`91.8`
+- [x] Complete · PR: #161
+
+---
+
+### 90. Security isolation fix — code (MCP socket fallback, agent-server PAT source, .github fail-closed)
+
+Read `.kiro/specs/security-isolation-fix/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `90.1`–`90.10`. Realigns shipped agent-process-isolation code with the
+corrected spec: removes the MCP operator-socket fallback (CRITICAL), sources the agent-server PAT
+from `credentialTokenResolver` via the credential token store only (HIGH — `tokens.json` is now
+required for `push_branch`/`pr_create`/`pr_view`), and makes the `push_branch` `.github/` guard
+fail closed. Adds startup warnings for both missing `agentworker` account (when `useWorkerUid:
+true`) and `_fallback` token mode. Depends on items 83–86.
+
+- Spec: `.kiro/specs/security-isolation-fix/` · tasks `90.1`–`90.10`
+- [x] Complete · PR: #160
+
+---
+
+### 89. SPA Polish — Overview page, Config cron status, empty states
+
+Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `12`, `13`, `14`, `15`, `16`. Depends on item 88 (router
+overview route and MessageRow must be present).
+
+- Spec: `.kiro/specs/spa-polish/` · tasks `12`, `13`, `14`, `15`, `16`
+- [x] Complete · PR: #159
+
+---
+
+### 88. SPA Polish — Header branding, router/overview routing, message grammar
+
+Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `8`, `9`, `10`, `11`. Depends on item 87 (shared primitives and
+CSS tokens must be present).
+
+- Spec: `.kiro/specs/spa-polish/` · tasks `8`, `9`, `10`, `11`
+- [x] Complete · PR: #158
+
+---
+
+### 87. SPA Polish — Backend endpoint, shared primitives, layout & overflow
+
+Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`.
+
+- Spec: `.kiro/specs/spa-polish/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
+- [x] Complete · PR: #156
+
+---
+
+### 86. Agent process isolation — startup checks, ClaudeCodeAdapter block, Tier 2 tests, docs
 
 Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
-full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7`, `84.8`.
-Depends on item 83 (user, socket dir, worktree dir must exist).
+full, then implement tasks `86.1`, `86.2`, `86.3`, `86.4`. Depends on items 83, 84, 85.
 
-- Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.8`
-- [x] Complete · PR: #150
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `86.1–86.4`
+- [x] Complete · PR: #152
 
 ---
 
@@ -108,6 +288,17 @@ full, then implement tasks `85.1`, `85.2`, `85.3`, `85.4`, `85.5`, `85.6`. Depen
 
 ---
 
+### 84. Agent process isolation — config, agent socket, spawn change, cap-token, worktree base
+
+Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
+full, then implement tasks `84.1`, `84.2`, `84.3`, `84.4`, `84.5`, `84.6`, `84.7`, `84.8`.
+Depends on item 83 (user, socket dir, worktree dir must exist).
+
+- Spec: `.kiro/specs/agent-process-isolation/` · tasks `84.1–84.8`
+- [x] Complete · PR: #150
+
+---
+
 ### 83. Agent process isolation — setup script, user, proxy, iptables, rootDir hardening
 
 Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
@@ -117,14 +308,6 @@ full, then implement tasks `83.1`, `83.2`, `83.3`, `83.4`.
 - [x] Complete · PR: #149
 
 ---
-
-### 79. Wire MCP server into ACP sessions (register_pr, merge_pr, complete_session)
-
-Read `.kiro/specs/mcp-server-wiring/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `7b`, `8`, `9`, `9b`, `10`, `11`.
-
-- Spec: `.kiro/specs/mcp-server-wiring/` · tasks `1`–`11` (including `9b`)
-- [x] Complete · PR: #142
 
 ### 82. SPA operator restoration — Config view
 
@@ -156,6 +339,16 @@ then implement tasks `A-1`, `A-2`, `A-3`, `A-4`, `A-5`, `A-6`, `A-7`, `A-8`, `A-
 
 ---
 
+### 79. Wire MCP server into ACP sessions (register_pr, merge_pr, complete_session)
+
+Read `.kiro/specs/mcp-server-wiring/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`, `7b`, `8`, `9`, `9b`, `10`, `11`.
+
+- Spec: `.kiro/specs/mcp-server-wiring/` · tasks `1`–`11` (including `9b`)
+- [x] Complete · PR: #142
+
+---
+
 ### 78. SPA overhaul — cutover: migrate / and /ui to the SPA, remove the monolith
 
 Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -163,6 +356,8 @@ then implement task `8`. Depends on item 77.
 
 - Spec: `.kiro/specs/spa-overhaul/` · task `8`
 - [x] Complete · PR: #138
+
+---
 
 ### 77. SPA overhaul — JSON pivot toggle, polish, accessibility
 
@@ -172,6 +367,8 @@ then implement task `7`. Depends on item 76.
 - Spec: `.kiro/specs/spa-overhaul/` · task `7`
 - [x] Complete · PR: #137
 
+---
+
 ### 76. SPA overhaul — live SSE streaming, streaming states, operator controls
 
 Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -179,6 +376,8 @@ then implement task `6`. Depends on item 75.
 
 - Spec: `.kiro/specs/spa-overhaul/` · task `6`
 - [x] Complete · PR: #136
+
+---
 
 ### 75. SPA overhaul — core chat view, bubble renderer, all entry kinds
 
@@ -188,6 +387,8 @@ then implement task `5`. Depends on item 74.
 - Spec: `.kiro/specs/spa-overhaul/` · task `5`
 - [x] Complete · PR: #135
 
+---
+
 ### 74. SPA overhaul — mobile-first session list view, single Sessions nav
 
 Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -196,6 +397,8 @@ then implement task `4`. Depends on item 73.
 - Spec: `.kiro/specs/spa-overhaul/` · task `4`
 - [x] Complete · PR: #134
 
+---
+
 ### 73. SPA overhaul — auth flow, typed API client, SSE stream client
 
 Read `.kiro/specs/spa-overhaul/requirements.md`, `design.md`, and `tasks.md` in full,
@@ -203,6 +406,8 @@ then implement task `3`. Depends on item 71.
 
 - Spec: `.kiro/specs/spa-overhaul/` · task `3`
 - [x] Complete · PR: #133
+
+---
 
 ### 72. SPA overhaul — Hono SPA serving under /app, dev proxy wiring
 
@@ -301,6 +506,60 @@ then implement tasks `1`, `1b`.
 
 - Spec: `.kiro/specs/session-stream-chat/` · tasks `1`, `1b`
 - [x] Complete · PR: #119
+
+---
+
+### 62. Auth credential proxy v2 — get_token derives project from session (security fix)
+
+Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `10.1`, `10.2`, `10.3`, `10.4`, `11`. Depends on item 61.
+
+- Spec: `.kiro/specs/auth-credential-proxy-v2/` · tasks `10.1`, `10.2`, `10.3`, `10.4`, `11`
+- [x] Complete · PR: #118
+
+---
+
+### 61. Auth credential proxy v2 — path/repo cross-check security fix
+
+Read `.kiro/specs/auth-credential-proxy-v2/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `9.1`, `9.2`, `9.3`, `9.4`.
+
+- Spec: `.kiro/specs/auth-credential-proxy-v2/` · tasks `9.1`, `9.2`, `9.3`, `9.4`
+- [x] Complete · PR: #115
+
+---
+
+### 60. Browser test harness v2 — housekeeping (update stale v1 spec headers, record backoff defect note)
+
+Read `.kiro/specs/browser-test-harness-v2/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `G2`, `G3`. G2 is documentation-only — add a code comment in `src/web-ui.ts`
+near `connectSSE` noting the reset behavior; do NOT change the backoff logic (Req 6.2 requires
+fixed 1000ms first retry). Depends on item 59.
+
+- Spec: `.kiro/specs/browser-test-harness-v2/` · tasks `G2`, `G3`
+- [x] Complete · PR: #113
+
+---
+
+### 59. Browser test harness v2 — missing tests (Last-Event-ID header, fetch timeout budget, stale test.fail marks)
+
+Read `.kiro/specs/browser-test-harness-v2/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement tasks `8.2`, `14.5`, `G4`.
+
+- Spec: `.kiro/specs/browser-test-harness-v2/` · tasks `8.2`, `14.5`, `G4`
+- [x] Complete · PR: #112
+
+---
+
+### 58. Web client: SSE anti-buffering headers and initial flush
+
+Read `.kiro/specs/web-client/requirements.md`, `design.md`, and `tasks.md` in full,
+then implement task `4.1b`.
+
+- Spec: `.kiro/specs/web-client/` · task `4.1b`
+- [x] Complete · PR: #110
+
+Items move here after they merge to `development`.
 
 ---
 
@@ -633,6 +892,28 @@ state).
 
 - Spec: `BACKLOG.md § P1.2`
 - [x] Complete · PR: #70
+
+---
+
+### 30. Rate-limit queues wake delivery instead of dropping events
+
+Stop the per-PR rate limiter from dropping webhook events during its cooldown window. Today
+`evaluateWakePolicy` (`src/router.ts`) returns `rate_limited` / `wake: false` when
+`tryAcquireWakeSlot` finds a wake happened less than `rateLimit.perPRSeconds` (default 60) ago,
+and the event processor (`src/index.ts`) drops the event — so a `check_run.completed` that lands
+during the cooldown is lost and the session waits on CI forever (observed: sessions `eedb2b25`,
+`6675adac`), which is why agents resort to polling `gh pr checks` against their no-poll contract.
+Instead, *defer* a rate-limited event: persist one coalesced pending wake per `(repo, pr)` (newest
+payload wins) in a new `pending_wakes` table (`src/db.ts`) with `deferred_until = last_waked_at +
+perPRSeconds`, and add a bounded daemon sweeper that injects the deferred wake once the window
+elapses (reusing the existing inject path and re-acquiring the slot), then clears the row. Clear a
+PR's pending wake on session end; drop cleanly if the session is gone. This is the root-cause fix
+that item 23's watchdog only works around. Tier 1 (defer-until + coalescing pure logic) + Tier 2
+(an event during the cooldown is delivered after the window; a burst yields exactly one later wake
+with the latest payload).
+
+- Spec: `BACKLOG.md § P1.9`
+- [x] Complete · PR: #43
 
 ---
 
@@ -980,28 +1261,6 @@ asserting a `400` with a clear error body.
 
 ---
 
-### 30. Rate-limit queues wake delivery instead of dropping events
-
-Stop the per-PR rate limiter from dropping webhook events during its cooldown window. Today
-`evaluateWakePolicy` (`src/router.ts`) returns `rate_limited` / `wake: false` when
-`tryAcquireWakeSlot` finds a wake happened less than `rateLimit.perPRSeconds` (default 60) ago,
-and the event processor (`src/index.ts`) drops the event — so a `check_run.completed` that lands
-during the cooldown is lost and the session waits on CI forever (observed: sessions `eedb2b25`,
-`6675adac`), which is why agents resort to polling `gh pr checks` against their no-poll contract.
-Instead, *defer* a rate-limited event: persist one coalesced pending wake per `(repo, pr)` (newest
-payload wins) in a new `pending_wakes` table (`src/db.ts`) with `deferred_until = last_waked_at +
-perPRSeconds`, and add a bounded daemon sweeper that injects the deferred wake once the window
-elapses (reusing the existing inject path and re-acquiring the slot), then clears the row. Clear a
-PR's pending wake on session end; drop cleanly if the session is gone. This is the root-cause fix
-that item 23's watchdog only works around. Tier 1 (defer-until + coalescing pure logic) + Tier 2
-(an event during the cooldown is delivered after the window; a burst yields exactly one later wake
-with the latest payload).
-
-- Spec: `BACKLOG.md § P1.9`
-- [x] Complete · PR: #43
-
----
-
 ### 3. Allow cron re-fire after an abandoned session
 
 Relax the clean-state guard in the cron-fire handler (`handleCronFire`, `src/index.ts`) so it
@@ -1040,223 +1299,4 @@ is the foundation item — small, self-contained, and proves the self-build loop
 - Spec: `BACKLOG.md § P2.10`
 - [x] Complete · PR: #36
 
-### 86. Agent process isolation — startup checks, ClaudeCodeAdapter block, Tier 2 tests, docs
-
-Read `.kiro/specs/agent-process-isolation/requirements.md`, `design.md`, and `tasks.md` in
-full, then implement tasks `86.1`, `86.2`, `86.3`, `86.4`. Depends on items 83, 84, 85.
-
-- Spec: `.kiro/specs/agent-process-isolation/` · tasks `86.1–86.4`
-- [x] Complete · PR: #152
-
-### 87. SPA Polish — Backend endpoint, shared primitives, layout & overflow
-
-Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`.
-
-- Spec: `.kiro/specs/spa-polish/` · tasks `1`, `2`, `3`, `4`, `5`, `6`, `7`
-- [x] Complete · PR: #156
-
 ---
-
-### 88. SPA Polish — Header branding, router/overview routing, message grammar
-
-Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `8`, `9`, `10`, `11`. Depends on item 87 (shared primitives and
-CSS tokens must be present).
-
-- Spec: `.kiro/specs/spa-polish/` · tasks `8`, `9`, `10`, `11`
-- [x] Complete · PR: #158
-
----
-
-### 89. SPA Polish — Overview page, Config cron status, empty states
-
-Read `.kiro/specs/spa-polish/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `12`, `13`, `14`, `15`, `16`. Depends on item 88 (router
-overview route and MessageRow must be present).
-
-- Spec: `.kiro/specs/spa-polish/` · tasks `12`, `13`, `14`, `15`, `16`
-- [x] Complete · PR: #159
-
----
-
-
-### 90. Security isolation fix — code (MCP socket fallback, agent-server PAT source, .github fail-closed)
-
-Read `.kiro/specs/security-isolation-fix/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `90.1`–`90.10`. Realigns shipped agent-process-isolation code with the
-corrected spec: removes the MCP operator-socket fallback (CRITICAL), sources the agent-server PAT
-from `credentialTokenResolver` via the credential token store only (HIGH — `tokens.json` is now
-required for `push_branch`/`pr_create`/`pr_view`), and makes the `push_branch` `.github/` guard
-fail closed. Adds startup warnings for both missing `agentworker` account (when `useWorkerUid:
-true`) and `_fallback` token mode. Depends on items 83–86.
-
-- Spec: `.kiro/specs/security-isolation-fix/` · tasks `90.1`–`90.10`
-- [x] Complete · PR: #160
-
-### 91. Security isolation fix — provisioning (usermod step, iptables chain rename, docs)
-
-Read `.kiro/specs/security-isolation-fix/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `91.1`–`91.8`. Adds `usermod -aG "$WORKER_USER" "$DAEMON_USER"` to
-`setup-agent-user.sh`, renames the tinyproxy iptables chain from `TPROXY_SSRF_BLOCK` to
-`TINYPROXY_OUT` in the script and docs, and documents the provisioning prerequisites. Depends on
-item 90 (merge conflict on `src/index.ts` and `src/isolation-startup.ts`).
-
-- Spec: `.kiro/specs/security-isolation-fix/` · tasks `91.1`–`91.8`
-- [x] Complete · PR: #161
-
----
-
-
-### 92. Continuous mode — core runner and session-mgr wiring
-
-Read `.kiro/specs/continuous-mode/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `1.1`, `1.2`, `1.3`, `1.4`, `1.5`, `1.6`, `1.7`. Adds config fields
-(`continuous`, `baseBranch`), the `ContinuousRunner` module, `onSessionEnded` callback to
-session-mgr (fires at registry removal, not meta-write), cron handler integration, and
-Tier 1 + T2-CONT-1/2 tests.
-
-- Spec: `.kiro/specs/continuous-mode/` · tasks `1.1`–`1.7`
-- [x] Complete · PR: #166
-
----
-
-### 93. Continuous mode — CLI surface and remaining tests
-
-Read `.kiro/specs/continuous-mode/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `2.1`, `2.2`, `2.3`, `2.4`, `2.6`, `2.7`. Adds `stop_continuous` CLI
-server op, `stop-continuous` CLI subcommand, `ls` display enhancements, and T2-CONT-3/6/7
-tests. Depends on item 92.
-
-- Spec: `.kiro/specs/continuous-mode/` · tasks `2.1`–`2.4`, `2.6`, `2.7`
-- [x] Complete · PR: #167
-
----
-
-### 94. Fix `buildGitAuthEnv` test isolation
-
-Add an optional `askpassHelperExists?: () => boolean` dep to `AgentServerDeps` and thread it
-into `buildGitAuthEnv`. Default is `() => fs.existsSync(ASKPASS_HELPER)` (production behavior
-unchanged). Update the failing test to pass `askpassHelperExists: () => false`, and add a
-second test for the askpass-present path. Fixes a CI-breaking environment dependency.
-
-- Spec: `BACKLOG.md § P2.21`
-- [x] Complete · PR: #168
-
----
-
-## Completed
-
-### 103. Cron timer for agent-router — systemd template units and README setup guide
-
-Add `scripts/agent-router-cron@.service` and `scripts/agent-router-cron@.timer` (systemd
-templated unit files) for scheduling agent sessions via OS-level cron as an alternative to the
-daemon's built-in `cron` config. The service uses `flock -n` (BACKLOG.md § P1.6 lockfile
-pattern) to skip if a prior fire is still running. The timer fires daily at 06:00 by default.
-Updates README with an "OS-level cron via systemd timer" sub-section under "Cron sessions".
-Marks BACKLOG.md § P1.1 and § P1.6 as done.
-
-- Spec: `BACKLOG.md § P1.1`
-- [x] Complete · PR: #177
-
----
-
-### 102. Session cleanup cron — `prune-sessions` CLI subcommand and systemd units
-
-Add `agent-router prune-sessions [--retention-days N] [--dry-run] [--verbose]` subcommand that
-queries the daemon's IPC socket for currently-active session IDs (accurate DB-backed list),
-falls back to `meta.json` status when the daemon is offline, and removes terminal session
-directories older than the retention window. Ships with systemd service + timer unit files in
-`scripts/` for automated daily cleanup. Updates README Maintenance section.
-
-- Spec: `BACKLOG.md § P1.4`
-- [x] Complete · PR: #176
-
----
-
-### 101. Log rotation documentation
-
-Document the daemon's logging and log rotation strategy in README.md. The daemon logs
-structured NDJSON to stdout, captured by systemd journal in production; journal handles
-rotation automatically. Per-session `stream.log` files are scoped to a session lifetime and
-cleaned up by the existing session cleanup cron (P1.4). Documents the path for adding
-`logrotate` support if file-based `daemon.log` logging is added in the future.
-Documentation-only: no code changes, no tests.
-
-- Spec: `BACKLOG.md § P2.6`
-- [x] Complete · PR: #175
-
----
-
-### 100. Fix stale agent-router spec task checkboxes
-
-Tick the 6 non-optional unchecked tasks in `.kiro/specs/agent-router/tasks.md` that are fully
-implemented in the codebase but whose checkboxes were never ticked: `8.6`, `14.1b`, `15.5c`,
-`16.1b`, `17.1b`, `19.1c`. Also annotate BACKLOG items `P2.1` (shipped as ROADMAP item 19,
-PR #59) and `P2.4` (template literal fix — bug was never present in the codebase) as done.
-Documentation-only: no code, no tests.
-
-- Spec: `BACKLOG.md § P2.24`
-- [x] Complete · PR: #174
-
-### 95. Mark BACKLOG.md § P2.20 as complete (server-side waiting-for shipped in PR #100)
-
-Update `BACKLOG.md` to annotate P2.20 as done. The server-side waiting-for computation
-(`waitingForFn` → `paginateSessions`) shipped in PR #100 (item 51) alongside the
-web-ui-sessions-by-repo backend work, but BACKLOG.md was never updated to reflect that.
-This is a documentation-only housekeeping item. Also fixes a pre-existing typecheck failure:
-`vitest.config.ts` used `maxWorkers` (not valid in vitest 3.2.4's `ThreadsOptions`);
-renamed to `maxThreads`.
-
-- Spec: `BACKLOG.md § P2.20`
-- [x] Complete · PR: #169
-
----
-
-### 96. Task/attempt/outcome — missing Tier 2 tests (task-lifecycle, cancel-cleanup)
-
-Read `.kiro/specs/task-attempt-outcome/requirements.md`, `design.md`, and `tasks.md` in full,
-then implement tasks `11.4` and `11.5`. These two HIGH-9 Tier 2 tests were specified but never
-implemented. Task 11.4 adds `test/tier2/task-lifecycle.test.ts` covering the full lifecycle
-(queued → running → heartbeat → report_outcome(succeeded) → attempt.ended → task.succeeded,
-with hasDiff via WorktreeOps mock). Task 11.5 adds `test/tier2/cancel-cleanup.test.ts`
-covering cancel of a running attempt (cancelled_by_api, worktree removed) and cancel of a
-non-running task (task.cancelled without attempt.ended).
-
-- Spec: `.kiro/specs/task-attempt-outcome/` · tasks `11.4`, `11.5`
-- [x] Complete · PR: #170
-
----
-
-### 97. Fix stale spec task checkboxes across active specs
-
-Fix unchecked parent task checkboxes in non-deprecated spec `tasks.md` files where all
-sub-tasks are done and the corresponding ROADMAP items have merged. Affected specs:
-`task-attempt-outcome` (task 11), `web-client` (task 4), `security-isolation-fix` (items
-90/91 templates), `agent-process-isolation` (items 83–86 templates), `continuous-mode`
-(pre-merge completion checklist). Documentation-only: no code, no tests.
-
-- Spec: `BACKLOG.md § P2.22`
-- [x] Complete · PR: #171
-
-### 98. Fix stale spa-polish spec sub-task checkboxes
-
-Tick the 25 unchecked sub-task checkboxes in `.kiro/specs/spa-polish/tasks.md` that were
-left behind when ROADMAP items 87, 88, 89 (PRs #156, #158, #159) merged. All 16 parent
-task checkboxes are already `[x]`; only the sub-tasks are stale. Same pattern as P2.22
-(item 97). Documentation-only: no code, no tests.
-
-- Spec: `BACKLOG.md § P2.23`
-- [x] Complete · PR: #172
-
-### 99. Annotate completed BACKLOG items as done
-
-Update `BACKLOG.md` to add `✅ DONE (PR #<n>)` annotations to all items whose ROADMAP entries
-have merged but that were never marked done in BACKLOG.md: P1.2 (PR #70), P1.3 (PR #51),
-P1.5 (PR #49), P1.7 (PR #60), P1.8 (PR #41), P1.9 (PR #43), P2.0 (PR #52), P2.2 (PR #50),
-P2.5 (PR #47), P2.7 (PR #44), P2.8 (PR #46), P2.11 (PR #45), P2.12 (PR #48), P2.13 (PR #37),
-P2.14 (PR #85), P2.15 (PR #88), P2.16 (PR #93), P2.17 (PR #94), P2.18 (PR #95), P2.19
-(PR #96), P2.21 (PR #168), P3.2 (PR #53). Documentation-only: no code, no tests.
-
-- Spec: `BACKLOG.md § P1.2`, `P1.3`, `P1.5`, `P1.7`, `P1.8`, `P1.9`, `P2.0`, `P2.2`, `P2.5`, `P2.7`, `P2.8`, `P2.11`, `P2.12`, `P2.13`, `P2.14`, `P2.15`, `P2.16`, `P2.17`, `P2.18`, `P2.19`, `P2.21`, `P3.2`
-- [x] Complete · PR: #173

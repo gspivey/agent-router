@@ -627,6 +627,20 @@ Additionally, BACKLOG items P2.1 (session persistence — shipped as ROADMAP ite
 
 ---
 
+### P2.25 — ROADMAP housekeeping: archive completed Active Roadmap items to Completed section ✅ DONE (PR #179)
+
+**Problem.** `ROADMAP.md` has 94 items in the `## Active Roadmap` section that are all `[x] Complete`. The `## Completed` section holds only 9 items (the most recently merged ones: 95–103). The 85 older completed items (items 1–94, minus those already in Completed) are still sitting in `## Active Roadmap`, making the section visually cluttered and semantically incorrect — "Active Roadmap" should contain only work yet to be done or in-flight, not a historical archive.
+
+**Fix.** Move all 85 remaining `[x] Complete` items from `## Active Roadmap` to `## Completed`, preserving their text verbatim and ordering them by item number (most-recently-completed first, matching the existing convention in Completed). After the move, `## Active Roadmap` should contain only the `---` separator and any future unchecked items. Documentation-only: no code, no tests.
+
+**Acceptance.**
+- `## Active Roadmap` contains zero `[x] Complete` entries.
+- `## Completed` contains all 94 previously-completed items.
+- Item text and PR annotations are unchanged.
+- `npm run typecheck` and `npm test` still pass (no source changes).
+
+---
+
 ### P2.23 — Fix stale spa-polish spec sub-task checkboxes ✅ DONE (PR #172)
 
 **Problem.** `.kiro/specs/spa-polish/tasks.md` has 16 parent task checkboxes all marked `[x]` (items 1–16), but 25 sub-task checkboxes remain `[ ]` unchecked. The corresponding ROADMAP items (87, 88, 89 — PRs #156, #158, #159) have all merged and CI was green. This is the same stale-checkbox pattern fixed for other specs in ROADMAP item 97 / P2.22 (PR #171), except spa-polish was not included in that batch.
