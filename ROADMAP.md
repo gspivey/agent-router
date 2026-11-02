@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 120. Confirm db.ts property test deferral — crash verified in better-sqlite3 11.10.0
 
 ROADMAP item 119 (PR #195) deferred tasks 9.3 and 9.4 (db.ts property tests) pending
@@ -56,16 +60,14 @@ hooks synchronously when `db.close()` is called, rather than relying on GC final
 process exits; or (c) moving to a different SQLite binding that does not use NAPI finalizers
 for cleanup.
 
-This item is documentation-only: update `BACKLOG.md § P2.36` with the investigation
-findings, note the confirmed-bad version combination, and add a `✅ NOTE: crash confirmed in
-11.10.0` marker. No code changes, no test changes. Tasks 9.3 and 9.4 remain deferred.
+This item is documentation-only: updated `BACKLOG.md § P2.36` with the investigation
+findings and the confirmed-bad version combination. No code changes, no test changes.
+Tasks 9.3 and 9.4 remain deferred.
 
 - Spec: `BACKLOG.md § P2.36`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #196
 
 ---
-
-## Completed
 
 ### 119. Deferred property tests: queue.ts and session-files.ts
 
