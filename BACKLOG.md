@@ -819,6 +819,14 @@ is required, `GET /overview` omits the `restart_required` key and the SPA shows 
 
 ### P2.36 — Deferred property tests: db.ts, queue.ts, and session-files.ts
 
+> **Status (2026-11-02):** Tasks `10.2`, `11.7`–`11.10` (queue.ts and session-files.ts) were
+> implemented and merged as ROADMAP item 119 (PR #195). Tasks `9.3` and `9.4` (db.ts property
+> tests) remain deferred. Investigation in ROADMAP item 120 confirmed that the
+> `Statement::~Statement()` → `RemoveEnvironmentCleanupHook` crash is **still present** in
+> Node 24.19.0 + better-sqlite3 11.10.0 + vitest 3.2.4. All test-level workarounds were
+> insufficient. A fix requires a better-sqlite3 or vitest change (see ROADMAP item 120 for
+> details). Tasks 9.3 and 9.4 are deferred until the underlying crash is resolved upstream.
+
 The agent-router spec (`tasks.md` items `9.3`, `9.4`, `10.2`, `11.7`, `11.8`, `11.9`, `11.10`)
 specified seven property-based tests that were deferred when their parent tasks shipped. This
 item delivers the fast-check coverage for FIFO ordering in `queue.ts` and session file I/O in

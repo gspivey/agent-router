@@ -33,6 +33,36 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 120. Confirm db.ts property test deferral — crash verified in better-sqlite3 11.10.0
+
+ROADMAP item 119 (PR #195) deferred tasks 9.3 and 9.4 (db.ts property tests) pending
+confirmation that the Node 24 + better-sqlite3 native destructor race was fixed in a newer
+version. This item investigates whether better-sqlite3 11.10.0 (the version now installed)
+resolves the crash, documents the findings, and updates `BACKLOG.md § P2.36` with the
+current status.
+
+Investigation finding: the crash (`Statement::~Statement()` → `RemoveEnvironmentCleanupHook`
+assertion failure with `env == nullptr`) is **still present** in Node 24.19.0 + better-sqlite3
+11.10.0 + vitest 3.2.4 with the `forks` pool. The crash is a race between V8's incremental
+GC finalizing prepared Statement objects from closed databases and the Node.js environment
+teardown sequence. It occurs non-deterministically (roughly 80% of the time) when a test file
+runs 7 or more property tests backed by a SQLite database. All workarounds tried
+(module-level database, pre-prepared delete statements, `beforeAll`/`afterAll` scoped
+databases, per-test databases with `afterEach` cleanup) were insufficient to prevent the race.
+
+The fix requires one of: (a) a better-sqlite3 release that removes Statement NAPI cleanup
+hooks synchronously when `db.close()` is called, rather than relying on GC finalizers; or
+(b) vitest providing a synchronous `afterAll` with a guaranteed GC flush before the worker
+process exits; or (c) moving to a different SQLite binding that does not use NAPI finalizers
+for cleanup.
+
+This item is documentation-only: update `BACKLOG.md § P2.36` with the investigation
+findings, note the confirmed-bad version combination, and add a `✅ NOTE: crash confirmed in
+11.10.0` marker. No code changes, no test changes. Tasks 9.3 and 9.4 remain deferred.
+
+- Spec: `BACKLOG.md § P2.36`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
