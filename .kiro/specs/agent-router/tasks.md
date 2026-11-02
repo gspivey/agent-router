@@ -147,7 +147,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
 - [x] 10. Event queue (`queue.ts`)
   - [x] 10.1 Implement `createEventQueue` — array-based FIFO queue with `enqueue`, `startWorker` (sequential async processor), `shutdown` (wait for in-flight event up to timeout), and `length` getter
     - _Requirements: 5.1, 5.2, 5.4_
-  - [ ]* 10.2 Write property test for FIFO queue ordering
+  - [x]* 10.2 Write property test for FIFO queue ordering
     - **Property 5: FIFO Queue Ordering**
     - **Validates: Requirements 5.1**
 
@@ -164,16 +164,16 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 18.7, 20.3, 20.4, 20.5, 20.6, 20.7_
   - [x] 11.6 Implement `readMeta`, `listSessions`, `sessionExists` helpers
     - _Requirements: 20.1, 21.4_
-  - [ ]* 11.7 Write property test for stream entry structure
+  - [x]* 11.7 Write property test for stream entry structure
     - **Property 16: Stream Entry Structure**
     - **Validates: Requirements 19.1, 19.2**
-  - [ ]* 11.8 Write property test for meta file atomic writes
+  - [x]* 11.8 Write property test for meta file atomic writes
     - **Property 17: Meta File Atomic Writes**
     - **Validates: Requirements 18.7**
-  - [ ]* 11.9 Write property test for session status transitions
+  - [x]* 11.9 Write property test for session status transitions
     - **Property 18: Session Status Transitions**
     - **Validates: Requirements 20.4, 20.5, 20.6, 20.7**
-  - [ ]* 11.10 Write property test for prompt log completeness
+  - [x]* 11.10 Write property test for prompt log completeness
     - **Property 19: Prompt Log Completeness**
     - **Validates: Requirements 19.7**
   - [ ]* 11.11 Write unit tests for session file edge cases

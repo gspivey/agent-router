@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 119. Deferred property tests: queue.ts and session-files.ts
 
 The agent-router spec (`tasks.md` items `10.2`, `11.7`, `11.8`, `11.9`, `11.10`)
@@ -50,11 +54,9 @@ cover event storage round-trip and rate limit acquisition for specific examples;
 coverage gap remains and is tracked in BACKLOG.md § P2.36 for a future fix.
 
 - Spec: `BACKLOG.md § P2.36`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #195
 
 ---
-
-## Completed
 
 ### 118. Surface continuous-run state in the SPA Overview dashboard
 
