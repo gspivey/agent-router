@@ -929,7 +929,7 @@ property tests are cheap, deterministic, and exhaustive over the relevant input 
 
 ---
 
-### P2.32 — Deferred property tests: prompt composers, config validation, and logger
+### P2.32 — Deferred property tests: prompt composers, config validation, and logger ✅ DONE (PR #191)
 
 The agent-router spec (`tasks.md` items `5.2a`–`5.2d`, `3.5`, `4.3`, `4.4`, `4.5`) specified
 eight property-based tests that were deferred when their parent tasks shipped. This item delivers

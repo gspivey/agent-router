@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 115. Deferred property tests: prompt composers, config validation, and logger
 
 The agent-router spec (`tasks.md` items `5.2a`–`5.2d`, `3.5`, `4.3`, `4.4`, `4.5`) specified
@@ -45,11 +49,9 @@ run at the default 100 iterations. On completion, ticks `tasks.md` items `5.2a`,
 `5.2d`, `3.5`, `4.3`, `4.4`, `4.5` in `.kiro/specs/agent-router/tasks.md`.
 
 - Spec: `BACKLOG.md § P2.32`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #191
 
 ---
-
-## Completed
 
 ### 114. Deferred property tests: wake policy and config ENV: resolution
 
