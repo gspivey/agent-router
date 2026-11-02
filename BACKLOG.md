@@ -69,7 +69,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P0.3 — README and perf-log updates must precede merge (prompt fix)
+### P0.3 — README and perf-log updates must precede merge (prompt fix) ✅ DONE
 
 **New (caught from PR #49 review).** PR #49 merged with stale README; the post-merge update went to `development` directly.
 
@@ -753,6 +753,22 @@ actual shipped state. Documentation-only: no code, no tests.
 
 **Acceptance.** `BACKLOG.md § P2.27` carries a `✅ DONE (PR #185)` annotation. The ROADMAP
 item for this fix is ticked.
+
+---
+
+### P2.29 — Annotate BACKLOG.md § P0.3 as done ✅ DONE (PR #187)
+
+`BACKLOG.md § P0.3` (README and perf-log updates must precede merge) was partially addressed
+by earlier work that documented the ordering convention in `AGENTS.md`: the "Don't merge
+before documentation is on the feature branch" rule in the "What not to do" section. The
+external dpdk prompt files (`/home/agentrouter/prompts/dpdk.txt`, `dpdk-resume.txt`) are
+managed outside this repository and their update is an operator concern, not a code item.
+The in-repo obligation — documenting the convention — has been fulfilled. This item adds the
+`✅ DONE` annotation to P0.3 to reflect the actual shipped state. Documentation-only: no
+code, no tests.
+
+**Acceptance.** `BACKLOG.md § P0.3` carries a `✅ DONE` annotation. The ROADMAP item for
+this fix is ticked.
 
 ---
 

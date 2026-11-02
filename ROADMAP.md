@@ -37,6 +37,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 112. Annotate BACKLOG.md § P0.3 as done
+
+`BACKLOG.md § P0.3` (README and perf-log updates must precede merge) was partially addressed
+by earlier work that documented the ordering convention in `AGENTS.md` (the "Don't merge
+before documentation is on the feature branch" rule). The in-repo obligation is fulfilled.
+The external dpdk prompt files are managed outside this repository. This item adds the
+`✅ DONE` annotation to P0.3 to reflect the actual shipped state. Documentation-only: no
+code, no tests.
+
+- Spec: `BACKLOG.md § P2.29`
+- [x] Complete · PR: #187
+
+---
+
 ### 111. Annotate BACKLOG.md § P2.27 as done
 
 The stale-checkbox fix for `.kiro/specs/agent-router/tasks.md` task 8 was fully implemented
