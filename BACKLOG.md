@@ -862,7 +862,7 @@ Context files: src/token-store.ts, src/github.ts, src/mcp-server.ts, src/cli-ser
 
 ---
 
-### P2.31 — Deferred property tests: wake policy and config ENV: resolution
+### P2.31 — Deferred property tests: wake policy and config ENV: resolution ✅ DONE (PR #190)
 
 The agent-router spec (`tasks.md` items `8.4`, `8.5`, `3.4`) specified three property-based
 tests that were deferred to a follow-up PR when their parent tasks shipped. The tests exercise

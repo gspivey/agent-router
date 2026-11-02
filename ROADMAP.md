@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 114. Deferred property tests: wake policy and config ENV: resolution
 
 The agent-router spec (`tasks.md` items `8.4`, `8.5`, `3.4`) specified three property-based
@@ -46,11 +50,9 @@ iterations. On completion, ticks `tasks.md` items `8.4`, `8.5`, and `3.4` in
 `.kiro/specs/agent-router/tasks.md`.
 
 - Spec: `BACKLOG.md § P2.31`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #190
 
 ---
-
-## Completed
 
 ### 113. Surface `restart_required` in the SPA Overview dashboard
 
