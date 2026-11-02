@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as fc from 'fast-check';
 import { createEventQueue, type QueuedEvent } from '../../src/queue.js';
 
 function makeEvent(id: number, overrides?: Partial<QueuedEvent>): QueuedEvent {
@@ -140,4 +141,60 @@ describe('createEventQueue', () => {
 
     expect(processed).toEqual([1, 2]);
   });
+});
+
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Property 5: FIFO Queue Ordering (task 10.2)
+// ---------------------------------------------------------------------------
+
+describe('Property 5: FIFO Queue Ordering', () => {
+  it(
+    'events delivered in exact enqueue order for any sequence 1–20 (100 runs)',
+    {
+      // 100 runs × ~5ms each = ~500ms
+      timeout: 15_000,
+    },
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.array(fc.integer({ min: 1, max: 10000 }), { minLength: 1, maxLength: 20 }),
+          async (ids) => {
+            const q = createEventQueue();
+            const processed: number[] = [];
+            const total = ids.length;
+
+            // Promise-based drain — resolves when all events processed (no fixed timeout)
+            let resolveDrain!: () => void;
+            const drain = new Promise<void>((r) => { resolveDrain = r; });
+            let count = 0;
+
+            q.startWorker(async (event) => {
+              processed.push(event.id);
+              if (++count === total) resolveDrain();
+            });
+
+            for (const id of ids) {
+              q.enqueue({
+                id,
+                repo: 'owner/repo',
+                prNumber: 1,
+                eventType: 'check_run',
+                payload: '{}',
+                source: 'webhook',
+              });
+            }
+
+            await drain;
+            await q.shutdown(1);
+
+            // Events MUST arrive in exact FIFO order
+            expect(processed).toEqual(ids);
+          },
+        ),
+        { numRuns: 100 },
+      );
+    },
+  );
 });

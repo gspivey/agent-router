@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fc from 'fast-check';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -7,7 +8,18 @@ import {
   type SessionFiles,
   type StreamEntry,
   type SessionMeta,
+  type PromptSource,
 } from '../../src/session-files.js';
+
+// Use /dev/shm (ramdisk) for property tests when available — avoids slow fsync
+// calls on spinning/SSD storage that add ~15ms per iteration (1.5s for 100 runs).
+// Falls back to the system temp directory on non-Linux hosts.
+function fastTmpDir(): string {
+  if (fs.existsSync('/dev/shm')) {
+    return fs.mkdtempSync('/dev/shm/sf-prop-test-');
+  }
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'sf-prop-test-'));
+}
 
 let tmpDir: string;
 let sf: SessionFiles;
@@ -338,5 +350,293 @@ describe('sessionExists', () => {
 
   it('returns false for non-existent session', () => {
     expect(sf.sessionExists('nonexistent')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property tests setup — use /dev/shm (ramdisk) for ~250x faster file I/O
+// ---------------------------------------------------------------------------
+//
+// Session file property tests create one session per fast-check iteration:
+//   100 runs × 4 fsync calls/session × ~3ms/fsync on disk = ~1.2s overhead.
+// On /dev/shm, fsync is essentially free (0.06ms/iteration = ~6ms total).
+// The `propSf` / `propTmpDir` variables are reset per describe block via their
+// own nested beforeEach/afterEach so each property suite has a clean state.
+
+let propTmpDir: string;
+let propSf: SessionFiles;
+
+// ---------------------------------------------------------------------------
+// Property 16: Stream Entry Structure (task 11.7)
+// ---------------------------------------------------------------------------
+
+describe('Property 16: Stream Entry Structure', () => {
+  beforeEach(() => {
+    propTmpDir = fastTmpDir();
+    propSf = createSessionFiles(propTmpDir);
+  });
+  afterEach(() => {
+    fs.rmSync(propTmpDir, { recursive: true, force: true });
+  });
+
+  it('every appendStream write produces valid single-line JSON with required fields (100 runs)', () => {
+    const sourceArb = fc.constantFrom<StreamEntry['source']>('router', 'agent');
+    const typeArb = fc.constantFrom(
+      'session_started',
+      'session_ended',
+      'message',
+      'tool_call',
+      'tool_result',
+      'webhook_received',
+      'event_routed',
+    );
+
+    fc.assert(
+      fc.property(
+        // Arbitrary string values including those with newlines that should be stripped
+        fc.record({
+          ts: fc.date().map((d) => d.toISOString()),
+          source: sourceArb,
+          type: typeArb,
+          // extra field — may contain newlines that must be stripped
+          text: fc.option(fc.string({ maxLength: 200 }), { nil: undefined }),
+        }),
+        (entryFields) => {
+          const sessionId = `sess-prop16-${Math.random().toString(36).slice(2)}`;
+          propSf.createSession(sessionId, 'test');
+
+          // Build the entry — only include defined fields
+          const entry: StreamEntry = {
+            ts: entryFields.ts,
+            source: entryFields.source,
+            type: entryFields.type,
+            ...(entryFields.text !== undefined ? { text: entryFields.text } : {}),
+          };
+
+          propSf.appendStream(sessionId, entry);
+
+          const streamPath = path.join(propTmpDir, 'sessions', sessionId, 'stream.log');
+          const content = fs.readFileSync(streamPath, 'utf-8');
+          const lines = content.trimEnd().split('\n');
+
+          // Exactly one line appended
+          expect(lines).toHaveLength(1);
+
+          // Must be valid JSON
+          let parsed: Record<string, unknown>;
+          expect(() => {
+            parsed = JSON.parse(lines[0]!);
+          }).not.toThrow();
+
+          // Required fields present as strings
+          expect(typeof parsed!['ts']).toBe('string');
+          expect(typeof parsed!['source']).toBe('string');
+          expect(typeof parsed!['type']).toBe('string');
+
+          // No embedded newlines in any string value
+          for (const [, value] of Object.entries(parsed!)) {
+            if (typeof value === 'string') {
+              expect(value).not.toMatch(/\r|\n/);
+            }
+          }
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 17: Meta File Atomic Writes (task 11.8)
+// ---------------------------------------------------------------------------
+
+describe('Property 17: Meta File Atomic Writes', () => {
+  beforeEach(() => {
+    propTmpDir = fastTmpDir();
+    propSf = createSessionFiles(propTmpDir);
+  });
+  afterEach(() => {
+    fs.rmSync(propTmpDir, { recursive: true, force: true });
+  });
+
+  it('meta.json is always valid JSON after every updateMeta call (100 runs)', () => {
+    const statusArb = fc.constantFrom<'completed' | 'failed' | 'abandoned'>(
+      'completed',
+      'failed',
+      'abandoned',
+    );
+
+    fc.assert(
+      fc.property(
+        statusArb,
+        fc.integer({ min: 1_700_000_000, max: 1_999_999_999 }),
+        (status, completedAt) => {
+          const sessionId = `sess-prop17-${Math.random().toString(36).slice(2)}`;
+          propSf.createSession(sessionId, 'atomic-write-test');
+
+          // The meta file must be valid JSON after initial creation
+          const metaPath = path.join(propTmpDir, 'sessions', sessionId, 'meta.json');
+          const raw1 = fs.readFileSync(metaPath, 'utf-8');
+          expect(() => JSON.parse(raw1)).not.toThrow();
+
+          // Apply a terminal-status patch
+          propSf.updateMeta(sessionId, { status, completed_at: completedAt });
+
+          // Must still be valid JSON
+          const raw2 = fs.readFileSync(metaPath, 'utf-8');
+          let parsed: Record<string, unknown>;
+          expect(() => {
+            parsed = JSON.parse(raw2);
+          }).not.toThrow();
+
+          // Patched values reflected
+          expect(parsed!['status']).toBe(status);
+          expect(parsed!['completed_at']).toBe(completedAt);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 18: Session Status Transitions (task 11.9)
+// ---------------------------------------------------------------------------
+
+describe('Property 18: Session Status Transitions', () => {
+  beforeEach(() => {
+    propTmpDir = fastTmpDir();
+    propSf = createSessionFiles(propTmpDir);
+  });
+  afterEach(() => {
+    fs.rmSync(propTmpDir, { recursive: true, force: true });
+  });
+
+  it('any terminal status prevents further updateMeta (100 runs)', () => {
+    const terminalStatusArb = fc.constantFrom<'completed' | 'failed' | 'abandoned'>(
+      'completed',
+      'failed',
+      'abandoned',
+    );
+
+    fc.assert(
+      fc.property(
+        terminalStatusArb,
+        fc.constantFrom<'completed' | 'failed' | 'abandoned'>('completed', 'failed', 'abandoned'),
+        (firstStatus, secondStatus) => {
+          const sessionId = `sess-prop18-${Math.random().toString(36).slice(2)}`;
+          propSf.createSession(sessionId, 'status-transition-test');
+
+          // Transition to terminal status
+          propSf.updateMeta(sessionId, { status: firstStatus, completed_at: 1_700_000_000 });
+
+          // Any subsequent update must throw
+          expect(() => {
+            propSf.updateMeta(sessionId, { status: secondStatus, completed_at: 1_700_000_001 });
+          }).toThrow(/only 'active' sessions can be modified/);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('patch applied exactly once for active sessions (100 runs)', () => {
+    const prsArb = fc.array(
+      fc.record({
+        repo: fc.constant('org/repo'),
+        pr_number: fc.integer({ min: 1, max: 999 }),
+        registered_at: fc.integer({ min: 1_700_000_000, max: 1_999_999_999 }),
+      }),
+      { minLength: 0, maxLength: 5 },
+    );
+
+    fc.assert(
+      fc.property(prsArb, (prs) => {
+        const sessionId = `sess-prop18b-${Math.random().toString(36).slice(2)}`;
+        propSf.createSession(sessionId, 'patch-once-test');
+
+        propSf.updateMeta(sessionId, { prs });
+
+        const meta = propSf.readMeta(sessionId);
+        expect(meta.prs).toHaveLength(prs.length);
+        // status still active
+        expect(meta.status).toBe('active');
+      }),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 19: Prompt Log Completeness (task 11.10)
+// ---------------------------------------------------------------------------
+
+describe('Property 19: Prompt Log Completeness', () => {
+  beforeEach(() => {
+    propTmpDir = fastTmpDir();
+    propSf = createSessionFiles(propTmpDir);
+  });
+  afterEach(() => {
+    fs.rmSync(propTmpDir, { recursive: true, force: true });
+  });
+
+  it(
+    'every appendPrompt call adds exactly one entry (100 runs)',
+    { timeout: 10_000 },
+    () => {
+    const sourceArb = fc.constantFrom<PromptSource>(
+      'cli',
+      'webhook',
+      'cron',
+      'mcp',
+      'web',
+      'router',
+    );
+
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            source: sourceArb,
+            // prompts may contain newlines — they should be stripped
+            prompt: fc.string({ maxLength: 500 }),
+          }),
+          { minLength: 1, maxLength: 10 },
+        ),
+        (entries) => {
+          const sessionId = `sess-prop19-${Math.random().toString(36).slice(2)}`;
+          propSf.createSession(sessionId, 'prompt-completeness-test');
+
+          for (const { source, prompt } of entries) {
+            propSf.appendPrompt(sessionId, source, prompt);
+          }
+
+          const promptsPath = path.join(propTmpDir, 'sessions', sessionId, 'prompts.log');
+          const content = fs.readFileSync(promptsPath, 'utf-8');
+          const lines = content.trimEnd().split('\n');
+
+          // One line per prompt
+          expect(lines).toHaveLength(entries.length);
+
+          for (let i = 0; i < entries.length; i++) {
+            const parsed = JSON.parse(lines[i]!) as Record<string, unknown>;
+
+            // source preserved
+            expect(parsed['source']).toBe(entries[i]!.source);
+
+            // prompt text present (newlines replaced by spaces)
+            expect(typeof parsed['prompt']).toBe('string');
+            const storedPrompt = parsed['prompt'] as string;
+
+            // No embedded newlines in the stored value
+            expect(storedPrompt).not.toMatch(/\r|\n/);
+
+            // ts present
+            expect(typeof parsed['ts']).toBe('string');
+          }
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 });

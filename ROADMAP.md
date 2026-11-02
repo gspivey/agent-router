@@ -33,6 +33,25 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 119. Deferred property tests: queue.ts and session-files.ts
+
+The agent-router spec (`tasks.md` items `10.2`, `11.7`, `11.8`, `11.9`, `11.10`)
+specified five property-based tests that were deferred when their parent tasks shipped. This
+item delivers the fast-check coverage for FIFO ordering in `queue.ts` and session file I/O in
+`session-files.ts` (stream entry structure, meta atomic writes, session status transitions, and
+prompt log completeness). All tests go into existing Tier 1 test files, are pure with no I/O
+beyond a temp directory, and run at the default 100 iterations. On completion, ticks `tasks.md`
+items `10.2`, `11.7`, `11.8`, `11.9`, `11.10` in `.kiro/specs/agent-router/tasks.md`.
+
+Note: tasks 9.3 and 9.4 (db.ts property tests) are deferred to a future item — these require
+SQLite-backed tests that intermittently crash in the current Node 24 + better-sqlite3 build due
+to a native destructor race during test cleanup. The existing unit tests in db.test.ts already
+cover event storage round-trip and rate limit acquisition for specific examples; the property
+coverage gap remains and is tracked in BACKLOG.md § P2.36 for a future fix.
+
+- Spec: `BACKLOG.md § P2.36`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
