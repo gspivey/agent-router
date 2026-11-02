@@ -841,6 +841,20 @@ async function main(): Promise<void> {
       continuousRunner.notifySessionEnded(sessionId, repo, reason);
     },
     ...(reaper !== undefined ? { reaper } : {}),
+    installHooksForSession: async (sessionId: string) => {
+      // Install adapter hooks after session creation if the adapter supports them.
+      // We use the default adapter's capabilities as the check; per-repo overrides
+      // also call installHooks but via the same adapter instance (their capabilities
+      // are identical today). The daemonUrl uses config.port (HTTP server); the
+      // bearer token is read from the DaemonTokenStore at call time so the hook
+      // script's embedded path is correct even after a daemon restart.
+      const caps = adapter.capabilities();
+      if (caps.events.includes('tool.post') || caps.events.includes('session.end')) {
+        const daemonUrl = `http://127.0.0.1:${config.port}`;
+        const bearerToken = tokenStore.read();
+        await adapter.installHooks({ sessionId, daemonUrl, bearerToken });
+      }
+    },
   });
   log.info('Session manager initialized');
 

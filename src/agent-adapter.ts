@@ -59,6 +59,15 @@ export interface SpawnOpts {
   agentSocketPath?: string;
 }
 
+export interface InstallHooksOpts {
+  /** The agent-router session id, used to identify hook entries for later cleanup. */
+  sessionId: string;
+  /** Full URL of the daemon's /hooks/event endpoint, e.g. http://127.0.0.1:3000 */
+  daemonUrl: string;
+  /** The bearer token for authenticating hook POSTs (contents of $rootDir/daemon-token). */
+  bearerToken: string;
+}
+
 export interface AgentAdapter {
   /** Stable identifier for diagnostics, e.g. "kiro". */
   readonly name: string;
@@ -66,9 +75,14 @@ export interface AgentAdapter {
   spawn(opts: SpawnOpts): ACPClient;
   /**
    * Wire the agent harness's hooks to POST to the given daemon URL with the
-   * given bearer token. The current Kiro implementation is a documentation
-   * stub; users hand-edit ~/.kiro/agents/agent-router.json per docs/kiro-hooks.md.
+   * given bearer token. The Kiro implementation writes (or merges)
+   * ~/.kiro/agents/agent-router.json. Adapters that don't support hooks
+   * should implement this as a no-op (log + return).
    */
-  installHooks(daemonUrl: string, token: string): Promise<void>;
-  uninstallHooks(): Promise<void>;
+  installHooks(opts: InstallHooksOpts): Promise<void>;
+  /**
+   * Remove hook entries written by installHooks. Should be idempotent —
+   * no-op when the file does not exist or the entries are already absent.
+   */
+  uninstallHooks(opts?: { sessionId?: string }): Promise<void>;
 }

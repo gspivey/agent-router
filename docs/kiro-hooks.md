@@ -1,13 +1,15 @@
 # Kiro hooks → agent-router `/hooks/event`
 
-> **Status:** Hand-installation only. `KiroAdapter.installHooks` is a stub in
-> this version; this page documents the contract so users can wire Kiro to
-> POST verification triggers to the daemon by hand.
+> **Status:** Automatic installation is active. `KiroAdapter.installHooks` writes
+> `~/.kiro/agents/agent-router.json` after each new session is created. You do NOT
+> need to hand-edit the file for daemon-driven sessions — the daemon manages hook
+> entries automatically and removes them when the session ends.
 >
-> The daemon works correctly without any hooks installed — the ACP-layer
-> fallback (post-`sendPrompt` + inactivity watchdog) guarantees verification
-> still fires. Hooks reduce the verification latency from "seconds to one
-> inactivity window" down to milliseconds-after-the-event.
+> If you are testing hooks manually or driving Kiro outside the daemon, use the
+> hand-wiring steps below. The daemon works correctly without any hooks — the
+> ACP-layer fallback (post-`sendPrompt` + inactivity watchdog) guarantees
+> verification still fires. Hooks reduce the verification latency from
+> "seconds to one inactivity window" down to milliseconds-after-the-event.
 
 ## What the daemon expects
 
@@ -62,7 +64,11 @@ Recommended fields (logged for diagnostics, no behavioral effect today):
 - `401 Unauthorized` — missing or wrong bearer token.
 - `400 Bad Request` — malformed JSON or missing `session_id`.
 
-## Hand-wiring it into Kiro
+## Hand-wiring it into Kiro (manual / standalone use)
+
+> **Note:** For daemon-driven sessions, the daemon writes and maintains this
+> file automatically. The hand-wiring steps below are only needed if you are
+> running Kiro outside the daemon and want the sub-second verification path.
 
 The agent-router profile lives at `~/.kiro/agents/agent-router.json`. To
 add hooks, edit that file and merge the following snippet into its `hooks`
