@@ -1,0 +1,75 @@
+name: Tier 3 PR
+
+# Runs a partial tier-3 suite on every PR against development.
+#
+# Tier 3 tests that need a live public webhook URL (WEBHOOK_URL) or a
+# real Kiro CLI (KIRO_PATH) — smoke, github-operations, e2e-real — skip
+# gracefully when those variables are absent.  Only merge-and-verify runs
+# unconditionally because it requires only GITHUB_TOKEN + GITHUB_TEST_REPO.
+#
+# This workflow uses the tier3-integration environment so it can access the
+# TIER3_* secrets already in place for the nightly run.  The environment MUST
+# be configured with "Allow all branches and tags" (or no branch protection) so
+# it fires automatically on PR pushes without a manual approval gate.
+#
+# When a session is bound to this PR, agent-router delivers the posted comment
+# back to the session and the agent can self-correct without human involvement.
+
+on:
+  pull_request:
+    branches: [development]
+
+jobs:
+  tier3-pr:
+    name: Tier 3 (partial — merge-and-verify)
+    runs-on: ubuntu-latest
+    environment: tier3-integration
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Run partial tier-3 suite
+        id: test
+        run: npx vitest run --project tier3 --reporter=default --reporter=junit --outputFile=tier3-results.xml
+        env:
+          GITHUB_TOKEN: ${{ secrets.TIER3_GITHUB_TOKEN }}
+          GITHUB_TEST_REPO: ${{ secrets.TIER3_GITHUB_TEST_REPO }}
+          # WEBHOOK_URL and KIRO_PATH are intentionally omitted — tests that
+          # need them (smoke, github-operations, e2e-real) skip gracefully.
+          # Only merge-and-verify runs, as it only needs GITHUB_TOKEN and
+          # GITHUB_TEST_REPO.
+
+      - name: Generate Report
+        if: always()
+        run: |
+          # Emit a "no typecheck" placeholder so ci-report.sh treats the
+          # typecheck outcome as success (tier3-pr does not run typecheck).
+          touch tier3-typecheck.txt
+          bash scripts/ci-report.sh \
+            --junit tier3-results.xml \
+            --typecheck tier3-typecheck.txt \
+            --run-link "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --typecheck-outcome "success" \
+            --test-outcome "${{ steps.test.outcome }}" \
+            --output tier3-report.md
+
+      - name: Post PR Comment
+        id: post-comment
+        if: always() && github.event_name == 'pull_request' && vars.ENABLE_PR_COMMENTS == 'true'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --body-file tier3-report.md
+
+      - name: "Fallback: Write to Step Summary"
+        if: always() && steps.post-comment.outcome == 'failure'
+        run: cat tier3-report.md >> $GITHUB_STEP_SUMMARY

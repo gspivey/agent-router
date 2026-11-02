@@ -33,6 +33,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 106. Self-dogfooding: tier3 in CI on PRs against agent-router
+
+Add `.github/workflows/tier3-pr.yml` that runs the partial tier-3 suite on every
+`pull_request` targeting `development`. Tests that need a live public webhook URL
+(`WEBHOOK_URL`) or a real Kiro CLI (`KIRO_PATH`) — `smoke`, `github-operations`, `e2e-real`
+— skip gracefully when those variables are absent. Only `merge-and-verify` runs because it
+requires only `GITHUB_TOKEN` + `GITHUB_TEST_REPO`. Reuses the `tier3-integration`
+environment and `scripts/ci-report.sh` from the existing nightly workflow. The posted
+comment feeds back into any bound agent session, closing the self-correction loop.
+
+- Spec: `BACKLOG.md § P2.9`
+- [ ] Complete · PR: —
+
 ---
 
 
