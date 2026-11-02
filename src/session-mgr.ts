@@ -512,6 +512,13 @@ export function createSessionManager(deps: {
    * (AGENT_ROUTER_AGENT_SOCK) and to the adapter when useWorkerUid is on.
    */
   agentSocketPath?: string;
+  /**
+   * Optional callback fired after a session is created and ACP is initialized.
+   * The daemon uses this to install adapter hooks (e.g. KiroAdapter writes
+   * ~/.kiro/agents/agent-router.json). Best-effort: errors are logged and swallowed
+   * so a hook installation failure never prevents a session from starting.
+   */
+  installHooksForSession?: (sessionId: string) => Promise<void>;
 }): SessionManager {
   const { db, sessionFiles, acpSpawner, log } = deps;
   const github = deps.github;
@@ -528,6 +535,7 @@ export function createSessionManager(deps: {
   const extraEnv = deps.extraEnv;
   const useWorkerUid = deps.useWorkerUid ?? false;
   const agentSocketPath = deps.agentSocketPath;
+  const installHooksForSession = deps.installHooksForSession;
   const timeout = deps.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
   const shutdownDrainSeconds = deps.shutdownDrainSeconds ?? 60;
   const inactivityMs = timeout.inactivityMinutes * 60 * 1000;
@@ -1190,6 +1198,18 @@ export function createSessionManager(deps: {
       // 10. Start inactivity timer and max-lifetime timer
       resetInactivityTimer(sessionId, acp);
       enforceMaxLifetime(sessionId, acp);
+
+      // 11. Install adapter hooks (e.g. KiroAdapter writes ~/.kiro/agents/agent-router.json).
+      //     Fire-and-forget — best-effort. A hook installation failure never prevents the
+      //     session from being returned to the caller; the ACP fallback handles verification.
+      if (installHooksForSession !== undefined) {
+        void installHooksForSession(sessionId).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          sessionLog.warn('installHooksForSession failed (session proceeds without hooks)', {
+            error: msg,
+          });
+        });
+      }
 
       sessionLog.info('Session created');
       return handle;

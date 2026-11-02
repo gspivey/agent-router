@@ -10,7 +10,7 @@
  * into stdio ACP server mode (JSON-RPC 2.0 over stdin/stdout).
  */
 import type { ACPClient } from '../acp.js';
-import type { AgentAdapter, AdapterCapabilities, SpawnOpts } from '../agent-adapter.js';
+import type { AgentAdapter, AdapterCapabilities, SpawnOpts, InstallHooksOpts } from '../agent-adapter.js';
 import type { Logger } from '../log.js';
 import { spawnACPClient } from '../acp.js';
 
@@ -50,11 +50,11 @@ export function createClaudeCodeAdapter(deps: ClaudeCodeAdapterDeps): AgentAdapt
       );
     },
 
-    async installHooks(_daemonUrl: string, _token: string): Promise<void> {
+    async installHooks(_opts: InstallHooksOpts): Promise<void> {
       deps.log.info('ClaudeCodeAdapter.installHooks is a stub in this version');
     },
 
-    async uninstallHooks(): Promise<void> {
+    async uninstallHooks(_opts?: { sessionId?: string }): Promise<void> {
       // No-op stub
     },
   };

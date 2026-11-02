@@ -138,7 +138,7 @@ describe('createClaudeCodeAdapter', () => {
         output: (line) => { logs.push(line); },
       });
       const adapter = createClaudeCodeAdapter({ log });
-      await expect(adapter.installHooks('http://daemon.local', 'token-xyz')).resolves.toBeUndefined();
+      await expect(adapter.installHooks({ sessionId: 'sess-test', daemonUrl: 'http://daemon.local', bearerToken: 'token-xyz' })).resolves.toBeUndefined();
       expect(logs.some((line) => line.includes('stub'))).toBe(true);
     });
 

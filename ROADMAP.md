@@ -33,6 +33,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 108. Implement real `KiroAdapter.installHooks`
+
+Replace the documentation-only `KiroAdapter.installHooks` stub with a real
+implementation that writes (or merges) `~/.kiro/agents/agent-router.json` after each
+session is created. The daemon wires `installHooksForSession` into `createSessionManager`
+so new sessions automatically get `PostToolUse` (on `@agent-router/merge_pr`) and
+`agentStop` hooks pointing at `POST /hooks/event`. `uninstallHooks` removes the managed
+entries without disturbing user-defined hooks. This delivers sub-second verification
+latency on merge instead of waiting for the next inactivity window.
+
+- Spec: `BACKLOG.md § P2.26`
+- [ ] Complete · PR: —
+
 ---
 
 
