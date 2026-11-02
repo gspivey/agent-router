@@ -627,7 +627,7 @@ Additionally, BACKLOG items P2.1 (session persistence — shipped as ROADMAP ite
 
 ---
 
-### P2.25 — ROADMAP housekeeping: archive completed Active Roadmap items to Completed section
+### P2.25 — ROADMAP housekeeping: archive completed Active Roadmap items to Completed section ✅ DONE (PR #179)
 
 **Problem.** `ROADMAP.md` has 94 items in the `## Active Roadmap` section that are all `[x] Complete`. The `## Completed` section holds only 9 items (the most recently merged ones: 95–103). The 85 older completed items (items 1–94, minus those already in Completed) are still sitting in `## Active Roadmap`, making the section visually cluttered and semantically incorrect — "Active Roadmap" should contain only work yet to be done or in-flight, not a historical archive.
 

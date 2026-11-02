@@ -35,16 +35,18 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+
+## Completed
+
 ### 104. ROADMAP housekeeping — archive completed items to Completed section
 
 Move all 94 completed items from `## Active Roadmap` to `## Completed`, leaving the Active
 Roadmap queue empty and ready for the next unchecked item. Documentation-only: no code, no tests.
 
 - Spec: `BACKLOG.md § P2.25`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #179
 
-
-## Completed
+---
 
 ### 103. Cron timer for agent-router — systemd template units and README setup guide
 
