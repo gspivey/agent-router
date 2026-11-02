@@ -302,5 +302,46 @@
         </Card>
       {/if}
     </section>
+
+    <!-- Continuous Runs (BACKLOG.md § P2.35) — only shown when continuous mode is configured -->
+    {#if overview !== null && overview.continuous_runs !== undefined && overview.continuous_runs.length > 0}
+      <section data-testid="continuous-runs">
+        <h2 class="mb-2 text-sm font-semibold text-[var(--text-primary)]">Continuous Runs</h2>
+        <Card>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr class="border-b border-[var(--border)] text-[var(--text-muted)]">
+                  <th class="px-2 py-2 font-medium">Repo</th>
+                  <th class="px-2 py-2 font-medium">Status</th>
+                  <th class="px-2 py-2 font-medium">Items</th>
+                  <th class="px-2 py-2 font-medium">Started</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each overview.continuous_runs as run (run.repo)}
+                  <tr
+                    data-testid="continuous-run-row"
+                    class="border-b border-[var(--border)] last:border-b-0"
+                  >
+                    <td class="px-2 py-2 font-mono text-xs text-[var(--text-primary)]">{run.repo}</td>
+                    <td class="px-2 py-2">
+                      <StatusBadge
+                        state={run.status === 'running' ? 'active' : 'paused'}
+                        label={run.status === 'running' ? 'Running' : (run.stop_reason ?? 'Stopped')}
+                      />
+                    </td>
+                    <td class="px-2 py-2 text-[var(--text-muted)]">{run.items_completed}</td>
+                    <td class="px-2 py-2 text-[var(--text-muted)]">
+                      {new Date(run.started_at * 1000).toLocaleString()}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
+    {/if}
   {/if}
 </section>

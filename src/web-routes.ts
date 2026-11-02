@@ -17,6 +17,7 @@ import { deriveWaitingFor } from './ui/logic.js';
 import { computeProjectHealth, computeTokenCoverage, partitionRepos } from './projects.js';
 import type { ProjectConfig, RepoSessionCounts } from './projects.js';
 import type { RestartRequiredCondition } from './restart-required.js';
+import type { ContinuousRunDTO } from './continuous-runner.js';
 
 type WebEnv = { Variables: { auth: AuthResult } };
 
@@ -468,6 +469,12 @@ export interface OverviewResponse {
    * See BACKLOG.md § P2.33.
    */
   readonly token_expiry?: TokenExpiryCondition;
+  /**
+   * Active and recently-stopped continuous runs, keyed by repo. Present when
+   * the continuous runner is wired into the web layer; absent otherwise (e.g.
+   * in tests that don't supply the getter). See BACKLOG.md § P2.35.
+   */
+  readonly continuous_runs?: ContinuousRunDTO[];
 }
 
 /**
@@ -602,6 +609,14 @@ export function createWebRoutes(deps: {
    * banner. Returns null when expiry is > 14 days away or not configured.
    */
   tokenExpiry?: () => TokenExpiryCondition | null;
+  /**
+   * Getter for the current list of continuous runs (BACKLOG.md § P2.35). When
+   * present, `GET /overview` includes `continuous_runs` in the response body
+   * so the SPA can surface active and recently-stopped continuous runs. When
+   * absent, the field is omitted from the response (backwards compat for tests
+   * that don't supply a continuous runner).
+   */
+  continuousRuns?: () => ContinuousRunDTO[];
 }): Hono<WebEnv> {
   const { sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, config, tokenStore, db } = deps;
   const app = new Hono<WebEnv>();
@@ -1187,6 +1202,10 @@ export function createWebRoutes(deps: {
     const teCondition = deps.tokenExpiry?.() ?? null;
     const tokenExpiry = teCondition !== null ? teCondition : undefined;
 
+    // Include continuous_runs when the continuous runner is wired in
+    // (BACKLOG.md § P2.35). When absent, the field is omitted.
+    const continuousRuns = deps.continuousRuns?.();
+
     const body: OverviewResponse = {
       active_sessions: active.length,
       queue_depth: computeQueueDepth(),
@@ -1198,6 +1217,7 @@ export function createWebRoutes(deps: {
       uptime_s: Math.floor((Date.now() - overviewStartedAt) / 1000),
       ...(restartRequired !== undefined ? { restart_required: restartRequired } : {}),
       ...(tokenExpiry !== undefined ? { token_expiry: tokenExpiry } : {}),
+      ...(continuousRuns !== undefined ? { continuous_runs: continuousRuns } : {}),
     };
 
     return c.json(body);

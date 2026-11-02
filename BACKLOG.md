@@ -1137,6 +1137,60 @@ Tests:
 
 ---
 
+### P2.35 — Surface continuous-run state in the SPA Overview dashboard ✅ DONE (PR #194)
+
+**Why this exists.** Continuous mode (`repos[i].continuous: true`) lets the daemon run ROADMAP
+items back-to-back without human intervention — it re-fires after each merged PR and advances
+the queue automatically. `agent-router ls` already shows a `Continuous runs:` section above the
+session table. But the SPA Overview dashboard has no knowledge of continuous runs: the
+`continuousRunner` is never wired into `createWebApp`, so `GET /overview` never includes the
+run list, and the dashboard shows nothing. An operator checking on an overnight continuous run
+must fall back to the CLI.
+
+**What changes.**
+
+Backend (`src/web-routes.ts`, `src/web-server.ts`, `src/index.ts`):
+- Import `ContinuousRunDTO` from `./continuous-runner.js` in `src/web-routes.ts`.
+- Add `readonly continuous_runs?: ContinuousRunDTO[]` to `OverviewResponse`.
+- Add optional `continuousRuns?: () => ContinuousRunDTO[]` getter to the `createWebRoutes`
+  deps object (analogous to `restartRequired` and `tokenExpiry`). When present, the
+  `GET /overview` handler calls it and includes the result as `continuous_runs`. When absent,
+  the field is omitted (backwards compat for tests that don't supply a runner).
+- Add `continuousRuns?: () => ContinuousRunDTO[]` to `WebAppDeps` in `src/web-server.ts` and
+  wire it into the `routeDeps` object (same pattern as `restartRequired`).
+- In `src/index.ts`, pass `continuousRuns: () => continuousRunner.listRuns()` to `createWebApp`.
+
+Client (`client/src/lib/types.ts`, `client/src/components/Overview.svelte`):
+- Add `ContinuousRunDTO` interface to `client/src/lib/types.ts`.
+- Add `readonly continuous_runs?: ContinuousRunDTO[]` to the client `OverviewResponse` type.
+- In `Overview.svelte`, add a "Continuous Runs" section after the Cron Summary section. The
+  section is only rendered when `overview.continuous_runs` is defined and non-empty (so existing
+  deployments without continuous mode are unaffected). Each row shows repo, status badge
+  (running → active/green, stopped → paused/amber + stop reason), items completed, and started
+  time.
+
+Tests:
+- Tier 1 (`test/tier1/web-server/overview-continuous-runs.test.ts`): tests that the `GET /overview`
+  handler omits the field when the getter is absent, includes `[]` when the getter returns an
+  empty array, surfaces the DTO array when the getter returns runs, and reflects live getter
+  state on each request (not a snapshot).
+- Tier 2 (`test/tier2/overview-continuous-runs.test.ts`): full web-server stack test that
+  verifies `GET /overview` correctly surfaces (or omits) `continuous_runs` based on the wired
+  getter.
+- Client (`client/src/components/Overview.test.ts`): unit tests that the continuous-runs section
+  is absent when `continuous_runs` is undefined or `[]`, and is rendered with one row per run
+  when the array is non-empty.
+
+**Acceptance.**
+- `GET /overview` returns `{ ..., continuous_runs: [...] }` when continuous mode is enabled and
+  the continuous runner is wired into the web layer; the field is absent when not configured.
+- The SPA Overview shows a "Continuous Runs" section with a row per run (repo, status badge,
+  items completed, started time) when any runs are present.
+- When no runs are present or the runner is not configured, no section is shown.
+- `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
+
+---
+
 ### P3.3 — ACP server (PRODUCT.md Phase 2)
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.

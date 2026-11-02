@@ -67,10 +67,17 @@ export interface WebAppDeps {
    * banner. Returns null when expiry is > 14 days away or not configured.
    */
   tokenExpiry?: () => import('./web-routes.js').TokenExpiryCondition | null;
+  /**
+   * Getter for the current list of continuous runs (BACKLOG.md § P2.35).
+   * When present, `GET /overview` includes `continuous_runs` in the response
+   * body so the SPA can surface active and recently-stopped continuous runs.
+   * Absent when the continuous runner is not configured for any repo.
+   */
+  continuousRuns?: () => import('./continuous-runner.js').ContinuousRunDTO[];
 }
 
 export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
-  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1, clientDist, restartRequired, tokenExpiry } = deps;
+  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1, clientDist, restartRequired, tokenExpiry, continuousRuns } = deps;
 
   const app = new Hono<WebEnv>();
 
@@ -144,6 +151,7 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   if (db !== undefined) routeDeps.db = db;
   if (restartRequired !== undefined) routeDeps.restartRequired = restartRequired;
   if (tokenExpiry !== undefined) routeDeps.tokenExpiry = tokenExpiry;
+  if (continuousRuns !== undefined) routeDeps.continuousRuns = continuousRuns;
   const routes = createWebRoutes(routeDeps);
   app.route('/', routes);
 

@@ -1038,6 +1038,7 @@ async function main(): Promise<void> {
     db,
     restartRequired: () => restartRequiredState.get(),
     ...(tokenExpiryGetter !== undefined ? { tokenExpiry: tokenExpiryGetter } : {}),
+    continuousRuns: () => continuousRunner.listRuns(),
     v1: {
       taskService,
       scheduler: repoScheduler,
