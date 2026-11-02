@@ -720,6 +720,30 @@ triggers `verifySession` within 1 second.
 
 ---
 
+### P2.27 — Fix stale agent-router spec parent task checkbox
+
+**Problem.** `.kiro/specs/agent-router/tasks.md` has parent task `8` (Wake policy and event
+routing) marked `- [ ]` even though all of its non-optional sub-tasks are done:
+
+- `8.1` — `filterEventType` implementation `[x]`
+- `8.2` — `resolvePRNumber` implementation `[x]`
+- `8.3` — `evaluateWakePolicy` implementation `[x]`
+- `8.4` — property test for event type filtering `[ ]*` (optional — not required)
+- `8.5` — property test for PR number resolution `[ ]*` (optional — not required)
+- `8.6` — Tier 2 routing-matrix test `[x]`
+
+The optional sub-tasks `8.4` and `8.5` (marked with `*`) do not gate the parent task. The
+same stale-checkbox pattern was fixed for other specs in ROADMAP items 97 (P2.22), 98 (P2.23),
+and 100 (P2.24). This is the last known instance.
+
+**Fix.** Tick parent task `8` to `[x]` in `.kiro/specs/agent-router/tasks.md`.
+Documentation-only: no code, no tests.
+
+**Acceptance.** Zero non-optional `- [ ]` lines remain in `.kiro/specs/agent-router/tasks.md`
+(optional tasks marked with `*` may remain). The ROADMAP item for this fix is ticked.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)
