@@ -667,7 +667,7 @@ Additionally, BACKLOG items P2.1 (session persistence — shipped as ROADMAP ite
 
 ---
 
-### P2.26 — Implement real `KiroAdapter.installHooks` ✅ DONE (PR #TBD)
+### P2.26 — Implement real `KiroAdapter.installHooks` ✅ DONE (PR #183)
 
 **Context.** The `agent-adapter-completion` feature (PR #182) ships `KiroAdapter` with `installHooks`
 and `uninstallHooks` as no-op stubs that only log. The spec deferred real hook installation because

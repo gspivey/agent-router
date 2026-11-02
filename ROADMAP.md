@@ -33,6 +33,11 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+
+## Completed
+
 ### 108. Implement real `KiroAdapter.installHooks`
 
 Replace the documentation-only `KiroAdapter.installHooks` stub with a real
@@ -44,7 +49,7 @@ entries without disturbing user-defined hooks. This delivers sub-second verifica
 latency on merge instead of waiting for the next inactivity window.
 
 - Spec: `BACKLOG.md § P2.26`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #183
 
 ---
 
