@@ -449,6 +449,13 @@ export interface OverviewResponse {
   readonly version: string;
   readonly uptime_s: number;
   /**
+   * Count of rows in the `pending_wakes` table — deferred rate-limited wake
+   * events waiting for the cooldown window to elapse. Useful for operators to
+   * see whether any wake events are queued. Always `>= 0`.
+   * See BACKLOG.md § P2.34.
+   */
+  readonly pending_wakes_count: number;
+  /**
    * Present when the daemon has detected a config change that requires a
    * restart to take effect (e.g. `port`, `kiroPath`). Mirrors the shape from
    * `GET /health`. Absent when no restart is required.
@@ -626,6 +633,24 @@ export function createWebRoutes(deps: {
       const row = db
         .raw()
         .prepare(`SELECT count(*) AS n FROM tasks WHERE state = 'queued'`)
+        .get() as { n?: number } | undefined;
+      return typeof row?.n === 'number' ? row.n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Count rows in the `pending_wakes` table — deferred rate-limited wake
+   * events waiting for the cooldown window to elapse (BACKLOG.md § P2.34).
+   * Returns `0` when the DB is unavailable or the table cannot be read.
+   */
+  function countPendingWakes(): number {
+    if (db === undefined) return 0;
+    try {
+      const row = db
+        .raw()
+        .prepare(`SELECT count(*) AS n FROM pending_wakes`)
         .get() as { n?: number } | undefined;
       return typeof row?.n === 'number' ? row.n : 0;
     } catch {
@@ -1165,6 +1190,7 @@ export function createWebRoutes(deps: {
     const body: OverviewResponse = {
       active_sessions: active.length,
       queue_depth: computeQueueDepth(),
+      pending_wakes_count: countPendingWakes(),
       recent_prs: collectRecentPrs(sessions),
       cron_summary: cronSummary,
       health,

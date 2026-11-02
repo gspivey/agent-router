@@ -37,6 +37,24 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 117. Overview auto-refresh and `pending_wakes_count`
+
+The SPA Overview page loads once on mount but never auto-refreshes, so an operator checking
+daemon status sees stale data until they reload manually. The `pending_wakes` table
+(ROADMAP item 30, P1.9) counts deferred rate-limited wake events but nothing surfaces this
+count in the dashboard. This item adds `pending_wakes_count` to `OverviewResponse` in
+`src/web-routes.ts` (backed by a `SELECT count(*)` on `pending_wakes`), updates the client
+type in `client/src/lib/types.ts`, adds a "Pending Wakes" fifth stat card in
+`Overview.svelte`, and adds auto-refresh: a 30-second `setInterval` in `onMount`,
+a "last updated" timestamp footer, and a manual "Refresh" button. Includes Tier 1 (handler
+logic), Tier 2 (DB count), and client unit tests (stat card, timestamp, refresh button,
+interval lifecycle).
+
+- Spec: `BACKLOG.md § P2.34`
+- [x] Complete · PR: #193
+
+---
+
 ### 116. Surface `token_expiry` in the SPA Overview dashboard
 
 `config.tokenExpiresAt` (set since ROADMAP item 12, PR #52) drives startup + 24 h alerting

@@ -3,8 +3,8 @@
    * Overview dashboard page at `#/` (spa-polish ROADMAP 89, Req 12).
    *
    * Fetches `GET /api/overview` AND the session list on mount via the API layer.
-   * Renders a `PageHeader`, a responsive four-card stat row (Active Sessions,
-   * Queued Work, Recent PRs in the last 24h, and a Health badge), a Recent
+   * Renders a `PageHeader`, a responsive stat row (Active Sessions, Queued Work,
+   * Pending Wakes, Recent PRs in the last 24h, and a Health badge), a Recent
    * Sessions list (last five sessions, reusing `SessionCard`), and a compact
    * Cron Summary table. Each section surfaces a skeleton loading state while the
    * request is in flight (Req 12.6) and a muted icon + message empty state when
@@ -12,8 +12,12 @@
    * unreachable daemon) is surfaced as a client-only "failed to fetch" error
    * state, not a server `health` value (Req 2.2). `AuthError` is swallowed — the
    * global auth lockout handles it. All colors reference `app.css` tokens.
+   *
+   * Auto-refresh: polls every 30 seconds (BACKLOG.md § P2.34). A "last updated"
+   * timestamp is shown below the stat row; a "Refresh" button allows manual
+   * re-fetch on demand.
    */
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api, AuthError } from '../lib/api.js';
   import type { OverviewResponse, SessionSummary } from '../lib/types.js';
   import Card from './Card.svelte';
@@ -22,6 +26,9 @@
   import StatusBadge from './StatusBadge.svelte';
   import SessionCard from './SessionCard.svelte';
 
+  /** Auto-refresh interval in milliseconds (30 seconds). */
+  const REFRESH_INTERVAL_MS = 30_000;
+
   /** One day in milliseconds — the "Recent PRs (24h)" window. */
   const DAY_MS = 86_400_000;
 
@@ -29,6 +36,8 @@
   let recentSessions = $state<SessionSummary[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  /** Timestamp of the last successful data fetch (BACKLOG.md § P2.34). */
+  let lastRefreshed = $state<Date | null>(null);
 
   async function load(): Promise<void> {
     loading = true;
@@ -42,6 +51,7 @@
       ]);
       overview = ov;
       recentSessions = list.sessions.slice(0, 5);
+      lastRefreshed = new Date();
     } catch (err) {
       // A 401/403 already entered the expired lockout via `api`; surface other
       // failures as a client-only error state without clearing the token.
@@ -53,8 +63,18 @@
     }
   }
 
+  let refreshTimer: ReturnType<typeof setInterval> | null = null;
+
   onMount(() => {
     void load();
+    refreshTimer = setInterval(() => void load(), REFRESH_INTERVAL_MS);
+  });
+
+  onDestroy(() => {
+    if (refreshTimer !== null) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
   });
 
   /** Count of recent PRs opened within the last 24 hours (Req 12.2). */
@@ -81,6 +101,11 @@
     if (isoString === null) return '—';
     const d = new Date(isoString);
     return Number.isNaN(d.getTime()) ? isoString : d.toLocaleString();
+  }
+
+  /** Format a Date as HH:MM:SS for the last-refreshed indicator. */
+  function formatTime(d: Date): string {
+    return d.toLocaleTimeString();
   }
 </script>
 
@@ -162,19 +187,39 @@
     {#if loading}
       <div
         data-testid="stat-row-skeleton"
-        class="grid grid-cols-2 gap-4 lg:grid-cols-4"
+        class="grid grid-cols-2 gap-4 lg:grid-cols-5"
         aria-hidden="true"
       >
-        {#each Array(4) as _unused}
+        {#each Array(5) as _unused}
           <div class="h-20 animate-pulse rounded-lg bg-[var(--surface)]"></div>
         {/each}
       </div>
     {:else if overview !== null}
-      <div data-testid="stat-row" class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div data-testid="stat-row" class="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Active Sessions" value={overview.active_sessions} />
         <StatCard label="Queued Work" value={overview.queue_depth} />
+        <StatCard label="Pending Wakes" value={overview.pending_wakes_count} />
         <StatCard label="Recent PRs (24h)" value={recentPrCount} />
         <StatCard label="Health" value="System" badge={healthBadge} />
+      </div>
+      <!-- Last-refreshed indicator + manual refresh button (BACKLOG.md § P2.34) -->
+      <div class="flex items-center gap-3">
+        {#if lastRefreshed !== null}
+          <p
+            data-testid="last-refreshed"
+            class="m-0 text-xs text-[var(--text-muted)]"
+          >
+            Last updated {formatTime(lastRefreshed)}
+          </p>
+        {/if}
+        <button
+          type="button"
+          data-testid="overview-refresh"
+          onclick={() => void load()}
+          class="min-h-[32px] rounded border border-[var(--border)] bg-[var(--surface)] px-3 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover,var(--surface))]"
+        >
+          Refresh
+        </button>
       </div>
     {/if}
 
