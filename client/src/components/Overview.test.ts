@@ -248,4 +248,72 @@ describe('Overview', () => {
     expect(banner.textContent).toContain('port');
     expect(banner.textContent).toContain('controlPort');
   });
+
+  // ---- token_expiry banner (BACKLOG.md § P2.33) ----
+
+  it('does not show token-expiry banner when token_expiry is absent', async () => {
+    getOverview.mockResolvedValue(makeOverview({ /* no token_expiry */ }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { queryByTestId } = render(Overview);
+    await waitFor(() => expect(queryByTestId('stat-row-skeleton')).toBeNull());
+    expect(queryByTestId('token-expiry-banner')).toBeNull();
+  });
+
+  it('shows amber token-expiry banner with days remaining when severity is warn', async () => {
+    const expiresAt = new Date(Date.now() + 10 * 86400 * 1000).toISOString();
+    getOverview.mockResolvedValue(
+      makeOverview({
+        token_expiry: { days_remaining: 10, severity: 'warn', expires_at: expiresAt },
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const banner = await findByTestId('token-expiry-banner');
+    expect(banner).toBeTruthy();
+    expect(banner.textContent).toContain('10');
+  });
+
+  it('shows red token-expiry banner when severity is error', async () => {
+    const expiresAt = new Date(Date.now() + 1 * 86400 * 1000).toISOString();
+    getOverview.mockResolvedValue(
+      makeOverview({
+        token_expiry: { days_remaining: 1, severity: 'error', expires_at: expiresAt },
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const banner = await findByTestId('token-expiry-banner');
+    expect(banner).toBeTruthy();
+    // Error banner uses red border/background CSS classes
+    expect(banner.className).toContain('error');
+  });
+
+  it('shows "expired" message when days_remaining is negative', async () => {
+    const expiresAt = new Date(Date.now() - 5 * 86400 * 1000).toISOString();
+    getOverview.mockResolvedValue(
+      makeOverview({
+        token_expiry: { days_remaining: -5, severity: 'error', expires_at: expiresAt },
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const banner = await findByTestId('token-expiry-banner');
+    expect(banner.textContent).toContain('expired');
+    expect(banner.textContent).toContain('5');
+  });
+
+  it('shows both restart-required and token-expiry banners when both are set', async () => {
+    const since = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 3 * 86400 * 1000).toISOString();
+    getOverview.mockResolvedValue(
+      makeOverview({
+        restart_required: { fields: ['kiroPath'], since },
+        token_expiry: { days_remaining: 3, severity: 'error', expires_at: expiresAt },
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    expect(await findByTestId('restart-required-banner')).toBeTruthy();
+    expect(await findByTestId('token-expiry-banner')).toBeTruthy();
+  });
 });

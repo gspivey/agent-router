@@ -118,6 +118,46 @@
       </div>
     {/if}
 
+    <!-- Token expiry banner (BACKLOG.md § P2.33) -->
+    {#if overview !== null && overview.token_expiry !== undefined}
+      {@const te = overview.token_expiry}
+      <div
+        data-testid="token-expiry-banner"
+        role="alert"
+        class={[
+          'flex flex-col gap-1 rounded-lg border p-3 text-sm',
+          te.severity === 'error'
+            ? 'border-[var(--error,#b91c1c)] bg-[var(--error-bg,#fef2f2)]'
+            : 'border-[var(--warning,#b45309)] bg-[var(--warning-bg,#fffbeb)]',
+        ].join(' ')}
+      >
+        <p
+          class={[
+            'm-0 font-semibold',
+            te.severity === 'error'
+              ? 'text-[var(--error-text,#7f1d1d)]'
+              : 'text-[var(--warning-text,#92400e)]',
+          ].join(' ')}
+        >
+          {te.severity === 'error' ? '🔴' : '⚠'} GitHub token expiring soon
+        </p>
+        <p
+          class={[
+            'm-0',
+            te.severity === 'error'
+              ? 'text-[var(--error-text,#7f1d1d)]'
+              : 'text-[var(--warning-text,#92400e)]',
+          ].join(' ')}
+        >
+          {te.days_remaining <= 0
+            ? `Token expired ${Math.abs(te.days_remaining)} day${Math.abs(te.days_remaining) === 1 ? '' : 's'} ago`
+            : `Token expires in ${te.days_remaining} day${te.days_remaining === 1 ? '' : 's'}`}
+          ({new Date(te.expires_at).toLocaleDateString()}).
+          Rotate the PAT and update <code>tokenExpiresAt</code> in config.
+        </p>
+      </div>
+    {/if}
+
     <!-- Stat row (Req 12.2, 12.3) -->
     {#if loading}
       <div

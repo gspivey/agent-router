@@ -60,10 +60,17 @@ export interface WebAppDeps {
    * `restart_required` in the response body so the SPA can surface an alert.
    */
   restartRequired?: () => import('./restart-required.js').RestartRequiredCondition | null;
+  /**
+   * Getter for the current token expiry condition (BACKLOG.md § P2.33).
+   * When present and returning a non-null value, `GET /overview` includes
+   * `token_expiry` in the response body so the SPA can surface a PAT expiry
+   * banner. Returns null when expiry is > 14 days away or not configured.
+   */
+  tokenExpiry?: () => import('./web-routes.js').TokenExpiryCondition | null;
 }
 
 export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
-  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1, clientDist, restartRequired } = deps;
+  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1, clientDist, restartRequired, tokenExpiry } = deps;
 
   const app = new Hono<WebEnv>();
 
@@ -136,6 +143,7 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   if (credentialTokenStore !== undefined) routeDeps.tokenStore = credentialTokenStore;
   if (db !== undefined) routeDeps.db = db;
   if (restartRequired !== undefined) routeDeps.restartRequired = restartRequired;
+  if (tokenExpiry !== undefined) routeDeps.tokenExpiry = tokenExpiry;
   const routes = createWebRoutes(routeDeps);
   app.route('/', routes);
 

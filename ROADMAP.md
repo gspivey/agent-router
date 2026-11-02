@@ -37,6 +37,23 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 116. Surface `token_expiry` in the SPA Overview dashboard
+
+`config.tokenExpiresAt` (set since ROADMAP item 12, PR #52) drives startup + 24 h alerting
+via `startTokenExpiryChecker` in `src/token-expiry.ts`, but the SPA Overview dashboard has
+no way to surface the condition. An operator whose PAT is expiring in 5 days must check
+daemon logs manually. This item adds the optional `token_expiry` field to `OverviewResponse`
+in `src/web-routes.ts`, wires a `tokenExpiry` getter through `WebAppDeps` and
+`createWebRoutes`, extends the client-owned type in `client/src/lib/types.ts`, and renders an
+amber or red banner in `Overview.svelte`. Uses the existing pure functions `computeDaysRemaining`
+and `daysToSeverity` from `src/token-expiry.ts`. Includes Tier 1 (pure handler logic) and
+Tier 2 (config sets the field) tests.
+
+- Spec: `BACKLOG.md § P2.33`
+- [x] Complete · PR: #192
+
+---
+
 ### 115. Deferred property tests: prompt composers, config validation, and logger
 
 The agent-router spec (`tasks.md` items `5.2a`–`5.2d`, `3.5`, `4.3`, `4.4`, `4.5`) specified
