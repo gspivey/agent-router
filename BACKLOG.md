@@ -929,6 +929,96 @@ property tests are cheap, deterministic, and exhaustive over the relevant input 
 
 ---
 
+### P2.32 — Deferred property tests: prompt composers, config validation, and logger
+
+The agent-router spec (`tasks.md` items `5.2a`–`5.2d`, `3.5`, `4.3`, `4.4`, `4.5`) specified
+eight property-based tests that were deferred when their parent tasks shipped. This item delivers
+the fast-check coverage for the prompt composers (completeness invariants), config validation
+(invalid config rejected), and the structured logger (entry structure, secret redaction,
+level filtering). All tests go into existing Tier 1 test files, are pure with no I/O, and run
+at the default 100 iterations. On completion, ticks `tasks.md` items `5.2a`, `5.2b`, `5.2c`,
+`5.2d`, `3.5`, `4.3`, `4.4`, `4.5` in `.kiro/specs/agent-router/tasks.md`.
+
+**Why these.** The prompt composers are the last user-visible output before the agent acts —
+completeness properties ensure no field is silently dropped when composing a prompt from an
+arbitrary payload. The config validation property ensures that any config missing required
+fields reliably produces a `FatalError`. The logger properties ensure the structural invariant
+(every entry is valid NDJSON with `timestamp`, `level`, `message`), the security invariant (no
+secret values survive serialization), and the level-filtering invariant (no entry below the
+configured level appears) all hold for arbitrary inputs.
+
+**Property 12 — Configuration validation** (`validateConfig` in `src/config.ts`):
+- For any config object with `port` outside [1, 65535], `validateConfig` throws `FatalError`.
+- For any config object with an empty `webhookSecret`, throws `FatalError`.
+- For any config object with a repo entry missing `owner` or `name`, throws `FatalError`.
+- A valid config (correct port, non-empty secret, valid repos) always succeeds.
+
+**Property 13 — Log entry structure** (`createLogger` in `src/log.ts`):
+- For any message string and arbitrary extra fields, every emitted line is valid JSON.
+- Every parsed entry has `timestamp` (ISO 8601 UTC), `level` (one of debug/info/warn/error),
+  and `message` as a string.
+- Extra fields at call site appear in the serialized entry (unless they collide with system
+  fields).
+
+**Property 14 — No secrets in log output** (`createLogger` in `src/log.ts`):
+- For any message and extra fields that contain the registered secret string, the raw log
+  line does not contain the secret value.
+- The invariant holds regardless of where the secret appears: top-level field, nested object,
+  inside a string, inside the message text.
+
+**Property 15 — Log level filtering** (`createLogger` in `src/log.ts`):
+- For any configured level `L` and any log call at a level below `L`, no line is emitted.
+- For any configured level `L` and any log call at level `L` or above, exactly one line is
+  emitted.
+
+**Property for 5.2a — `composeCheckRunPrompt` completeness**:
+- For any `CheckRunPayload` with non-null `conclusion` and arbitrary string fields (name, full_name,
+  summary, PR number), the result contains the check run name, repository full_name, and PR number.
+- The preamble appears as the first line.
+- Untrusted fields are wrapped in `<<UNTRUSTED_INPUT>>…<</UNTRUSTED_INPUT>>` markers.
+
+**Property for 5.2b — `composeReviewCommentPrompt` completeness**:
+- For any `ReviewCommentPayload` with arbitrary string fields, the result contains the
+  repository full_name, PR number, and file path.
+- Both `comment.body` and `comment.diff_hunk` are wrapped in untrusted markers.
+- The preamble appears.
+
+**Property for 5.2c — `composeCommandTriggerPrompt` completeness and `/agent` stripping**:
+- For any `IssueCommentPayload` where `body` starts with `/agent ` (slash-agent-space), the
+  result does not contain the literal `/agent ` prefix (the stripped part).
+- The result always contains the repository full_name and issue number.
+- The command body (after stripping) is wrapped in untrusted markers.
+- For any body that does NOT start with `/agent`, the body passes through unchanged (still
+  wrapped in untrusted markers).
+
+**Property for 5.2d — `composeCronPrompt` completeness**:
+- For any non-empty promptFileContent and repo string, the result contains the repo string and
+  the trimmed promptFileContent.
+- No untrusted markers or preamble are present (cron prompts are trusted input).
+
+**Mini spec.**
+
+- Add property tests to `test/tier1/prompt.test.ts` for properties 5.2a–5.2d. Use `fc.record`
+  and `fc.string` to generate arbitrary payloads. Assert completeness invariants for each
+  composer. Minimum 100 runs per property.
+- Add property tests to `test/tier1/validate-config.test.ts` for Property 12. Use `fc.integer`
+  to generate out-of-range ports and `fc.string` for empty/present secrets. Minimum 100 runs.
+- Add property tests to `test/tier1/logger.test.ts` for Properties 13, 14, and 15. Use
+  `fc.string`, `fc.dictionary`, and `fc.oneof` for the level generator. Minimum 100 runs per
+  property.
+- All new tests are pure Tier 1 — no fake backends, no filesystem, no network.
+- Tick `tasks.md` items `5.2a`, `5.2b`, `5.2c`, `5.2d` in `.kiro/specs/agent-router/tasks.md`
+  to `[x]`.
+- Tick `tasks.md` items `3.5`, `4.3`, `4.4`, `4.5` in `.kiro/specs/agent-router/tasks.md` to
+  `[x]`.
+
+**Acceptance criteria.**
+- `npm test` passes with the new property tests included.
+- Each property runs at least 100 iterations (default `fc.assert` behaviour).
+- `npm run typecheck` passes — no `any` or stray `as` casts in the new test code.
+
+---
+
 ### P3.3 — ACP server (PRODUCT.md Phase 2)
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.

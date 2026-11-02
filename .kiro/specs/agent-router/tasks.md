@@ -48,10 +48,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6_
   - [x] 3.3 Implement `loadConfig` — read `./config.json`, parse JSON (throw `FatalError` on missing/invalid), call `resolveEnvValues`, call `validateConfig`, return typed `AgentRouterConfig`
     - _Requirements: 1.1, 1.3_
-  - [x]* 3.4 Write property test for ENV: value resolution
-    - **Property 1: ENV: Value Resolution**
-    - **Validates: Requirements 1.2**
-  - [ ]* 3.5 Write property test for configuration validation
+  - [x]* 3.5 Write property test for configuration validation
     - **Property 12: Configuration Validation**
     - **Validates: Requirements 15.1, 15.2, 15.3, 15.4**
   - [ ]* 3.6 Write unit tests for config error paths
@@ -67,13 +64,13 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 17.1, 17.2, 17.6_
   - [x] 4.2 Implement secret filtering — ensure no log entry contains `webhookSecret`, resolved ENV values, or common secret patterns
     - _Requirements: 17.5_
-  - [ ]* 4.3 Write property test for log entry structure
+  - [x]* 4.3 Write property test for log entry structure
     - **Property 13: Log Entry Structure**
     - **Validates: Requirements 17.1, 17.2, 17.3, 17.4**
-  - [ ]* 4.4 Write property test for no secrets in log output
+  - [x]* 4.4 Write property test for no secrets in log output
     - **Property 14: No Secrets in Log Output**
     - **Validates: Requirements 17.5**
-  - [ ]* 4.5 Write property test for log level filtering
+  - [x]* 4.5 Write property test for log level filtering
     - **Property 15: Log Level Filtering**
     - **Validates: Requirements 17.6**
 
@@ -86,13 +83,13 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 11.3_
   - [x] 5.1d Implement `composeCronTaskPrompt` — pure function taking (task, repo, roadmapPath) returning structured prompt string
     - _Requirements: 11.4_
-  - [ ]* 5.2a Property test for `composeCheckRunPrompt` completeness
+  - [x]* 5.2a Property test for `composeCheckRunPrompt` completeness
     - Validates: Requirements 11.1
-  - [ ]* 5.2b Property test for `composeReviewCommentPrompt` completeness
+  - [x]* 5.2b Property test for `composeReviewCommentPrompt` completeness
     - Validates: Requirements 11.2
-  - [ ]* 5.2c Property test for `composeCommandTriggerPrompt` completeness and `/agent` stripping
+  - [x]* 5.2c Property test for `composeCommandTriggerPrompt` completeness and `/agent` stripping
     - Validates: Requirements 11.3
-  - [ ]* 5.2d Property test for `composeCronTaskPrompt` completeness
+  - [x]* 5.2d Property test for `composeCronTaskPrompt` completeness
     - Validates: Requirements 11.4
 
 - [x] 6. Roadmap parsing (`roadmap.ts`)
