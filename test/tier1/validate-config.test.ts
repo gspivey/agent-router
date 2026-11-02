@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fc from 'fast-check';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -620,5 +621,125 @@ describe('validateConfig', () => {
     });
     const result = validateConfig(cfg);
     expect(result.repos[0]!.adapter).toEqual({ type: 'kiro', model: 'some-model' });
+  });
+});
+
+// ── Property test for configuration validation (spec task 3.5) ──
+
+describe('property: configuration validation invariants (3.5)', () => {
+  // We need a real executable for valid configs; create one per test group
+  let executablePath: string;
+  let executableDir: string;
+
+  beforeEach(() => {
+    executableDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prop-config-'));
+    executablePath = path.join(executableDir, 'fake-kiro');
+    fs.writeFileSync(executablePath, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(executablePath, 0o755);
+  });
+
+  afterEach(() => {
+    fs.rmSync(executableDir, { recursive: true, force: true });
+  });
+
+  it('always throws FatalError for ports outside [1, 65535]', () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.integer({ max: 0 }),
+          fc.integer({ min: 65536 }),
+        ),
+        (port) => {
+          const cfg = {
+            port,
+            webhookSecret: 'secret',
+            kiroPath: executablePath,
+            repos: [{ owner: 'org', name: 'repo' }],
+            cron: [],
+          };
+          expect(() => validateConfig(cfg)).toThrow(FatalError);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('always throws FatalError for empty webhookSecret', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 65535 }),
+        (port) => {
+          const cfg = {
+            port,
+            webhookSecret: '',
+            kiroPath: executablePath,
+            repos: [{ owner: 'org', name: 'repo' }],
+            cron: [],
+          };
+          expect(() => validateConfig(cfg)).toThrow(FatalError);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('always throws FatalError when any repo has empty owner', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 30 }),
+        (name) => {
+          const cfg = {
+            port: 3000,
+            webhookSecret: 'secret',
+            kiroPath: executablePath,
+            repos: [{ owner: '', name }],
+            cron: [],
+          };
+          expect(() => validateConfig(cfg)).toThrow(FatalError);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('always throws FatalError when any repo has empty name', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 30 }),
+        (owner) => {
+          const cfg = {
+            port: 3000,
+            webhookSecret: 'secret',
+            kiroPath: executablePath,
+            repos: [{ owner, name: '' }],
+            cron: [],
+          };
+          expect(() => validateConfig(cfg)).toThrow(FatalError);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('always succeeds for valid port, non-empty secret, and non-empty repo owner/name', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 65535 }),
+        fc.string({ minLength: 1, maxLength: 50 }),
+        fc.string({ minLength: 1, maxLength: 30 }),
+        fc.string({ minLength: 1, maxLength: 30 }),
+        (port, secret, owner, name) => {
+          const cfg = {
+            port,
+            webhookSecret: secret,
+            kiroPath: executablePath,
+            repos: [{ owner, name }],
+            cron: [],
+          };
+          expect(() => validateConfig(cfg)).not.toThrow();
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 });

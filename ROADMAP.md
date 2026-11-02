@@ -37,6 +37,22 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 115. Deferred property tests: prompt composers, config validation, and logger
+
+The agent-router spec (`tasks.md` items `5.2a`–`5.2d`, `3.5`, `4.3`, `4.4`, `4.5`) specified
+eight property-based tests that were deferred when their parent tasks shipped. This item delivers
+the fast-check coverage for the prompt composers (completeness invariants), config validation
+(invalid configs reliably rejected), and the structured logger (entry structure, secret redaction,
+level filtering). All tests go into existing Tier 1 test files (`test/tier1/prompt.test.ts`,
+`test/tier1/validate-config.test.ts`, `test/tier1/logger.test.ts`), are pure with no I/O, and
+run at the default 100 iterations. On completion, ticks `tasks.md` items `5.2a`, `5.2b`, `5.2c`,
+`5.2d`, `3.5`, `4.3`, `4.4`, `4.5` in `.kiro/specs/agent-router/tasks.md`.
+
+- Spec: `BACKLOG.md § P2.32`
+- [x] Complete · PR: #191
+
+---
+
 ### 114. Deferred property tests: wake policy and config ENV: resolution
 
 The agent-router spec (`tasks.md` items `8.4`, `8.5`, `3.4`) specified three property-based
