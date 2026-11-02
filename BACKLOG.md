@@ -1069,7 +1069,7 @@ SPA shows no banner.
 
 ---
 
-### P2.34 — Overview auto-refresh and `pending_wakes_count`
+### P2.34 — Overview auto-refresh and `pending_wakes_count` ✅ DONE (PR #193)
 
 **Why this exists.** The SPA Overview page loads once on mount but never refreshes. An
 operator checking on daemon status after a CI event fires sees stale data until they reload.

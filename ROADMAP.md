@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 117. Overview auto-refresh and `pending_wakes_count`
 
 The SPA Overview page loads once on mount but never auto-refreshes, so an operator checking
@@ -47,11 +51,9 @@ logic), Tier 2 (DB count), and client unit tests (stat card, timestamp, refresh 
 interval lifecycle).
 
 - Spec: `BACKLOG.md § P2.34`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #193
 
 ---
-
-## Completed
 
 ### 116. Surface `token_expiry` in the SPA Overview dashboard
 
