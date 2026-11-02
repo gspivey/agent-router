@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 110. Fix stale agent-router spec parent task checkbox
 
 Tick the non-optional parent task `8` (Wake policy and event routing) in
@@ -43,11 +47,9 @@ ROADMAP items 97 (P2.22), 98 (P2.23), and 100 (P2.24). Also adds the BACKLOG.md 
 this housekeeping item. Documentation-only: no code, no tests.
 
 - Spec: `BACKLOG.md § P2.27`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #185
 
 ---
-
-## Completed
 
 ### 109. Annotate BACKLOG.md § P3.6 as done
 
