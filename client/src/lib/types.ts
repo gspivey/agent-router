@@ -262,4 +262,10 @@ export interface OverviewResponse {
   readonly health: 'healthy' | 'degraded';
   readonly version: string;
   readonly uptime_s: number;
+  /**
+   * Present when the daemon has detected a config change that requires a
+   * restart to take effect (BACKLOG.md § P2.30). Absent when no restart is
+   * required.
+   */
+  readonly restart_required?: { readonly fields: string[]; readonly since: string };
 }

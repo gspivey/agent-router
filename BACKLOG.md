@@ -772,6 +772,51 @@ this fix is ticked.
 
 ---
 
+### P2.30 — Surface `restart_required` in the SPA Overview dashboard
+
+**Problem.** `GET /health` already computes and exposes `restart_required` (introduced by
+ROADMAP item 25, PR #65, via `src/restart-required.ts` and `src/health.ts`). When a config
+hot-reload detects a change to a restart-required field (`port`, `controlPort`, `bindPublic`,
+`kiroPath`, `trustedProxy`), the daemon sets a `restart_required` condition and surfaces it on
+`GET /health`. However, `GET /overview` does NOT include this condition, so the SPA Overview
+dashboard has no way to surface it. An operator who changed `kiroPath` in `config.json` has no
+visual indicator in the SPA that a restart is needed — they would have to `curl /health`
+manually to discover it.
+
+**Approach.** Add an optional `restart_required` field to the `OverviewResponse` type and to
+the `GET /overview` handler. The field mirrors the shape already used by `GET /health`:
+`{ fields: string[]; since: string }`. When no restart is required the field is absent
+(not `null`) so JSON-serialized responses stay compact. Wire the `restartRequired` getter
+through `WebAppDeps` → `createWebRoutes` deps → the `GET /overview` handler. Update the
+client-owned `OverviewResponse` type in `client/src/lib/types.ts` and show a dismissable
+amber banner in `Overview.svelte` when the field is present.
+
+**Mini spec.**
+
+- Add `restart_required?: { fields: string[]; since: string }` to `OverviewResponse` in
+  `src/web-routes.ts`.
+- Add `restartRequired?: () => RestartRequiredCondition | null` to the `createWebRoutes` deps.
+  Wire it from `WebAppDeps` through `createWebRoutes` to the `GET /overview` handler. When
+  present and non-null, serialize as `{ fields, since: new Date(since).toISOString() }` and
+  include in the response body.
+- Update `client/src/lib/types.ts` `OverviewResponse` to add the optional field.
+- In `Overview.svelte`, render an amber banner when `overview.restart_required` is defined.
+  The banner shows the affected fields and the ISO `since` timestamp. No dismiss action
+  required (the condition clears only on daemon restart).
+- Wire `restartRequired` from `index.ts` into `createWebApp` → `createWebRoutes` (one-line
+  addition to the `routeDeps` object).
+- Tier 1 test: `GET /overview` handler includes `restart_required` when the getter returns a
+  condition, and omits the field when the getter returns null.
+- Tier 2 test: after a config reload that changes a restart-required field, `GET /overview`
+  returns `restart_required` with the changed fields.
+
+**Acceptance.** When `restartRequired` is set (e.g., `kiroPath` changed via config hot-reload),
+`GET /overview` returns `{ ..., restart_required: { fields: ["kiroPath"], since: "<ISO>" } }`.
+The SPA Overview dashboard shows an amber banner listing the affected fields. When no restart
+is required, `GET /overview` omits the `restart_required` key and the SPA shows no banner.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)

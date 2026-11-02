@@ -210,4 +210,42 @@ describe('Overview', () => {
     await waitFor(() => expect(queryByTestId('stat-row-skeleton')).toBeNull());
     expect(queryByTestId('overview-error')).toBeNull();
   });
+
+  // ---- restart_required banner (BACKLOG.md § P2.30) ----
+
+  it('does not show restart-required banner when restart_required is absent', async () => {
+    getOverview.mockResolvedValue(makeOverview({ /* no restart_required */ }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { queryByTestId } = render(Overview);
+    await waitFor(() => expect(queryByTestId('stat-row-skeleton')).toBeNull());
+    expect(queryByTestId('restart-required-banner')).toBeNull();
+  });
+
+  it('shows amber restart-required banner with affected fields when restart_required is set', async () => {
+    const since = new Date('2026-11-02T12:00:00.000Z').toISOString();
+    getOverview.mockResolvedValue(
+      makeOverview({
+        restart_required: { fields: ['kiroPath'], since },
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const banner = await findByTestId('restart-required-banner');
+    expect(banner).toBeTruthy();
+    expect(banner.textContent).toContain('kiroPath');
+  });
+
+  it('shows all affected fields in the banner when multiple fields changed', async () => {
+    const since = new Date().toISOString();
+    getOverview.mockResolvedValue(
+      makeOverview({
+        restart_required: { fields: ['port', 'controlPort'], since },
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const banner = await findByTestId('restart-required-banner');
+    expect(banner.textContent).toContain('port');
+    expect(banner.textContent).toContain('controlPort');
+  });
 });

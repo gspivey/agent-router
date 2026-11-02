@@ -100,6 +100,24 @@
       </button>
     </div>
   {:else}
+    <!-- Restart-required banner (BACKLOG.md § P2.30) -->
+    {#if overview !== null && overview.restart_required !== undefined}
+      <div
+        data-testid="restart-required-banner"
+        role="alert"
+        class="flex flex-col gap-1 rounded-lg border border-[var(--warning,#b45309)] bg-[var(--warning-bg,#fffbeb)] p-3 text-sm"
+      >
+        <p class="m-0 font-semibold text-[var(--warning-text,#92400e)]">
+          ⚠ Restart required
+        </p>
+        <p class="m-0 text-[var(--warning-text,#92400e)]">
+          The following config fields changed and require a daemon restart to take effect:
+          <strong>{overview.restart_required.fields.join(', ')}</strong>.
+          Detected at {new Date(overview.restart_required.since).toLocaleString()}.
+        </p>
+      </div>
+    {/if}
+
     <!-- Stat row (Req 12.2, 12.3) -->
     {#if loading}
       <div

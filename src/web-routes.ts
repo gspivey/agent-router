@@ -16,6 +16,7 @@ import { getNextCronFire } from './cron-next.js';
 import { deriveWaitingFor } from './ui/logic.js';
 import { computeProjectHealth, computeTokenCoverage, partitionRepos } from './projects.js';
 import type { ProjectConfig, RepoSessionCounts } from './projects.js';
+import type { RestartRequiredCondition } from './restart-required.js';
 
 type WebEnv = { Variables: { auth: AuthResult } };
 
@@ -440,6 +441,12 @@ export interface OverviewResponse {
   readonly health: 'healthy' | 'degraded';
   readonly version: string;
   readonly uptime_s: number;
+  /**
+   * Present when the daemon has detected a config change that requires a
+   * restart to take effect (e.g. `port`, `kiroPath`). Mirrors the shape from
+   * `GET /health`. Absent when no restart is required.
+   */
+  readonly restart_required?: { readonly fields: string[]; readonly since: string };
 }
 
 /**
@@ -561,6 +568,12 @@ export function createWebRoutes(deps: {
   config?: AgentRouterConfig;
   tokenStore?: TokenStore;
   db?: Database;
+  /**
+   * Getter for the current restart-required condition. When present and
+   * returning a non-null value, `GET /overview` includes `restart_required`
+   * in the response body so the SPA can surface an operator alert.
+   */
+  restartRequired?: () => RestartRequiredCondition | null;
 }): Hono<WebEnv> {
   const { sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, config, tokenStore, db } = deps;
   const app = new Hono<WebEnv>();
@@ -1115,6 +1128,13 @@ export function createWebRoutes(deps: {
       nowS,
     });
 
+    // Include restart_required when the daemon has detected a config change
+    // that requires a restart to take effect (BACKLOG.md § P2.30).
+    const rrCondition = deps.restartRequired?.() ?? null;
+    const restartRequired = rrCondition !== null
+      ? { fields: rrCondition.fields, since: new Date(rrCondition.since).toISOString() }
+      : undefined;
+
     const body: OverviewResponse = {
       active_sessions: active.length,
       queue_depth: computeQueueDepth(),
@@ -1123,7 +1143,9 @@ export function createWebRoutes(deps: {
       health,
       version: overviewVersion,
       uptime_s: Math.floor((Date.now() - overviewStartedAt) / 1000),
+      ...(restartRequired !== undefined ? { restart_required: restartRequired } : {}),
     };
+
     return c.json(body);
   });
 

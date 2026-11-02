@@ -35,6 +35,25 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+## Active Roadmap
+
+### 113. Surface `restart_required` in the SPA Overview dashboard
+
+`GET /health` already computes and exposes `restart_required` (ROADMAP item 25, PR #65) but
+`GET /overview` does not include it, so the SPA Overview page has no way to surface the
+condition. When a config hot-reload detects a change to a restart-required field (`port`,
+`controlPort`, `bindPublic`, `kiroPath`, `trustedProxy`), the operator has no visual indicator
+in the dashboard. This item adds the optional `restart_required` field to `OverviewResponse`
+in `src/web-routes.ts`, wires the `restartRequired` getter through `WebAppDeps` and
+`createWebRoutes`, extends the client-owned type in `client/src/lib/types.ts`, and renders an
+amber banner in `Overview.svelte`. Includes Tier 1 (pure handler logic) and Tier 2 (config
+reload sets the field) tests.
+
+- Spec: `BACKLOG.md § P2.30`
+- [ ] Complete · PR: —
+
+---
+
 ## Completed
 
 ### 112. Annotate BACKLOG.md § P0.3 as done
