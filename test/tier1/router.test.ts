@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as fc from 'fast-check';
 import {
   filterEventType,
   isCommandTrigger,
@@ -780,5 +781,347 @@ describe('evaluateWakePolicy — self-wake prevention', () => {
     const result = evaluateWakePolicy(event, db, config);
     // No comment.id → extractWebhookCommentId returns null → skip self-authored check
     expect(result.wake).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 6: Event type filtering (spec task 8.4)
+// ---------------------------------------------------------------------------
+
+describe('Property 6: Event type filtering', () => {
+  // Arbitrary payload structure for comment events (issue_comment /
+  // pull_request_review_comment).  We need the minimal fields that
+  // filterEventType inspects: action, comment.user.login, comment.user.type,
+  // comment.author_association, and repository.owner.login.
+  const arbitraryCommentPayload = (action: string, authorAssoc: string, ownerLogin: string, commentBody: string) =>
+    fc.record({
+      action: fc.constant(action),
+      comment: fc.record({
+        body: fc.constant(commentBody),
+        user: fc.record({
+          login: fc.constant(ownerLogin),
+          type: fc.constant('User'),
+        }),
+        author_association: fc.constant(authorAssoc),
+      }),
+      repository: fc.record({
+        full_name: fc.constant(`${ownerLogin}/repo`),
+        owner: fc.record({ login: fc.constant(ownerLogin) }),
+      }),
+      issue: fc.constant({ number: 1, pull_request: {} }),
+    });
+
+  // Any string that is NOT one of the three known event types
+  const nonWakeableEventType = fc.string({ minLength: 1, maxLength: 40 }).filter(
+    (s) => s !== 'check_run' && s !== 'issue_comment' && s !== 'pull_request_review_comment',
+  );
+
+  it('Property 6.1: unknown event types always produce wakeable:false with wrong_event_type', () => {
+    fc.assert(
+      fc.property(
+        nonWakeableEventType,
+        fc.anything(),
+        (eventType, payload) => {
+          const result = filterEventType(eventType, payload);
+          return result.wakeable === false && result.filterReason === 'wrong_event_type';
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.2: check_run with action=completed is always wakeable', () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          action: fc.constant('completed'),
+          check_run: fc.record({
+            conclusion: fc.string({ minLength: 1, maxLength: 20 }),
+            pull_requests: fc.array(fc.record({ number: fc.nat({ max: 10000 }) }), { maxLength: 3 }),
+          }),
+        }),
+        (payload) => {
+          const result = filterEventType('check_run', payload);
+          return result.wakeable === true && result.filterReason === 'wakeable';
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.3: check_run with action !== completed is never wakeable', () => {
+    const nonCompletedAction = fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s !== 'completed');
+    fc.assert(
+      fc.property(
+        nonCompletedAction,
+        (action) => {
+          const result = filterEventType('check_run', { action });
+          return result.wakeable === false && result.filterReason === 'wrong_action';
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.4: comment events with action !== created are never wakeable', () => {
+    const nonCreatedAction = fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s !== 'created');
+    const commentEventType = fc.constantFrom('issue_comment', 'pull_request_review_comment');
+    fc.assert(
+      fc.property(
+        commentEventType,
+        nonCreatedAction,
+        (eventType, action) => {
+          const result = filterEventType(eventType, { action });
+          return result.wakeable === false && result.filterReason === 'wrong_action';
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.5: tier-1 comment events (owner) are always wakeable', () => {
+    // Owner login match → tier_1 → wake regardless of body
+    fc.assert(
+      fc.property(
+        fc.constantFrom('issue_comment', 'pull_request_review_comment'),
+        fc.string({ minLength: 1, maxLength: 30 }).filter((s) => /^[a-z0-9-]+$/i.test(s)), // valid GitHub login chars
+        fc.string({ minLength: 0, maxLength: 200 }), // any comment body
+        (eventType, ownerLogin, body) => {
+          const payload = {
+            action: 'created',
+            comment: {
+              body,
+              user: { login: ownerLogin, type: 'User' },
+              author_association: 'OWNER',
+            },
+            repository: {
+              full_name: `${ownerLogin}/repo`,
+              owner: { login: ownerLogin },
+            },
+            issue: { number: 1, pull_request: {} },
+            pull_request: { number: 1 },
+          };
+          const result = filterEventType(eventType, payload);
+          return result.wakeable === true && result.trustTier === 'tier_1';
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.6: tier-2 comment events (MEMBER) wake only when body starts with /agent', () => {
+    const commandBody = fc.oneof(
+      fc.constant('/agent'),
+      fc.string({ minLength: 1, maxLength: 100 }).map((s) => `/agent ${s}`),
+      fc.string({ minLength: 1, maxLength: 100 }).map((s) => `/agent\n${s}`),
+    );
+    const nonCommandBody = fc.string({ minLength: 0, maxLength: 100 }).filter(
+      (s) => !s.startsWith('/agent') || (s.length > 6 && s[6] !== ' ' && s[6] !== '\n'),
+    ).filter((s) => s !== '/agent');
+
+    fc.assert(
+      fc.property(
+        fc.constantFrom('issue_comment', 'pull_request_review_comment'),
+        commandBody,
+        (eventType, body) => {
+          const payload = {
+            action: 'created',
+            comment: {
+              body,
+              user: { login: 'collab', type: 'User' },
+              author_association: 'MEMBER',
+            },
+            repository: {
+              full_name: 'owner/repo',
+              owner: { login: 'owner' },
+            },
+            issue: { number: 1, pull_request: {} },
+            pull_request: { number: 1 },
+          };
+          const result = filterEventType(eventType, payload);
+          return result.wakeable === true && result.trustTier === 'tier_2';
+        },
+      ),
+      { numRuns: 100 },
+    );
+
+    fc.assert(
+      fc.property(
+        fc.constantFrom('issue_comment', 'pull_request_review_comment'),
+        nonCommandBody,
+        (eventType, body) => {
+          const payload = {
+            action: 'created',
+            comment: {
+              body,
+              user: { login: 'collab', type: 'User' },
+              author_association: 'MEMBER',
+            },
+            repository: {
+              full_name: 'owner/repo',
+              owner: { login: 'owner' },
+            },
+            issue: { number: 1, pull_request: {} },
+            pull_request: { number: 1 },
+          };
+          const result = filterEventType(eventType, payload);
+          return result.wakeable === false && result.trustTier === 'tier_2';
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.7: tier-3 comment events (NONE) are never wakeable', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('issue_comment', 'pull_request_review_comment'),
+        fc.string({ minLength: 0, maxLength: 200 }), // any body including /agent
+        (eventType, body) => {
+          const payload = {
+            action: 'created',
+            comment: {
+              body,
+              user: { login: 'outsider', type: 'User' },
+              author_association: 'NONE',
+            },
+            repository: {
+              full_name: 'owner/repo',
+              owner: { login: 'owner' },
+            },
+            issue: { number: 1, pull_request: {} },
+            pull_request: { number: 1 },
+          };
+          const result = filterEventType(eventType, payload);
+          return result.wakeable === false && result.trustTier === 'tier_3';
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 7: PR number resolution (spec task 8.5)
+// ---------------------------------------------------------------------------
+
+describe('Property 7: PR number resolution', () => {
+  it('Property 7.1: pull_request_review_comment with valid pull_request.number returns it', () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 100000 }),
+        (prNumber) => {
+          const payload = { pull_request: { number: prNumber } };
+          const result = resolvePRNumber('pull_request_review_comment', payload);
+          return result === prNumber;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 7.2: pull_request_review_comment without pull_request.number returns null', () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.constant({}),
+          fc.constant({ pull_request: null }),
+          fc.constant({ pull_request: {} }),
+          fc.constant({ pull_request: { number: 'not-a-number' } }),
+          fc.constant({ pull_request: { number: true } }),
+        ),
+        (payload) => {
+          const result = resolvePRNumber('pull_request_review_comment', payload);
+          return result === null;
+        },
+      ),
+      { numRuns: 50 },
+    );
+  });
+
+  it('Property 7.3: issue_comment without issue.pull_request always returns null', () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 100000 }),
+        (issueNumber) => {
+          const payload = { issue: { number: issueNumber } }; // no pull_request field
+          const result = resolvePRNumber('issue_comment', payload);
+          return result === null;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 7.4: issue_comment with issue.pull_request and valid number returns it', () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 100000 }),
+        (prNumber) => {
+          const payload = {
+            issue: { number: prNumber, pull_request: { url: 'https://github.com/...' } },
+          };
+          const result = resolvePRNumber('issue_comment', payload);
+          return result === prNumber;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 7.5: check_run with pull_requests[0].number returns it', () => {
+    fc.assert(
+      fc.property(
+        fc.record({ number: fc.nat({ max: 100000 }) }),
+        fc.array(
+          fc.record({ number: fc.nat({ max: 100000 }) }),
+          { minLength: 0, maxLength: 4 },
+        ),
+        (firstPr, otherPrs) => {
+          const prs = [firstPr, ...otherPrs];
+          const payload = { check_run: { pull_requests: prs } };
+          const result = resolvePRNumber('check_run', payload);
+          return result === firstPr.number;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 7.6: check_run with empty pull_requests returns null', () => {
+    const result = resolvePRNumber('check_run', { check_run: { pull_requests: [] } });
+    expect(result).toBeNull();
+  });
+
+  it('Property 7.7: non-null return is always a positive integer', () => {
+    const knownEventTypes = ['check_run', 'issue_comment', 'pull_request_review_comment'];
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...knownEventTypes),
+        fc.anything(),
+        (eventType, payload) => {
+          const result = resolvePRNumber(eventType, payload);
+          if (result === null) return true;
+          return Number.isInteger(result) && result > 0;
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  it('Property 7.8: unknown event types always return null', () => {
+    const unknownEventType = fc.string({ minLength: 1, maxLength: 40 }).filter(
+      (s) => !['check_run', 'issue_comment', 'pull_request_review_comment'].includes(s),
+    );
+    fc.assert(
+      fc.property(
+        unknownEventType,
+        fc.anything(),
+        (eventType, payload) => {
+          return resolvePRNumber(eventType, payload) === null;
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 });

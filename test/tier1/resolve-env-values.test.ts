@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fc from 'fast-check';
 import { resolveEnvValues } from '../../src/config.js';
 import { FatalError } from '../../src/errors.js';
 
@@ -107,5 +108,152 @@ describe('resolveEnvValues', () => {
       expect(err).toBeInstanceOf(FatalError);
       expect((err as FatalError).message).toContain('XYZ_MISSING');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 1: ENV: value resolution (spec task 3.4)
+// ---------------------------------------------------------------------------
+
+describe('Property 1: ENV: value resolution', () => {
+  // We use a fixed test-namespace prefix to avoid collision with real env vars
+  const TEST_PREFIX = 'AGENT_ROUTER_PROP_TEST_';
+
+  // Clean up any test env vars after each test
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith(TEST_PREFIX)) {
+        delete process.env[key];
+      }
+    }
+  });
+
+  it('Property 1.1: plain string values pass through unchanged', () => {
+    // For any string that does NOT start with "ENV:", the value is unchanged
+    const nonEnvString = fc.string({ minLength: 0, maxLength: 100 }).filter(
+      (s) => !s.startsWith('ENV:'),
+    );
+    // Avoid prototype-polluting keys (__proto__, constructor, prototype) which
+    // behave differently when used as object keys via computed property syntax
+    const safeKey = fc.string({ minLength: 1, maxLength: 20 })
+      .filter((k) => /^[a-z_][a-z0-9_]*$/i.test(k))
+      .filter((k) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype');
+    fc.assert(
+      fc.property(
+        safeKey,
+        nonEnvString,
+        (key, value) => {
+          const result = resolveEnvValues({ [key]: value });
+          return (result as Record<string, unknown>)[key] === value;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 1.2: ENV: prefixed values resolve to process.env value (trimmed)', () => {
+    // Generate unique variable names using a counter to avoid collisions between runs
+    let counter = 0;
+    fc.assert(
+      fc.property(
+        // Env var value (arbitrary printable string, possibly with surrounding whitespace)
+        fc.string({ minLength: 0, maxLength: 80 }),
+        (rawEnvValue) => {
+          const varName = `${TEST_PREFIX}P1_${counter++}`;
+          process.env[varName] = rawEnvValue;
+          try {
+            const result = resolveEnvValues({ key: `ENV:${varName}` });
+            const resolved = (result as Record<string, unknown>)['key'];
+            // Resolved value must be the trimmed env var value
+            return resolved === rawEnvValue.trim();
+          } finally {
+            delete process.env[varName];
+          }
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 1.3: non-ENV: strings survive nested objects unchanged', () => {
+    const nonEnvString = fc.string({ minLength: 0, maxLength: 50 }).filter(
+      (s) => !s.startsWith('ENV:'),
+    );
+    const safeKey = fc.string({ minLength: 1, maxLength: 15 })
+      .filter((k) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k))
+      .filter((k) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype');
+    fc.assert(
+      fc.property(
+        safeKey,
+        safeKey,
+        nonEnvString,
+        (outerKey, innerKey, value) => {
+          // Skip if keys collide — they'd overwrite each other in the record
+          if (outerKey === innerKey) return true;
+          const input = { [outerKey]: { [innerKey]: value } };
+          const result = resolveEnvValues(input) as Record<string, Record<string, unknown>>;
+          return result[outerKey]?.[innerKey] === value;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 1.4: after resolution, no ENV: strings remain when all vars are set', () => {
+    // Build a flat object with a mix of ENV: and plain values; ensure all referenced vars are set
+    let counter = 0;
+    fc.assert(
+      fc.property(
+        // Between 1 and 5 ENV: entries
+        fc.array(
+          fc.tuple(
+            fc.string({ minLength: 1, maxLength: 15 }).filter((k) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)).filter((k) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype'),
+            fc.string({ minLength: 0, maxLength: 40 }), // env var value
+          ),
+          { minLength: 1, maxLength: 5 },
+        ),
+        // Some plain-value entries
+        fc.array(
+          fc.tuple(
+            fc.string({ minLength: 1, maxLength: 15 }).filter((k) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)).filter((k) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype'),
+            fc.string({ minLength: 0, maxLength: 40 }).filter((s) => !s.startsWith('ENV:')),
+          ),
+          { minLength: 0, maxLength: 5 },
+        ),
+        (envEntries, plainEntries) => {
+          const varNames: string[] = [];
+          const input: Record<string, string> = {};
+
+          // Set all ENV: entries in process.env using unique names
+          for (const [key, val] of envEntries) {
+            const varName = `${TEST_PREFIX}P1I_${counter++}`;
+            process.env[varName] = val;
+            varNames.push(varName);
+            input[key] = `ENV:${varName}`;
+          }
+
+          for (const [key, val] of plainEntries) {
+            // Avoid overwriting ENV: keys if same key appears in both arrays
+            if (!(key in input)) {
+              input[key] = val;
+            }
+          }
+
+          try {
+            const result = resolveEnvValues(input) as Record<string, unknown>;
+            // Invariant: no remaining ENV: strings
+            const hasEnvStrings = Object.values(result).some(
+              (v) => typeof v === 'string' && v.startsWith('ENV:'),
+            );
+            return !hasEnvStrings;
+          } finally {
+            for (const varName of varNames) {
+              delete process.env[varName];
+            }
+          }
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 });
