@@ -38,6 +38,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 107. Add BACKLOG.md entries for KiroAdapter.installHooks and second-adapter implementation
+
+Add two missing `BACKLOG.md` entries that were specified in the `agent-adapter-completion`
+spec (`tasks.md` items `7.1` and `7.2`) but never actually written. `P2.26` captures the
+deferred work to implement real `KiroAdapter.installHooks` (writing the Kiro hook-config JSON
+for sub-second verification triggers vs the ACP fallback). `P3.6` captures the deferred work
+to implement a second `AgentAdapter` (Claude Code or OpenCode) to validate the adapter
+abstraction introduced in that spec. Documentation-only: no code, no tests.
+
+- Spec: `.kiro/specs/agent-adapter-completion/` · tasks `7.1`, `7.2`
+- [x] Complete · PR: #182
+
+---
+
 ### 106. Self-dogfooding: tier3 in CI on PRs against agent-router
 
 Add `.github/workflows/tier3-pr.yml` that runs the partial tier-3 suite on every

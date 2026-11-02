@@ -667,6 +667,59 @@ Additionally, BACKLOG items P2.1 (session persistence — shipped as ROADMAP ite
 
 ---
 
+### P2.26 — Implement real `KiroAdapter.installHooks`
+
+**Context.** The `agent-adapter-completion` feature (PR #182) ships `KiroAdapter` with `installHooks`
+and `uninstallHooks` as no-op stubs that only log. The spec deferred real hook installation because
+the ACP-layer fallback (fire verifySession after every `sendPrompt`) already closes the completion
+loop. This item delivers the latency improvement if production data shows the ACP fallback is too
+slow.
+
+**Why it matters.** The ACP fallback fires verifySession only after `sendPrompt` resolves — meaning
+the daemon learns the PR was merged only when the agent takes its next action. With the hook in
+place, `KiroAdapter` writes `~/.kiro/agents/agent-router.json` to register a `PostToolUse`
+matcher on `execute_bash` + a `Stop` hook, both pointing at `POST /hooks/event` with the daemon
+bearer token. This triggers verifySession within milliseconds of the merge command finishing,
+rather than waiting for the next ACP turn.
+
+**Prerequisites.** Real hook installation requires:
+1. The daemon to be running and the bearer token to be readable at `$rootDir/daemon-token`.
+2. The Kiro CLI to support custom agent profiles with `PostToolUse` and `Stop` hooks pointing at
+   an HTTP endpoint (currently documented in `docs/kiro-hooks.md`; the format must be validated
+   against the current Kiro version before shipping).
+3. A test strategy for the hook-write path — likely an integration test that checks the JSON file
+   is written correctly and a unit test for the hook script command parser.
+
+**Mini spec.**
+
+- `installHooks(opts: { sessionId: string; daemonUrl: string; bearerToken: string })`:
+  - Write (or merge) `~/.kiro/agents/agent-router.json` with `PostToolUse` (on `execute_bash`) and
+    `Stop` hooks both POSTing `{ session_id, agent_name, event_type }` to `opts.daemonUrl + '/hooks/event'`
+    with `Authorization: Bearer <token>`.
+  - Read-modify-write atomically; preserve any existing agent config fields not managed by this
+    method.
+  - Log `info` on success; log `warn` and continue (do not throw) on any file error.
+- `uninstallHooks(opts: { sessionId?: string })`:
+  - Remove the `PostToolUse` and `Stop` hook entries written by this session's `installHooks` call.
+  - No-op if the file does not exist or lacks these entries.
+- Update `src/session-mgr.ts` to call `adapter.installHooks(...)` after session creation when
+  `adapter.capabilities().events` includes `'tool.post'` or `'session.end'`.
+- Tier 1 test: `installHooks` writes the expected JSON shape; `uninstallHooks` removes it without
+  disturbing other fields.
+- Tier 2 test: a session with the real `KiroAdapter` gets the hook file written; verifySession fires
+  when a `tool.post` hook event arrives at `/hooks/event`.
+
+**When to ship.** When production usage shows the ACP fallback delay (measured as time from merge
+to `session_verified` stream entry) consistently exceeds 30 seconds, making the self-correction
+loop noticeably slow. If latency is acceptable with the fallback, this can remain deferred
+indefinitely.
+
+**Acceptance.** `KiroAdapter.installHooks` writes a valid `~/.kiro/agents/agent-router.json`
+containing the hook configuration. A simulated `PostToolUse` hook event reaching `/hooks/event`
+triggers `verifySession` within 1 second.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)
@@ -723,6 +776,45 @@ Out of scope for tactical backlog. Tracked in `PRODUCT.md`.
 ### P3.5 — Multi-repo project sandboxing (PRODUCT.md Phase 4)
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.
+
+### P3.6 — Second-adapter implementation (Claude Code or OpenCode)
+
+**Context.** The `agent-adapter-completion` feature (PR #182) ships the `AgentAdapter` interface
+in `src/agent-adapter.ts` and `KiroAdapter` as the first concrete implementation. The interface
+was designed for pluggability — a second adapter would validate the abstraction, prove that
+agent-router can drive non-Kiro agents, and enable per-session backend selection.
+
+**Why it matters.** PRODUCT.md Phase 5 ("Swappable Agent Backends") requires at least two
+working adapters to be meaningful. Shipping one now gives production data on the adapter
+interface before committing to Phase 5.
+
+**Candidate backends:**
+- **Claude Code** (Anthropic CLI with ACP stdio) — most similar to Kiro; the `ClaudeCodeAdapter`
+  block in `src/isolation-startup.ts` already blocks it from the isolation path, which would need
+  lifting. See `.kiro/specs/claude-code-adapter/` for the existing spec.
+- **OpenCode** — community-built ACP-compatible agent; less well-documented.
+
+**Prerequisites.**
+1. Pick one backend and validate it speaks ACP over stdio. Check its startup flags, session
+   lifecycle, and any differences from Kiro in how `session/create`, `session/load`, and
+   `session/prompt` behave.
+2. The `AgentAdapter` interface may need extension (e.g., different capability flags, different
+   env var injection conventions). Update the interface if needed.
+
+**Mini spec (to be written when a real second-agent need arises).**
+- Create `src/adapters/<name>.ts` implementing `AgentAdapter`.
+- Add `adapter: '<name>'` config option to `repos[]` for per-repo backend selection.
+- Extend `src/session-mgr.ts` to look up the adapter from config at session creation time.
+- Tier 2 test: two sessions, one using KiroAdapter and one using the new adapter, both
+  completing successfully.
+- Lift or update the `ClaudeCodeAdapter` block in `src/isolation-startup.ts` if Claude Code is
+  the chosen backend.
+
+**When to ship.** When there is a real operational need for a second agent backend — e.g., a
+repo that works better with Claude Code's tool surface, or a user who cannot use Kiro.
+
+**Acceptance.** At least one session successfully completes using the new adapter with no changes
+to the session manager routing logic beyond adapter selection at spawn time.
 
 ---
 
