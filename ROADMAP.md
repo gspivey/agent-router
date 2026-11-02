@@ -35,6 +35,9 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+
+## Completed
+
 ### 105. Annotate BACKLOG.md § P3.1 as done
 
 Update `BACKLOG.md` to add `✅ DONE (PRs #115, #118)` annotation to P3.1
@@ -43,12 +46,9 @@ Update `BACKLOG.md` to add `✅ DONE (PRs #115, #118)` annotation to P3.1
 no code, no tests.
 
 - Spec: `BACKLOG.md § P3.1`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #180
 
 ---
-
-
-## Completed
 
 ### 104. ROADMAP housekeeping — archive completed items to Completed section
 
