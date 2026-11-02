@@ -33,8 +33,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
----
+### 110. Fix stale agent-router spec parent task checkbox
 
+Tick the non-optional parent task `8` (Wake policy and event routing) in
+`.kiro/specs/agent-router/tasks.md` to `[x]`. All non-optional sub-tasks (`8.1`, `8.2`,
+`8.3`, `8.6`) are fully implemented; only the optional property tests (`8.4*`, `8.5*`) remain
+unchecked, which does not gate the parent. This is the same stale-checkbox pattern fixed in
+ROADMAP items 97 (P2.22), 98 (P2.23), and 100 (P2.24). Also adds the BACKLOG.md entry for
+this housekeeping item. Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.27`
+- [ ] Complete · PR: —
+
+---
 
 ## Completed
 
