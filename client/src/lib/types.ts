@@ -284,4 +284,24 @@ export interface OverviewResponse {
     readonly severity: 'warn' | 'error';
     readonly expires_at: string;
   };
+  /**
+   * Active and recently-stopped continuous runs, present when continuous mode
+   * is enabled for at least one repo (BACKLOG.md § P2.35). Absent when the
+   * continuous runner is not wired into the web layer.
+   */
+  readonly continuous_runs?: ContinuousRunDTO[];
+}
+
+/**
+ * DTO for a single continuous run, mirroring `ContinuousRunDTO` from
+ * `src/continuous-runner.ts` (BACKLOG.md § P2.35).
+ */
+export interface ContinuousRunDTO {
+  readonly repo: string;
+  readonly status: 'running' | 'stopped';
+  readonly stop_reason?: string;
+  readonly items_completed: number;
+  readonly current_session_id: string | null;
+  readonly started_at: number;
+  readonly stopped_at?: number;
 }

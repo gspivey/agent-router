@@ -33,6 +33,18 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 118. Surface continuous-run state in the SPA Overview dashboard
+
+`continuousRunner.listRuns()` is not wired into `createWebApp → createWebRoutes → GET /overview
+→ SPA`. An operator running an overnight continuous ROADMAP loop sees nothing in the dashboard:
+they must use `agent-router ls` to check on progress. This item wires the getter through all
+three layers, adds `continuous_runs?: ContinuousRunDTO[]` to the `OverviewResponse`, and renders
+a "Continuous Runs" table in `Overview.svelte` (only shown when any runs are present, so
+deployments without continuous mode are unaffected).
+
+- Spec: `BACKLOG.md § P2.35`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed

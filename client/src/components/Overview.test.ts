@@ -383,4 +383,75 @@ describe('Overview', () => {
     expect(queryByTestId('last-refreshed')).toBeNull();
     expect(queryByTestId('overview-refresh')).toBeNull();
   });
+
+  // ---- continuous_runs section (BACKLOG.md § P2.35) ----
+
+  it('does not show the continuous-runs section when continuous_runs is absent', async () => {
+    // `continuous_runs` is absent from the default makeOverview()
+    getOverview.mockResolvedValue(makeOverview());
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { queryByTestId, findByTestId } = render(Overview);
+    await findByTestId('stat-row'); // wait for load
+    expect(queryByTestId('continuous-runs')).toBeNull();
+  });
+
+  it('does not show the continuous-runs section when continuous_runs is an empty array', async () => {
+    getOverview.mockResolvedValue(makeOverview({ continuous_runs: [] }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { queryByTestId, findByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    expect(queryByTestId('continuous-runs')).toBeNull();
+  });
+
+  it('shows the continuous-runs section with one running row', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        continuous_runs: [
+          {
+            repo: 'org/my-repo',
+            status: 'running',
+            items_completed: 3,
+            current_session_id: 'sess-abc',
+            started_at: Math.floor(Date.now() / 1000) - 120,
+          },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    const section = await findByTestId('continuous-runs');
+    expect(section).toBeTruthy();
+    const rows = getAllByTestId('continuous-run-row');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('shows multiple rows when multiple continuous runs are present', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        continuous_runs: [
+          {
+            repo: 'org/repo-a',
+            status: 'running',
+            items_completed: 1,
+            current_session_id: 'sess-1',
+            started_at: Math.floor(Date.now() / 1000) - 60,
+          },
+          {
+            repo: 'org/repo-b',
+            status: 'stopped',
+            stop_reason: 'queue_empty',
+            items_completed: 5,
+            current_session_id: null,
+            started_at: Math.floor(Date.now() / 1000) - 300,
+            stopped_at: Math.floor(Date.now() / 1000) - 10,
+          },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('continuous-runs');
+    const rows = getAllByTestId('continuous-run-row');
+    expect(rows).toHaveLength(2);
+  });
 });
