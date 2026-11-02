@@ -417,7 +417,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.9 — Self-dogfooding: tier3 in CI with agent-router closing the loop
+### P2.9 — Self-dogfooding: tier3 in CI with agent-router closing the loop ✅ DONE (PR #181)
 
 **Why this exists.** Today running tier3 means: sit at terminal, run, copy failure output, paste to agent, fix, repeat. Multiple cycles per debugging session (we just did three rounds in a row for the GitHub-API quirks during the agent-adapter-completion PR). agent-router exists precisely to eliminate this human-relay loop. The pieces are now in place — `structured-ci-feedback` (CI failures posted as PR comments) and the `agent-adapter-completion` work (agent can drive a PR to merged autonomously). What's missing is wiring tier3 to run on PRs against agent-router itself and the existing wake-on-CI-comment loop will close the cycle.
 

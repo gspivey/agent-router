@@ -33,6 +33,11 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+
+## Completed
+
 ### 106. Self-dogfooding: tier3 in CI on PRs against agent-router
 
 Add `.github/workflows/tier3-pr.yml` that runs the partial tier-3 suite on every
@@ -44,12 +49,9 @@ environment and `scripts/ci-report.sh` from the existing nightly workflow. The p
 comment feeds back into any bound agent session, closing the self-correction loop.
 
 - Spec: `BACKLOG.md § P2.9`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #181
 
 ---
-
-
-## Completed
 
 ### 105. Annotate BACKLOG.md § P3.1 as done
 
