@@ -257,6 +257,12 @@ export interface OverviewCronSummary {
 export interface OverviewResponse {
   readonly active_sessions: number;
   readonly queue_depth: number;
+  /**
+   * Count of rows in the `pending_wakes` table — deferred rate-limited wake
+   * events waiting for the cooldown window to elapse (BACKLOG.md § P2.34).
+   * Always `>= 0`.
+   */
+  readonly pending_wakes_count: number;
   readonly recent_prs: OverviewRecentPr[];
   readonly cron_summary: OverviewCronSummary[];
   readonly health: 'healthy' | 'degraded';

@@ -1069,6 +1069,74 @@ SPA shows no banner.
 
 ---
 
+### P2.34 — Overview auto-refresh and `pending_wakes_count`
+
+**Why this exists.** The SPA Overview page loads once on mount but never refreshes. An
+operator checking on daemon status after a CI event fires sees stale data until they reload.
+Two small improvements address this together: (1) add `pending_wakes_count` to the Overview
+so operators can see how many deferred wake events are waiting for the rate-limit window to
+pass, and (2) auto-refresh the page every 30 seconds so the dashboard stays live without a
+manual reload.
+
+**`pending_wakes_count` — why it's useful.** The `pending_wakes` table (introduced in ROADMAP
+item 30, P1.9) holds deferred wake events coalesced by `(repo, pr)` whose rate-limit window has
+not yet elapsed. An operator who just pushed a fix and wonders why the agent hasn't woken up
+can see at a glance whether a wake is queued and waiting. Today they must query SQLite manually.
+
+**Auto-refresh — why it's useful.** The Overview is the daemon-health dashboard. Active sessions,
+deferred wakes, and cron state all change without any user action. A 30-second polling interval
+(same as the rate-limit default) keeps the data fresh. The UI shows a "last refreshed" timestamp
+so the operator knows they're looking at recent data, plus a manual refresh button for when they
+want an immediate update.
+
+**Mini spec.**
+
+Backend (`src/web-routes.ts`, `src/db.ts`):
+- Add `pending_wakes_count: number` to `OverviewResponse` in `src/web-routes.ts`.
+- Add a `countPendingWakes(): number` pure helper that runs
+  `SELECT count(*) AS n FROM pending_wakes` and returns `0` on any error. Wire it into
+  the `GET /overview` handler alongside the existing fields.
+- No new DB schema — the `pending_wakes` table already exists.
+
+Client (`client/src/components/Overview.svelte`, `client/src/lib/types.ts`):
+- Add `pending_wakes_count: number` to the `OverviewResponse` type in
+  `client/src/lib/types.ts`.
+- Show the count as a fifth stat card labeled "Pending Wakes" between "Queued Work" and
+  "Recent PRs (24h)". Update the grid from `grid-cols-2 lg:grid-cols-4` to
+  `grid-cols-2 lg:grid-cols-5`.
+- Add a 30-second polling interval in `onMount`: `setInterval(() => void load(), 30_000)`.
+  Clear it in `onDestroy`.
+- Track `lastRefreshed: Date | null` in component state; update it inside `load()` on a
+  successful fetch. Render as a footer below the stat row: "Last updated HH:MM:SS" in
+  `text-[var(--text-muted)]` style.
+- Add a "Refresh" button (accessible via `data-testid="overview-refresh"`) next to the
+  last-updated timestamp that calls `load()` on click.
+- The existing skeleton and error states are unchanged.
+
+Tests:
+- Tier 1 (`test/tier1/web-routes-overview.test.ts`): add a test case that asserts
+  `GET /overview` returns `pending_wakes_count: <n>` when the `pending_wakes` table has `n`
+  rows, and `pending_wakes_count: 0` when the table is empty. (These tests are pure
+  handler-logic tests with an injected DB, following the pattern of existing overview tests.)
+- Tier 2 (`test/tier2/`): add a test case that inserts a row into `pending_wakes` via the
+  fake-backend path and asserts `GET /overview` returns `pending_wakes_count: 1`. This
+  validates the DB query in an end-to-end context without a live daemon.
+- Client (`client/src/components/Overview.test.ts`): add test cases for:
+  - The "Pending Wakes" stat card is rendered with the correct value from the overview.
+  - The "Last updated" footer is shown after a successful load.
+  - The "Refresh" button calls `getOverview` again on click.
+  - `setInterval` is called once on mount; `clearInterval` is called once on destroy.
+
+**Acceptance.**
+- `GET /overview` returns `{ ..., pending_wakes_count: N }` where N is the current count of
+  rows in the `pending_wakes` table.
+- The SPA Overview shows a "Pending Wakes" stat card, a "Last updated HH:MM:SS" timestamp,
+  and a "Refresh" button.
+- The page re-fetches data automatically every 30 seconds.
+- `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
+
+---
+
 ### P3.3 — ACP server (PRODUCT.md Phase 2)
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.

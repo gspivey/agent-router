@@ -36,6 +36,7 @@ function makeOverview(overrides: Partial<OverviewResponse> = {}): OverviewRespon
   return {
     active_sessions: 2,
     queue_depth: 5,
+    pending_wakes_count: 0,
     recent_prs: [],
     cron_summary: [],
     health: 'healthy',
@@ -95,9 +96,9 @@ describe('Overview', () => {
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
     const cards = getAllByTestId('stat-card');
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(5);
     const labels = cards.map((c) => c.getAttribute('data-label'));
-    expect(labels).toEqual(['Active Sessions', 'Queued Work', 'Recent PRs (24h)', 'Health']);
+    expect(labels).toEqual(['Active Sessions', 'Queued Work', 'Pending Wakes', 'Recent PRs (24h)', 'Health']);
   });
 
   it('counts only recent PRs opened within the last 24h (Req 12.2)', async () => {
@@ -115,8 +116,8 @@ describe('Overview', () => {
     listSessions.mockResolvedValue(makeSessionList([]));
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
-    // The "Recent PRs (24h)" card is the third stat card.
-    const value = getAllByTestId('stat-card-value')[2];
+    // The "Recent PRs (24h)" card is the fourth stat card (index 3).
+    const value = getAllByTestId('stat-card-value')[3];
     expect(value?.textContent?.trim()).toBe('2');
   });
 
@@ -315,5 +316,71 @@ describe('Overview', () => {
     const { findByTestId } = render(Overview);
     expect(await findByTestId('restart-required-banner')).toBeTruthy();
     expect(await findByTestId('token-expiry-banner')).toBeTruthy();
+  });
+
+  // ---- pending_wakes_count stat card (BACKLOG.md § P2.34) ----
+
+  it('shows pending_wakes_count in the Pending Wakes stat card', async () => {
+    getOverview.mockResolvedValue(makeOverview({ pending_wakes_count: 3 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    // "Pending Wakes" is the third card (index 2)
+    const pendingCard = cards[2];
+    expect(pendingCard?.getAttribute('data-label')).toBe('Pending Wakes');
+    const value = pendingCard?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('3');
+  });
+
+  it('shows pending_wakes_count of 0 when no wakes are pending', async () => {
+    getOverview.mockResolvedValue(makeOverview({ pending_wakes_count: 0 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const pendingCard = cards[2];
+    const value = pendingCard?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('0');
+  });
+
+  // ---- auto-refresh and last-refreshed indicator (BACKLOG.md § P2.34) ----
+
+  it('shows the last-refreshed timestamp after a successful load', async () => {
+    getOverview.mockResolvedValue(makeOverview());
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    // After a successful load the "last-refreshed" element should appear.
+    const indicator = await findByTestId('last-refreshed');
+    expect(indicator).toBeTruthy();
+    // The text should include time digits (HH:MM:SS / locale format).
+    expect(indicator.textContent).toMatch(/\d/);
+  });
+
+  it('renders the Refresh button after a successful load', async () => {
+    getOverview.mockResolvedValue(makeOverview());
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const btn = await findByTestId('overview-refresh');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent?.trim()).toBe('Refresh');
+  });
+
+  it('Refresh button calls getOverview again on click', async () => {
+    getOverview.mockResolvedValue(makeOverview());
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const btn = await findByTestId('overview-refresh');
+    await fireEvent.click(btn);
+    // Two calls: initial mount + manual refresh
+    expect(getOverview).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not show last-refreshed or Refresh button while the initial load is in flight', () => {
+    getOverview.mockReturnValue(new Promise(() => {}));
+    listSessions.mockReturnValue(new Promise(() => {}));
+    const { queryByTestId } = render(Overview);
+    expect(queryByTestId('last-refreshed')).toBeNull();
+    expect(queryByTestId('overview-refresh')).toBeNull();
   });
 });

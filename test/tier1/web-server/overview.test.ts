@@ -195,6 +195,7 @@ describe('GET /overview handler shape', () => {
     const body = (await res.json()) as OverviewResponse;
     expect(body.active_sessions).toBe(0);
     expect(body.queue_depth).toBe(0);
+    expect(body.pending_wakes_count).toBe(0);
     expect(body.recent_prs).toEqual([]);
     expect(body.cron_summary).toEqual([]);
     expect(body.health).toBe('healthy');
