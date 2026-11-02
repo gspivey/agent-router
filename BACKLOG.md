@@ -744,7 +744,7 @@ Documentation-only: no code, no tests.
 
 ---
 
-### P2.28 — Annotate BACKLOG.md § P2.27 as done
+### P2.28 — Annotate BACKLOG.md § P2.27 as done ✅ DONE (PR #186)
 
 `BACKLOG.md § P2.27` (Fix stale agent-router spec parent task checkbox) was fully implemented
 and shipped as ROADMAP item 110 (PR #185), but the BACKLOG.md entry was never annotated with

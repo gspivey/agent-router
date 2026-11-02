@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 111. Annotate BACKLOG.md § P2.27 as done
 
 The stale-checkbox fix for `.kiro/specs/agent-router/tasks.md` task 8 was fully implemented
@@ -41,11 +45,9 @@ was never marked done. This item adds the `✅ DONE (PR #185)` annotation to P2.
 the actual shipped state. Documentation-only: no code, no tests.
 
 - Spec: `BACKLOG.md § P2.28`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #186
 
 ---
-
-## Completed
 
 ### 110. Fix stale agent-router spec parent task checkbox
 
