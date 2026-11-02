@@ -1137,7 +1137,7 @@ Tests:
 
 ---
 
-### P2.35 — Surface continuous-run state in the SPA Overview dashboard
+### P2.35 — Surface continuous-run state in the SPA Overview dashboard ✅ DONE (PR #194)
 
 **Why this exists.** Continuous mode (`repos[i].continuous: true`) lets the daemon run ROADMAP
 items back-to-back without human intervention — it re-fires after each merged PR and advances

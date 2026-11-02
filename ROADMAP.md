@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 118. Surface continuous-run state in the SPA Overview dashboard
 
 `continuousRunner.listRuns()` is not wired into `createWebApp → createWebRoutes → GET /overview
@@ -43,11 +47,9 @@ a "Continuous Runs" table in `Overview.svelte` (only shown when any runs are pre
 deployments without continuous mode are unaffected).
 
 - Spec: `BACKLOG.md § P2.35`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #194
 
 ---
-
-## Completed
 
 ### 117. Overview auto-refresh and `pending_wakes_count`
 
