@@ -54,10 +54,16 @@ export interface WebAppDeps {
    * seeded fixture directory without requiring a real client build.
    */
   clientDist?: string;
+  /**
+   * Getter for the current restart-required condition (BACKLOG.md § P2.30).
+   * When present and returning a non-null value, `GET /overview` includes
+   * `restart_required` in the response body so the SPA can surface an alert.
+   */
+  restartRequired?: () => import('./restart-required.js').RestartRequiredCondition | null;
 }
 
 export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
-  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1, clientDist } = deps;
+  const { tokenStore, config, sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, credentialTokenStore, db, v1, clientDist, restartRequired } = deps;
 
   const app = new Hono<WebEnv>();
 
@@ -129,6 +135,7 @@ export function createWebApp(deps: WebAppDeps): Hono<WebEnv> {
   if (config !== undefined) routeDeps.config = config;
   if (credentialTokenStore !== undefined) routeDeps.tokenStore = credentialTokenStore;
   if (db !== undefined) routeDeps.db = db;
+  if (restartRequired !== undefined) routeDeps.restartRequired = restartRequired;
   const routes = createWebRoutes(routeDeps);
   app.route('/', routes);
 

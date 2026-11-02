@@ -1021,6 +1021,7 @@ async function main(): Promise<void> {
     shuttingDown: () => shuttingDownRef.value,
     credentialTokenStore,
     db,
+    restartRequired: () => restartRequiredState.get(),
     v1: {
       taskService,
       scheduler: repoScheduler,
