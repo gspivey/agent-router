@@ -720,7 +720,7 @@ triggers `verifySession` within 1 second.
 
 ---
 
-### P2.27 — Fix stale agent-router spec parent task checkbox
+### P2.27 — Fix stale agent-router spec parent task checkbox ✅ DONE (PR #185)
 
 **Problem.** `.kiro/specs/agent-router/tasks.md` has parent task `8` (Wake policy and event
 routing) marked `- [ ]` even though all of its non-optional sub-tasks are done:
@@ -741,6 +741,18 @@ Documentation-only: no code, no tests.
 
 **Acceptance.** Zero non-optional `- [ ]` lines remain in `.kiro/specs/agent-router/tasks.md`
 (optional tasks marked with `*` may remain). The ROADMAP item for this fix is ticked.
+
+---
+
+### P2.28 — Annotate BACKLOG.md § P2.27 as done ✅ DONE (PR #186)
+
+`BACKLOG.md § P2.27` (Fix stale agent-router spec parent task checkbox) was fully implemented
+and shipped as ROADMAP item 110 (PR #185), but the BACKLOG.md entry was never annotated with
+a DONE marker. This item adds the `✅ DONE (PR #185)` annotation to P2.27 to reflect the
+actual shipped state. Documentation-only: no code, no tests.
+
+**Acceptance.** `BACKLOG.md § P2.27` carries a `✅ DONE (PR #185)` annotation. The ROADMAP
+item for this fix is ticked.
 
 ---
 
