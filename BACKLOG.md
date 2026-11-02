@@ -772,7 +772,7 @@ this fix is ticked.
 
 ---
 
-### P2.30 — Surface `restart_required` in the SPA Overview dashboard
+### P2.30 — Surface `restart_required` in the SPA Overview dashboard ✅ DONE (PR #188)
 
 **Problem.** `GET /health` already computes and exposes `restart_required` (introduced by
 ROADMAP item 25, PR #65, via `src/restart-required.ts` and `src/health.ts`). When a config

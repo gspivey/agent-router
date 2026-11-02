@@ -35,7 +35,7 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
-## Active Roadmap
+## Completed
 
 ### 113. Surface `restart_required` in the SPA Overview dashboard
 
@@ -50,11 +50,9 @@ amber banner in `Overview.svelte`. Includes Tier 1 (pure handler logic) and Tier
 reload sets the field) tests.
 
 - Spec: `BACKLOG.md § P2.30`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #188
 
 ---
-
-## Completed
 
 ### 112. Annotate BACKLOG.md § P0.3 as done
 
