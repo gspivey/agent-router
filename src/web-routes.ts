@@ -432,6 +432,13 @@ export interface OverviewCronSummary {
   readonly next_fire: string | null;
 }
 
+/** Token expiry condition shape for the `GET /overview` response (BACKLOG.md § P2.33). */
+export interface TokenExpiryCondition {
+  readonly days_remaining: number;
+  readonly severity: 'warn' | 'error';
+  readonly expires_at: string;
+}
+
 /** The `GET /overview` response body (Req 1.2). */
 export interface OverviewResponse {
   readonly active_sessions: number;
@@ -447,6 +454,13 @@ export interface OverviewResponse {
    * `GET /health`. Absent when no restart is required.
    */
   readonly restart_required?: { readonly fields: string[]; readonly since: string };
+  /**
+   * Present when `config.tokenExpiresAt` is set and the PAT is within 14 days
+   * of expiry (severity `'warn'` at 7–14 days, `'error'` at ≤ 2 days or
+   * already expired). Absent when expiry is > 14 days away or not configured.
+   * See BACKLOG.md § P2.33.
+   */
+  readonly token_expiry?: TokenExpiryCondition;
 }
 
 /**
@@ -574,6 +588,13 @@ export function createWebRoutes(deps: {
    * in the response body so the SPA can surface an operator alert.
    */
   restartRequired?: () => RestartRequiredCondition | null;
+  /**
+   * Getter for the current token expiry condition (BACKLOG.md § P2.33). When
+   * present and returning a non-null value, `GET /overview` includes
+   * `token_expiry` in the response body so the SPA can surface a PAT expiry
+   * banner. Returns null when expiry is > 14 days away or not configured.
+   */
+  tokenExpiry?: () => TokenExpiryCondition | null;
 }): Hono<WebEnv> {
   const { sessionMgr, sessionFiles, sseBroker, rootDir, log, shuttingDown, config, tokenStore, db } = deps;
   const app = new Hono<WebEnv>();
@@ -1135,6 +1156,12 @@ export function createWebRoutes(deps: {
       ? { fields: rrCondition.fields, since: new Date(rrCondition.since).toISOString() }
       : undefined;
 
+    // Include token_expiry when the PAT is within 14 days of expiry
+    // (BACKLOG.md § P2.33). The getter returns null when expiry is ok or
+    // not configured, so no field appears in the normal case.
+    const teCondition = deps.tokenExpiry?.() ?? null;
+    const tokenExpiry = teCondition !== null ? teCondition : undefined;
+
     const body: OverviewResponse = {
       active_sessions: active.length,
       queue_depth: computeQueueDepth(),
@@ -1144,6 +1171,7 @@ export function createWebRoutes(deps: {
       version: overviewVersion,
       uptime_s: Math.floor((Date.now() - overviewStartedAt) / 1000),
       ...(restartRequired !== undefined ? { restart_required: restartRequired } : {}),
+      ...(tokenExpiry !== undefined ? { token_expiry: tokenExpiry } : {}),
     };
 
     return c.json(body);

@@ -1019,6 +1019,56 @@ configured level appears) all hold for arbitrary inputs.
 
 ---
 
+### P2.33 — Surface `token_expiry` in the SPA Overview dashboard
+
+**Problem.** `config.tokenExpiresAt` (set since ROADMAP item 12, PR #52) drives startup + 24 h
+alerting via `startTokenExpiryChecker` in `src/token-expiry.ts`, but the SPA Overview
+dashboard has no way to surface the condition. An operator whose PAT is expiring in 5 days
+must check daemon logs manually — there is no visual indicator in the dashboard.
+
+**Approach.** Add an optional `token_expiry` field to `OverviewResponse` (mirroring the
+pattern from `restart_required` in BACKLOG.md § P2.30). The handler calls
+`computeDaysRemaining` and `daysToSeverity` (both pure, already exported from
+`src/token-expiry.ts`) to produce `{ days_remaining, severity, expires_at }`. When severity
+is `'ok'` (> 14 days) the field is omitted so normal operations produce no noise. Wire the
+getter through `WebAppDeps` → `createWebRoutes` → the `GET /overview` handler. Update
+`client/src/lib/types.ts` and render a colored banner in `Overview.svelte`:
+amber (warn) or red (error).
+
+**Mini spec.**
+
+- Add `token_expiry?: { days_remaining: number; severity: 'warn' | 'error'; expires_at: string }`
+  to `OverviewResponse` in `src/web-routes.ts`.
+- Add `tokenExpiry?: () => { days_remaining: number; severity: 'warn' | 'error'; expires_at: string } | null`
+  to the `createWebRoutes` deps. The getter is called on every `GET /overview` request so
+  it reflects the current clock. When present and returning non-null, include the field in
+  the response body; when null or absent, omit it.
+- Implement the getter in `src/index.ts`: when `config.tokenExpiresAt` is set, create a
+  function that calls `computeDaysRemaining(new Date(), new Date(config.tokenExpiresAt))`
+  and `daysToSeverity(days)`. Return null when severity is `'ok'`, otherwise return the
+  struct. Pass it to `createWebApp` → `createWebRoutes`.
+- Add `tokenExpiry?: () => ... | null` to `WebAppDeps` in `src/web-server.ts` and thread
+  it into the `routeDeps` object (same pattern as `restartRequired`).
+- Update `client/src/lib/types.ts` `OverviewResponse` to add the optional field.
+- In `Overview.svelte`, render a banner below the restart-required banner when
+  `overview.token_expiry` is defined. Use amber for `severity === 'warn'` and red for
+  `severity === 'error'`. Show days remaining and the expiry date.
+- Wire `tokenExpiry` from `index.ts` into `createWebApp` (one-line addition to the deps
+  object, analogous to `restartRequired`).
+- Tier 1 test: `GET /overview` handler includes `token_expiry` when the getter returns a
+  non-null condition, and omits the field when the getter returns null.
+- Tier 2 test: `GET /overview` returns `token_expiry` with the expected shape when
+  `config.tokenExpiresAt` is set to a near-future date; omits the field when expiry is
+  far in the future (> 14 days).
+
+**Acceptance.** When `tokenExpiresAt` is set and within 14 days, `GET /overview` returns
+`{ ..., token_expiry: { days_remaining: N, severity: "warn"|"error", expires_at: "<ISO>" } }`.
+The SPA Overview dashboard shows a colored banner with the days remaining. When expiry is
+more than 14 days away (or not configured), `GET /overview` omits `token_expiry` and the
+SPA shows no banner.
+
+---
+
 ### P3.3 — ACP server (PRODUCT.md Phase 2)
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.

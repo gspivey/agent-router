@@ -268,4 +268,14 @@ export interface OverviewResponse {
    * required.
    */
   readonly restart_required?: { readonly fields: string[]; readonly since: string };
+  /**
+   * Present when `config.tokenExpiresAt` is set and the PAT is within 14 days
+   * of expiry (BACKLOG.md § P2.33). Absent when expiry is > 14 days away or
+   * not configured.
+   */
+  readonly token_expiry?: {
+    readonly days_remaining: number;
+    readonly severity: 'warn' | 'error';
+    readonly expires_at: string;
+  };
 }

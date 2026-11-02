@@ -45,7 +45,7 @@ import type { PendingWakeSweeper } from './pending-wake-sweeper.js';
 import { createCheckWatchdog } from './check-watchdog.js';
 import type { CheckWatchdog } from './check-watchdog.js';
 import { shouldNotify, sendSessionEndNotification } from './notify.js';
-import { startTokenExpiryChecker } from './token-expiry.js';
+import { startTokenExpiryChecker, computeDaysRemaining, daysToSeverity } from './token-expiry.js';
 import { createWorktreeManager, canonicalClonePath } from './worktree-manager.js';
 import { checkTokenFilePermissions, checkIptablesRules, checkAgentWorkerUser } from './isolation-startup.js';
 import { createAgentServer } from './agent-server.js';
@@ -1010,6 +1010,21 @@ async function main(): Promise<void> {
   const sseBroker = createSSEBroker({ sessionFiles, rootDir, log });
 
   const shuttingDownRef = { value: false };
+
+  // Build the token-expiry getter if tokenExpiresAt is configured.
+  // Returns null when expiry is > 14 days away so the SPA shows no banner.
+  const tokenExpiryGetter = effectiveConfig.tokenExpiresAt !== undefined
+    ? (() => {
+        const expiresAt = effectiveConfig.tokenExpiresAt;
+        return () => {
+          const days = computeDaysRemaining(new Date(), new Date(expiresAt));
+          const severity = daysToSeverity(days);
+          if (severity === 'ok') return null;
+          return { days_remaining: days, severity, expires_at: expiresAt };
+        };
+      })()
+    : undefined;
+
   const webApp = createWebApp({
     sessionMgr,
     sessionFiles,
@@ -1022,6 +1037,7 @@ async function main(): Promise<void> {
     credentialTokenStore,
     db,
     restartRequired: () => restartRequiredState.get(),
+    ...(tokenExpiryGetter !== undefined ? { tokenExpiry: tokenExpiryGetter } : {}),
     v1: {
       taskService,
       scheduler: repoScheduler,
