@@ -777,7 +777,7 @@ Out of scope for tactical backlog. Tracked in `PRODUCT.md`.
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.
 
-### P3.6 — Second-adapter implementation (Claude Code or OpenCode)
+### P3.6 — Second-adapter implementation (Claude Code or OpenCode) ✅ DONE (PRs #105, #106)
 
 **Context.** The `agent-adapter-completion` feature (PR #182) ships the `AgentAdapter` interface
 in `src/agent-adapter.ts` and `KiroAdapter` as the first concrete implementation. The interface

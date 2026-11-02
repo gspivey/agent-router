@@ -33,6 +33,16 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 109. Annotate BACKLOG.md § P3.6 as done
+
+The `ClaudeCodeAdapter` was fully implemented and shipped as ROADMAP items 56 and 57
+(PRs #105 and #106), but the corresponding `BACKLOG.md § P3.6` entry was never marked
+done. This item adds the `✅ DONE (PRs #105, #106)` annotation to P3.6 to reflect
+the actual shipped state. Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P3.6`
+- [ ] Complete · PR: —
+
 ---
 
 
