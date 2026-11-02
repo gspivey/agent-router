@@ -33,6 +33,11 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+
+## Completed
+
 ### 109. Annotate BACKLOG.md § P3.6 as done
 
 The `ClaudeCodeAdapter` was fully implemented and shipped as ROADMAP items 56 and 57
@@ -41,12 +46,9 @@ done. This item adds the `✅ DONE (PRs #105, #106)` annotation to P3.6 to refle
 the actual shipped state. Documentation-only: no code, no tests.
 
 - Spec: `BACKLOG.md § P3.6`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #184
 
 ---
-
-
-## Completed
 
 ### 108. Implement real `KiroAdapter.installHooks`
 
