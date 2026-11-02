@@ -37,6 +37,23 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 114. Deferred property tests: wake policy and config ENV: resolution
+
+The agent-router spec (`tasks.md` items `8.4`, `8.5`, `3.4`) specified three property-based
+tests that were deferred when their parent tasks shipped. This item delivers the fast-check
+coverage for the three core pure functions that form the beginning of every request path:
+`filterEventType` (Property 6: event type filtering), `resolvePRNumber` (Property 7: PR number
+resolution), and `resolveEnvValues` (Property 1: ENV: value resolution). All tests go into the
+existing Tier 1 test files (`test/tier1/router.test.ts` and
+`test/tier1/resolve-env-values.test.ts`), are pure with no I/O, and run at the default 100
+iterations. On completion, ticks `tasks.md` items `8.4`, `8.5`, and `3.4` in
+`.kiro/specs/agent-router/tasks.md`.
+
+- Spec: `BACKLOG.md § P2.31`
+- [x] Complete · PR: #190
+
+---
+
 ### 113. Surface `restart_required` in the SPA Overview dashboard
 
 `GET /health` already computes and exposes `restart_required` (ROADMAP item 25, PR #65) but

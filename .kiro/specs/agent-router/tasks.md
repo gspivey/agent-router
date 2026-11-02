@@ -48,7 +48,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6_
   - [x] 3.3 Implement `loadConfig` — read `./config.json`, parse JSON (throw `FatalError` on missing/invalid), call `resolveEnvValues`, call `validateConfig`, return typed `AgentRouterConfig`
     - _Requirements: 1.1, 1.3_
-  - [ ]* 3.4 Write property test for ENV: value resolution
+  - [x]* 3.4 Write property test for ENV: value resolution
     - **Property 1: ENV: Value Resolution**
     - **Validates: Requirements 1.2**
   - [ ]* 3.5 Write property test for configuration validation
@@ -118,10 +118,10 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
   - [x] 8.3 Implement `evaluateWakePolicy` — orchestrate the pipeline: filter event type → resolve PR → lookup session in DB → check rate limit via `db.tryAcquireWakeSlot`; return `WakeDecision` with reason string for logging
     - _Requirements: 6.4, 8.1, 8.2, 9.1, 9.2, 9.3_
-  - [ ]* 8.4 Write property test for event type filtering
+  - [x]* 8.4 Write property test for event type filtering
     - **Property 6: Event Type Filtering**
     - **Validates: Requirements 6.1, 6.2, 6.3, 6.4**
-  - [ ]* 8.5 Write property test for PR number resolution
+  - [x]* 8.5 Write property test for PR number resolution
     - **Property 7: PR Number Resolution**
     - **Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5**
   - [x] 8.6 Tier 2 test sending each wakeable event type through fake GitHub
