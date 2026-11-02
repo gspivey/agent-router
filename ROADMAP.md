@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 116. Surface `token_expiry` in the SPA Overview dashboard
 
 `config.tokenExpiresAt` (set since ROADMAP item 12, PR #52) drives startup + 24 h alerting
@@ -46,11 +50,9 @@ and `daysToSeverity` from `src/token-expiry.ts`. Includes Tier 1 (pure handler l
 Tier 2 (config sets the field) tests.
 
 - Spec: `BACKLOG.md § P2.33`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #192
 
 ---
-
-## Completed
 
 ### 115. Deferred property tests: prompt composers, config validation, and logger
 

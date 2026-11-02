@@ -1019,7 +1019,7 @@ configured level appears) all hold for arbitrary inputs.
 
 ---
 
-### P2.33 — Surface `token_expiry` in the SPA Overview dashboard
+### P2.33 — Surface `token_expiry` in the SPA Overview dashboard ✅ DONE (PR #192)
 
 **Problem.** `config.tokenExpiresAt` (set since ROADMAP item 12, PR #52) drives startup + 24 h
 alerting via `startTokenExpiryChecker` in `src/token-expiry.ts`, but the SPA Overview
