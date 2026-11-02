@@ -862,6 +862,73 @@ Context files: src/token-store.ts, src/github.ts, src/mcp-server.ts, src/cli-ser
 
 ---
 
+### P2.31 — Deferred property tests: wake policy and config ENV: resolution
+
+The agent-router spec (`tasks.md` items `8.4`, `8.5`, `3.4`) specified three property-based
+tests that were deferred to a follow-up PR when their parent tasks shipped. The tests exercise
+the core correctness properties of the wake policy pipeline and config loading, using
+`fast-check` with at least 100 iterations each.
+
+**Why these three.** `filterEventType` (Property 6) and `resolvePRNumber` (Property 7) are the
+first two gates in the wake pipeline — if either regresses, events either fire silently or
+stall forever. `resolveEnvValues` (Property 1) is the foundation of all configuration: a bug
+there corrupts secrets before the daemon even starts. All three are pure functions, so
+property tests are cheap, deterministic, and exhaustive over the relevant input space.
+
+**Property 6 — Event type filtering** (`filterEventType` in `src/router.ts`):
+- For any `eventType` not in `{check_run, issue_comment, pull_request_review_comment}`, the
+  function returns `wakeable: false` with `filterReason: 'wrong_event_type'`.
+- For `check_run` with `action !== 'completed'`, returns `wakeable: false, filterReason:
+  'wrong_action'`.
+- For `check_run` with `action: 'completed'`, returns `wakeable: true`.
+- For comment events with `action !== 'created'`, returns `wakeable: false`.
+- For comment events with tier-1 trust (owner login match), returns `wakeable: true`.
+- For comment events with tier-2 trust (MEMBER/COLLABORATOR), wakeability matches
+  `isCommandTrigger(body)`.
+- For comment events with tier-3 trust, returns `wakeable: false`.
+
+**Property 7 — PR number resolution** (`resolvePRNumber` in `src/router.ts`):
+- For `pull_request_review_comment`, a valid `pull_request.number` is returned; a missing or
+  non-integer `pull_request.number` returns `null`.
+- For `issue_comment` without `issue.pull_request`, returns `null`.
+- For `issue_comment` with `issue.pull_request` present, returns `issue.number` when it is an
+  integer.
+- For `check_run`, returns first `pull_requests[0].number` when present; `null` when array is
+  empty or absent.
+- For any other event type, returns `null`.
+- Invariant: when a non-null value is returned, it is always a positive integer.
+
+**Property 1 — ENV: value resolution** (`resolveEnvValues` in `src/config.ts`):
+- For any flat object whose values are arbitrary strings, resolving a value that starts with
+  `ENV:` followed by a variable present in the environment returns the env value (trimmed).
+- For any value that does NOT start with `ENV:`, the value passes through unchanged.
+- For any nested object or array, the property holds recursively (non-`ENV:` strings at any
+  depth are unchanged; `ENV:X` strings at any depth resolve to `process.env[X]`).
+- Invariant: no `ENV:` strings remain in the resolved output when all referenced env vars are
+  set.
+
+**Mini spec.**
+
+- Add property tests to `test/tier1/router.test.ts` for Properties 6 and 7. Generate
+  arbitrary event types and payloads using `fast-check`; use `fc.oneof` and `fc.record` to
+  produce structured payloads that cover the full input space (valid `check_run` with varied
+  actions, valid comment payloads with all trust-tier combinations, structurally invalid
+  payloads). Minimum 100 runs per property.
+- Add property tests to `test/tier1/resolve-env-values.test.ts` for Property 1. Generate
+  arbitrary flat and nested objects with a mix of `ENV:`-prefixed and plain strings. Set the
+  referenced env vars before running. Assert the invariant that no `ENV:` strings survive
+  resolution and that non-`ENV:` strings are unchanged. Minimum 100 runs.
+- All new tests are pure Tier 1 — no fake backends, no filesystem, no network.
+- Tick `tasks.md` items `8.4`, `8.5` in `.kiro/specs/agent-router/tasks.md` to `[x]`.
+- Tick `tasks.md` item `3.4` in `.kiro/specs/agent-router/tasks.md` to `[x]`.
+
+**Acceptance criteria.**
+- `npm test` passes with the new property tests included.
+- Each property runs at least 100 iterations (default `fc.assert` behaviour).
+- `npm run typecheck` passes — no `any` or stray `as` casts in the new test code.
+
+---
+
 ### P3.3 — ACP server (PRODUCT.md Phase 2)
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.
