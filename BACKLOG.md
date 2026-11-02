@@ -756,7 +756,7 @@ item for this fix is ticked.
 
 ---
 
-### P2.29 — Annotate BACKLOG.md § P0.3 as done
+### P2.29 — Annotate BACKLOG.md § P0.3 as done ✅ DONE (PR #187)
 
 `BACKLOG.md § P0.3` (README and perf-log updates must precede merge) was partially addressed
 by earlier work that documented the ordering convention in `AGENTS.md`: the "Don't merge

@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 112. Annotate BACKLOG.md § P0.3 as done
 
 `BACKLOG.md § P0.3` (README and perf-log updates must precede merge) was partially addressed
@@ -43,11 +47,9 @@ The external dpdk prompt files are managed outside this repository. This item ad
 code, no tests.
 
 - Spec: `BACKLOG.md § P2.29`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #187
 
 ---
-
-## Completed
 
 ### 111. Annotate BACKLOG.md § P2.27 as done
 
