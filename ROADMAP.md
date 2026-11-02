@@ -38,6 +38,18 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 105. Annotate BACKLOG.md § P3.1 as done
+
+Update `BACKLOG.md` to add `✅ DONE (PRs #115, #118)` annotation to P3.1
+(auth-credential-proxy-v2), which was fully implemented in ROADMAP items 61 and 62
+(PRs #115 and #118) but whose BACKLOG entry was never marked done. Documentation-only:
+no code, no tests.
+
+- Spec: `BACKLOG.md § P3.1`
+- [x] Complete · PR: #180
+
+---
+
 ### 104. ROADMAP housekeeping — archive completed items to Completed section
 
 Move all 94 completed items from `## Active Roadmap` to `## Completed`, leaving the Active
