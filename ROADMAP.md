@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 121. Add `events_processed_24h` stat to the SPA Overview dashboard
 
 `GET /overview` surfaces `pending_wakes_count` (deferred wake events) but has no visibility
@@ -45,11 +49,9 @@ type in `client/src/lib/types.ts`, and adds a "Events (24h)" sixth stat card in
 tests (stat card).
 
 - Spec: `BACKLOG.md § P2.37`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #197
 
 ---
-
-## Completed
 
 ### 120. Confirm db.ts property test deferral — crash verified in better-sqlite3 11.10.0
 

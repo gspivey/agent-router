@@ -914,7 +914,7 @@ Node/better-sqlite3 combination is updated.
 
 ---
 
-### P2.37 — Add `events_processed_24h` stat to the SPA Overview dashboard
+### P2.37 — Add `events_processed_24h` stat to the SPA Overview dashboard ✅ DONE (PR #197)
 
 **Why this exists.** The SPA Overview dashboard surfaces `pending_wakes_count` (deferred
 wake events) and `active_sessions` but has no visibility into recent webhook intake activity.
