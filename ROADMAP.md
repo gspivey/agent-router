@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 129. Surface `active_sessions_by_repo` in the SPA Overview dashboard
 
 `GET /overview` reports `active_sessions` as a scalar count but gives no per-repo
@@ -46,11 +50,9 @@ sorted by active count descending, capped at 10 rows), updates the client type i
 unit tests.
 
 - Spec: `BACKLOG.md § P2.45`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #205
 
 ---
-
-## Completed
 
 ### 128. Color-highlight task-outcome stat cards in the SPA Overview dashboard
 

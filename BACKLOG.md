@@ -1810,7 +1810,7 @@ this fix is ticked.
 
 ---
 
-### P2.45 — Surface `active_sessions_by_repo` in the SPA Overview dashboard
+### P2.45 — Surface `active_sessions_by_repo` in the SPA Overview dashboard ✅ DONE (PR #205)
 
 `GET /overview` reports `active_sessions` (a scalar count) but gives no per-repo
 breakdown. An operator running three repos simultaneously cannot tell from the dashboard
