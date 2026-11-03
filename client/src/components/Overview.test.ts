@@ -647,7 +647,7 @@ describe('Overview', () => {
     expect(subtitle?.textContent).toContain('v2.0.0-beta.1');
   });
 
-  // ---- Activity by Repo section (BACKLOG.md § P2.45) ----
+  // ---- Activity by Repo section (BACKLOG.md § P2.45, P2.48) ----
 
   it('does not show the Activity by Repo section when active_sessions_by_repo is empty', async () => {
     getOverview.mockResolvedValue(makeOverview({ active_sessions_by_repo: [] }));
@@ -658,10 +658,11 @@ describe('Overview', () => {
   });
 
   it('shows the Activity by Repo section when active_sessions_by_repo has entries', async () => {
+    const nowS = Math.floor(Date.now() / 1000);
     getOverview.mockResolvedValue(
       makeOverview({
         active_sessions_by_repo: [
-          { repo: 'org/repo-a', active: 2, completed_24h: 0 },
+          { repo: 'org/repo-a', active: 2, completed_24h: 0, last_started_at: nowS - 100 },
         ],
       }),
     );
@@ -674,11 +675,12 @@ describe('Overview', () => {
   });
 
   it('renders one row per entry in active_sessions_by_repo', async () => {
+    const nowS = Math.floor(Date.now() / 1000);
     getOverview.mockResolvedValue(
       makeOverview({
         active_sessions_by_repo: [
-          { repo: 'org/repo-a', active: 2, completed_24h: 1 },
-          { repo: 'org/repo-b', active: 0, completed_24h: 3 },
+          { repo: 'org/repo-a', active: 2, completed_24h: 1, last_started_at: nowS - 100 },
+          { repo: 'org/repo-b', active: 0, completed_24h: 3, last_started_at: nowS - 200 },
         ],
       }),
     );
@@ -690,6 +692,41 @@ describe('Overview', () => {
     // Each row should contain the repo name
     expect(rows[0]?.textContent).toContain('org/repo-a');
     expect(rows[1]?.textContent).toContain('org/repo-b');
+  });
+
+  it('renders last_started_at as a non-empty timestamp string when non-null', async () => {
+    const nowS = Math.floor(Date.now() / 1000);
+    getOverview.mockResolvedValue(
+      makeOverview({
+        active_sessions_by_repo: [
+          { repo: 'org/repo-a', active: 1, completed_24h: 0, last_started_at: nowS - 3600 },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('sessions-by-repo');
+    const cells = getAllByTestId('last-started-at');
+    expect(cells).toHaveLength(1);
+    // A locale timestamp string — non-empty, not "—"
+    expect(cells[0]?.textContent?.trim()).not.toBe('');
+    expect(cells[0]?.textContent?.trim()).not.toBe('—');
+  });
+
+  it('renders "—" for last_started_at when null', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        active_sessions_by_repo: [
+          { repo: 'org/repo-a', active: 0, completed_24h: 0, last_started_at: null },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('sessions-by-repo');
+    const cells = getAllByTestId('last-started-at');
+    expect(cells).toHaveLength(1);
+    expect(cells[0]?.textContent?.trim()).toBe('—');
   });
 
   // ---- Recent Events section (BACKLOG.md § P2.47) ----

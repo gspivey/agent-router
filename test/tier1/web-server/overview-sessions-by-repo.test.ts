@@ -5,7 +5,7 @@
  * Tests for the pure helper directly (no daemon, no disk I/O) and for the
  * field's presence/absence in the overview response.
  *
- * See BACKLOG.md § P2.45.
+ * See BACKLOG.md § P2.45 (original), BACKLOG.md § P2.48 (last_started_at).
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -69,6 +69,18 @@ function cleanup(ctx: TestCtx): void {
   fs.rmSync(ctx.rootDir, { recursive: true, force: true });
 }
 
+/** A minimal session object compatible with computeSessionsByRepo's input type. */
+function sess(
+  repo: string | undefined,
+  status: string,
+  completed_at: number | null,
+  created_at = 1_000_000,
+) {
+  return repo !== undefined
+    ? { repo, status, completed_at, created_at }
+    : { status, completed_at, created_at };
+}
+
 // ---------------------------------------------------------------------------
 // Unit tests for the pure computeSessionsByRepo function
 // ---------------------------------------------------------------------------
@@ -80,24 +92,22 @@ describe('computeSessionsByRepo — pure unit tests', () => {
 
   it('returns [] when all sessions have null/undefined repo', () => {
     const sessions = [
-      { status: 'active', completed_at: null },
-      { status: 'completed', completed_at: 999999 },
+      sess(undefined, 'active', null),
+      sess(undefined, 'completed', 999999),
     ];
     expect(computeSessionsByRepo(sessions, 1000000)).toEqual([]);
   });
 
   it('returns [] when all sessions have an empty-string repo', () => {
-    const sessions = [
-      { repo: '', status: 'active', completed_at: null },
-    ];
+    const sessions = [sess('', 'active', null)];
     expect(computeSessionsByRepo(sessions, 1000000)).toEqual([]);
   });
 
   it('counts active sessions per repo', () => {
     const sessions = [
-      { repo: 'org/a', status: 'active', completed_at: null },
-      { repo: 'org/a', status: 'active', completed_at: null },
-      { repo: 'org/b', status: 'active', completed_at: null },
+      sess('org/a', 'active', null),
+      sess('org/a', 'active', null),
+      sess('org/b', 'active', null),
     ];
     const result = computeSessionsByRepo(sessions, 1000000);
     const a = result.find((r) => r.repo === 'org/a');
@@ -111,14 +121,14 @@ describe('computeSessionsByRepo — pure unit tests', () => {
     const cutoffS = nowS - 86400; // 913600
     const sessions = [
       // within 24h
-      { repo: 'org/a', status: 'completed', completed_at: cutoffS + 1 },
-      { repo: 'org/a', status: 'failed', completed_at: nowS },
+      sess('org/a', 'completed', cutoffS + 1),
+      sess('org/a', 'failed', nowS),
       // exactly at boundary: should be included (>=)
-      { repo: 'org/a', status: 'abandoned', completed_at: cutoffS },
+      sess('org/a', 'abandoned', cutoffS),
       // older than 24h: should NOT count
-      { repo: 'org/a', status: 'completed', completed_at: cutoffS - 1 },
+      sess('org/a', 'completed', cutoffS - 1),
       // null completed_at: should NOT count
-      { repo: 'org/a', status: 'completed', completed_at: null },
+      sess('org/a', 'completed', null),
     ];
     const result = computeSessionsByRepo(sessions, nowS);
     const a = result.find((r) => r.repo === 'org/a');
@@ -130,7 +140,7 @@ describe('computeSessionsByRepo — pure unit tests', () => {
     const nowS = 1000000;
     const sessions = [
       // active session with a completed_at that would be within 24h — should only count active
-      { repo: 'org/a', status: 'active', completed_at: nowS - 100 },
+      sess('org/a', 'active', nowS - 100),
     ];
     const result = computeSessionsByRepo(sessions, nowS);
     const a = result.find((r) => r.repo === 'org/a');
@@ -142,14 +152,14 @@ describe('computeSessionsByRepo — pure unit tests', () => {
     const nowS = 1000000;
     const sessions = [
       // repo/c: 0 active, 1 completed_24h
-      { repo: 'org/c', status: 'completed', completed_at: nowS - 100 },
+      sess('org/c', 'completed', nowS - 100),
       // repo/a: 2 active, 0 completed_24h
-      { repo: 'org/a', status: 'active', completed_at: null },
-      { repo: 'org/a', status: 'active', completed_at: null },
+      sess('org/a', 'active', null),
+      sess('org/a', 'active', null),
       // repo/b: 1 active, 2 completed_24h
-      { repo: 'org/b', status: 'active', completed_at: null },
-      { repo: 'org/b', status: 'completed', completed_at: nowS - 200 },
-      { repo: 'org/b', status: 'completed', completed_at: nowS - 300 },
+      sess('org/b', 'active', null),
+      sess('org/b', 'completed', nowS - 200),
+      sess('org/b', 'completed', nowS - 300),
     ];
     const result = computeSessionsByRepo(sessions, nowS);
     expect(result[0]?.repo).toBe('org/a');  // 2 active
@@ -161,11 +171,11 @@ describe('computeSessionsByRepo — pure unit tests', () => {
     const nowS = 1000000;
     const sessions = [
       // repo/a: 0 active, 1 completed_24h
-      { repo: 'org/a', status: 'completed', completed_at: nowS - 100 },
+      sess('org/a', 'completed', nowS - 100),
       // repo/b: 0 active, 3 completed_24h
-      { repo: 'org/b', status: 'completed', completed_at: nowS - 100 },
-      { repo: 'org/b', status: 'completed', completed_at: nowS - 200 },
-      { repo: 'org/b', status: 'completed', completed_at: nowS - 300 },
+      sess('org/b', 'completed', nowS - 100),
+      sess('org/b', 'completed', nowS - 200),
+      sess('org/b', 'completed', nowS - 300),
     ];
     const result = computeSessionsByRepo(sessions, nowS);
     expect(result[0]?.repo).toBe('org/b');  // 3 completed_24h
@@ -173,18 +183,18 @@ describe('computeSessionsByRepo — pure unit tests', () => {
   });
 
   it('caps at maxRows (default 10)', () => {
-    const sessions: Array<{ repo: string; status: string; completed_at: number | null }> = [];
+    const sessions: ReturnType<typeof sess>[] = [];
     for (let i = 0; i < 15; i++) {
-      sessions.push({ repo: `org/repo-${i}`, status: 'active', completed_at: null });
+      sessions.push(sess(`org/repo-${i}`, 'active', null));
     }
     const result = computeSessionsByRepo(sessions, 1000000);
     expect(result).toHaveLength(10);
   });
 
   it('respects custom maxRows', () => {
-    const sessions: Array<{ repo: string; status: string; completed_at: number | null }> = [];
+    const sessions: ReturnType<typeof sess>[] = [];
     for (let i = 0; i < 5; i++) {
-      sessions.push({ repo: `org/repo-${i}`, status: 'active', completed_at: null });
+      sessions.push(sess(`org/repo-${i}`, 'active', null));
     }
     const result = computeSessionsByRepo(sessions, 1000000, 3);
     expect(result).toHaveLength(3);
@@ -192,9 +202,9 @@ describe('computeSessionsByRepo — pure unit tests', () => {
 
   it('includes each repo in the output exactly once', () => {
     const sessions = [
-      { repo: 'org/x', status: 'active', completed_at: null },
-      { repo: 'org/x', status: 'completed', completed_at: 999999 },
-      { repo: 'org/x', status: 'failed', completed_at: 999998 },
+      sess('org/x', 'active', null),
+      sess('org/x', 'completed', 999999),
+      sess('org/x', 'failed', 999998),
     ];
     const result = computeSessionsByRepo(sessions, 1000000);
     expect(result.filter((r) => r.repo === 'org/x')).toHaveLength(1);
@@ -203,8 +213,8 @@ describe('computeSessionsByRepo — pure unit tests', () => {
   it('returns rows with the correct OverviewSessionsByRepo shape', () => {
     const nowS = 1000000;
     const sessions = [
-      { repo: 'org/typed', status: 'active', completed_at: null },
-      { repo: 'org/typed', status: 'completed', completed_at: nowS - 100 },
+      sess('org/typed', 'active', null, nowS - 500),
+      sess('org/typed', 'completed', nowS - 100, nowS - 200),
     ];
     const result = computeSessionsByRepo(sessions, nowS);
     expect(result).toHaveLength(1);
@@ -212,6 +222,82 @@ describe('computeSessionsByRepo — pure unit tests', () => {
     expect(typeof row.repo).toBe('string');
     expect(typeof row.active).toBe('number');
     expect(typeof row.completed_24h).toBe('number');
+    // last_started_at is number | null
+    expect(row.last_started_at === null || typeof row.last_started_at === 'number').toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unit tests for last_started_at (BACKLOG.md § P2.48)
+// ---------------------------------------------------------------------------
+
+describe('computeSessionsByRepo — last_started_at (BACKLOG.md § P2.48)', () => {
+  it('returns last_started_at as the created_at of the only session', () => {
+    const sessions = [sess('org/a', 'active', null, 1_234_567)];
+    const result = computeSessionsByRepo(sessions, 2_000_000);
+    expect(result[0]?.last_started_at).toBe(1_234_567);
+  });
+
+  it('returns last_started_at as the maximum created_at across multiple sessions', () => {
+    const sessions = [
+      sess('org/a', 'completed', null, 1_000_000),
+      sess('org/a', 'active',    null, 1_500_000), // newest
+      sess('org/a', 'failed',    null, 1_200_000),
+    ];
+    const result = computeSessionsByRepo(sessions, 2_000_000);
+    expect(result[0]?.last_started_at).toBe(1_500_000);
+  });
+
+  it('returns last_started_at per repo independently', () => {
+    const sessions = [
+      sess('org/a', 'active', null, 1_100_000),
+      sess('org/a', 'active', null, 1_300_000),  // newest for org/a
+      sess('org/b', 'active', null, 1_200_000),
+      sess('org/b', 'active', null, 1_000_000),  // oldest for org/b
+    ];
+    const result = computeSessionsByRepo(sessions, 2_000_000);
+    const a = result.find((r) => r.repo === 'org/a');
+    const b = result.find((r) => r.repo === 'org/b');
+    expect(a?.last_started_at).toBe(1_300_000);
+    expect(b?.last_started_at).toBe(1_200_000);
+  });
+
+  it('sessions with null/undefined repo do not affect any repo last_started_at', () => {
+    const sessions = [
+      sess('org/a', 'active', null, 1_000_000),
+      // null-repo session with a newer created_at — must not bleed into org/a
+      { status: 'active', completed_at: null, created_at: 9_000_000 },
+    ];
+    const result = computeSessionsByRepo(sessions, 2_000_000);
+    const a = result.find((r) => r.repo === 'org/a');
+    expect(a?.last_started_at).toBe(1_000_000);
+  });
+
+  it('all-statuses are considered for last_started_at (active, completed, failed, abandoned)', () => {
+    const nowS = 2_000_000;
+    const sessions = [
+      sess('org/a', 'abandoned',  nowS - 500, 1_000_000),
+      sess('org/a', 'failed',     nowS - 400, 1_200_000),
+      sess('org/a', 'completed',  nowS - 300, 1_100_000),
+      sess('org/a', 'active',     null,        999_000), // active but oldest created_at
+    ];
+    const result = computeSessionsByRepo(sessions, nowS);
+    // The failed session has the highest created_at (1_200_000)
+    expect(result[0]?.last_started_at).toBe(1_200_000);
+  });
+
+  it('last_started_at is present on every row returned (never undefined)', () => {
+    const sessions = [
+      sess('org/a', 'active', null, 1_000_000),
+      sess('org/b', 'active', null, 1_100_000),
+    ];
+    const result = computeSessionsByRepo(sessions, 2_000_000);
+    for (const row of result) {
+      // The property must exist and be a number (not undefined)
+      expect('last_started_at' in row).toBe(true);
+      expect(row.last_started_at).not.toBeUndefined();
+      expect(typeof row.last_started_at).toBe('number');
+    }
   });
 });
 
@@ -272,6 +358,9 @@ describe('GET /overview active_sessions_by_repo field (BACKLOG.md § P2.45)', ()
       for (const row of body.active_sessions_by_repo) {
         expect(row.active).toBe(1);
         expect(row.completed_24h).toBe(0);
+        // last_started_at must be a number (unix seconds) for each row
+        expect(typeof row.last_started_at).toBe('number');
+        expect((row.last_started_at as number)).toBeGreaterThan(0);
       }
     } finally {
       cleanup(ctx);

@@ -351,6 +351,11 @@ export interface SessionsByRepo {
    * identified by `completed_at >= nowS - 86400`.
    */
   readonly completed_24h: number;
+  /**
+   * Unix epoch seconds of the most recently created session for this repo,
+   * across all statuses. `null` when no sessions exist. See BACKLOG.md § P2.48.
+   */
+  readonly last_started_at: number | null;
 }
 
 /**

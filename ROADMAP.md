@@ -37,6 +37,24 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 132. Add `last_started_at` to Activity by Repo rows in the SPA Overview
+
+The "Activity by Repo" table in the Overview dashboard shows active session count and
+24-hour terminal count per repo, but no timestamp. An operator running cron mode has no
+way to verify "when was the last agent session for this repo?" without leaving the Overview
+page. Adding `last_started_at` to each repo row — the unix-second timestamp of the most
+recently created session — lets operators verify cron schedules are firing at a glance: a
+stale timestamp is the first signal something is broken. The change adds one field to
+`OverviewSessionsByRepo` in `src/web-routes.ts` (updated by `computeSessionsByRepo`),
+updates the client DTO in `client/src/lib/types.ts`, and adds a third column to the
+"Activity by Repo" table in `Overview.svelte`. Includes Tier 1 (pure function) and client
+unit tests.
+
+- Spec: `BACKLOG.md § P2.48`
+- [x] Complete · PR: #208
+
+---
+
 ### 131. Surface recent webhook events in the SPA Overview dashboard
 
 `GET /overview` surfaces `events_processed_24h` (a scalar count) but gives no detail about

@@ -369,6 +369,7 @@
                   <th class="px-2 py-2 font-medium">Repo</th>
                   <th class="px-2 py-2 font-medium text-right">Active</th>
                   <th class="px-2 py-2 font-medium text-right">Done (24h)</th>
+                  <th class="px-2 py-2 font-medium">Last Started</th>
                 </tr>
               </thead>
               <tbody>
@@ -386,6 +387,9 @@
                       {/if}
                     </td>
                     <td class="px-2 py-2 text-right text-[var(--text-muted)]">{row.completed_24h}</td>
+                    <td class="px-2 py-2 text-xs text-[var(--text-muted)]" data-testid="last-started-at">
+                      {row.last_started_at !== null ? new Date(row.last_started_at * 1000).toLocaleString() : '—'}
+                    </td>
                   </tr>
                 {/each}
               </tbody>

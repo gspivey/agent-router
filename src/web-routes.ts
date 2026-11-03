@@ -471,29 +471,38 @@ export interface OverviewSessionsByRepo {
    * or `abandoned`) in the last 24 hours, identified by `completed_at >= nowS - 86400`.
    */
   readonly completed_24h: number;
+  /**
+   * Unix epoch seconds of the most recently created session for this repo,
+   * across all statuses. Lets operators verify cron schedules are firing: a
+   * stale timestamp is the first signal something is wrong. `null` when no
+   * sessions exist for the repo (defensive; grouping logic ensures at least one
+   * session exists per entry). See BACKLOG.md § P2.48.
+   */
+  readonly last_started_at: number | null;
 }
 
 /**
  * Compute per-repo session activity from the full session list.
  *
  * Groups all sessions that have a non-null `repo` field, counts active and
- * recently-terminal sessions per repo, sorts descending by `active` then
- * `completed_24h`, and returns at most `maxRows` rows (default 10) to avoid
- * response bloat in large multi-repo deployments.
+ * recently-terminal sessions per repo, tracks the most recently created session
+ * per repo, sorts descending by `active` then `completed_24h`, and returns at
+ * most `maxRows` rows (default 10) to avoid response bloat in large multi-repo
+ * deployments.
  *
  * Pure — takes all inputs as parameters for direct testability.
  */
 export function computeSessionsByRepo(
-  sessions: Array<{ repo?: string; status: string; completed_at: number | null }>,
+  sessions: Array<{ repo?: string; status: string; completed_at: number | null; created_at: number }>,
   nowS: number,
   maxRows = 10,
 ): OverviewSessionsByRepo[] {
   const cutoffS = nowS - 86400;
-  const map = new Map<string, { active: number; completed_24h: number }>();
+  const map = new Map<string, { active: number; completed_24h: number; last_started_at: number | null }>();
 
   for (const s of sessions) {
     if (s.repo === undefined || s.repo === null || s.repo === '') continue;
-    const row = map.get(s.repo) ?? { active: 0, completed_24h: 0 };
+    const row = map.get(s.repo) ?? { active: 0, completed_24h: 0, last_started_at: null };
     if (s.status === 'active') {
       row.active += 1;
     } else if (
@@ -502,12 +511,15 @@ export function computeSessionsByRepo(
     ) {
       row.completed_24h += 1;
     }
+    if (row.last_started_at === null || s.created_at > row.last_started_at) {
+      row.last_started_at = s.created_at;
+    }
     map.set(s.repo, row);
   }
 
   const result: OverviewSessionsByRepo[] = [];
   for (const [repo, counts] of map) {
-    result.push({ repo, active: counts.active, completed_24h: counts.completed_24h });
+    result.push({ repo, active: counts.active, completed_24h: counts.completed_24h, last_started_at: counts.last_started_at });
   }
 
   result.sort((a, b) => {
