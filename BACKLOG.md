@@ -1981,7 +1981,7 @@ Tests:
 
 ---
 
-### P2.47 — Surface recent webhook events in the SPA Overview dashboard
+### P2.47 — Surface recent webhook events in the SPA Overview dashboard ✅ DONE (PR #207)
 
 **Why this exists.** The SPA Overview dashboard surfaces `events_processed_24h` (a raw count)
 but gives no detail about *which* events were received. An operator wondering "did the webhook

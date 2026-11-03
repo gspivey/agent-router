@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 131. Surface recent webhook events in the SPA Overview dashboard
 
 `GET /overview` surfaces `events_processed_24h` (a scalar count) but gives no detail about
@@ -45,11 +49,9 @@ client type in `client/src/lib/types.ts`, and renders a "Recent Events" compact 
 tests.
 
 - Spec: `BACKLOG.md § P2.47`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #207
 
 ---
-
-## Completed
 
 ### 130. Fix `RepoGroup.svelte` Svelte-state-referenced-locally warnings
 
