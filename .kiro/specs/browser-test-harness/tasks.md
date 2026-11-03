@@ -28,7 +28,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - This does NOT write a `session_ended` event — it simulates server-initiated stream drop for reconnect testing
     - _Requirements: 5.1, 5.2, 5.3_
 
-- [ ] 3. Create Playwright fixtures
+- [x] 3. Create Playwright fixtures
   - [x] 3.1 Create `test/browser/fixtures.ts` with full per-test server lifecycle
     - Import `test as base` from `@playwright/test` and project modules: `createSessionFiles`, `initDatabase`, `createLogger`, `createDaemonTokenStore`, `createSSEBroker`, `createWebApp`, `startWebServer`, `FakeKiroBackend`, `createSessionManager`, `spawnACPClient`
     - Define `ServerFixture` interface: `baseUrl`, `sessionFiles`, `sseBroker`, `sessionManager`, `db`, `tokenStore`, `rootDir`, `token`
@@ -45,10 +45,10 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Export `test` as `base.extend<ServerFixture & BrowserFixture>(...)` 
     - _Requirements: 1.1, 1.2, 1.3, 1.8, 2.3, 11.1, 11.2, 11.3_
 
-- [ ] 4. Checkpoint
+- [x] 4. Checkpoint
   - Ensure smoke test and fixtures compile correctly under `npx playwright test test/browser/smoke.spec.ts`. Ask the user if questions arise.
 
-- [ ] 5. Implement list view tests
+- [x] 5. Implement list view tests
   - [x] 5.1 Create `test/browser/list-view.spec.ts`
     - Import `test` and `expect` from the local `./fixtures.ts`
     - Seed a session with `seedSession({ live: false, status: 'active' })` — filesystem-only, no live process needed
@@ -57,7 +57,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Test: verify `console.assertNoErrors()` passes (no unexpected JS errors)
     - _Requirements: 2.1, 2.2, 2.3, 11.3_
 
-- [ ] 6. Implement detail view tests
+- [x] 6. Implement detail view tests
   - [x] 6.1 Create `test/browser/detail-view.spec.ts`
     - Seed with `seedSession({ live: false, status: 'active' })` — filesystem-only, detail view just needs metadata
     - Test: call `page.goto(baseUrl)`, click session row → URL hash updates to `#/sessions/<id>`, `#list-view` hidden, `#detail-view` visible
@@ -66,7 +66,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Test: change hash to `#/` → list view shown, detail view hidden
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 7. Implement SSE rendering tests
+- [x] 7. Implement SSE rendering tests
   - [x] 7.1 Create `test/browser/sse-render.spec.ts`
     - Seed with `seedSession({ live: false, status: 'active' })` — filesystem-only; SSE broker tails stream.log regardless of live process
     - Call `page.goto(baseUrl)`, navigate to detail view
@@ -77,7 +77,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Test: log container auto-scrolls to bottom on new entries (scrollTop === scrollHeight - clientHeight)
     - _Requirements: 4.1, 4.2, 4.3, 4.6_
 
-- [ ] 8. Implement SSE reconnection tests
+- [x] 8. Implement SSE reconnection tests
   - [x] 8.1 Create `test/browser/sse-reconnect.spec.ts`
     - Seed with `seedSession({ live: false, status: 'active' })` — filesystem-only; SSE broker handles stream.log tailing
     - Call `page.goto(baseUrl)`, navigate to detail view, wait for initial SSE events to render
@@ -89,7 +89,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Test: first reconnect within 1500ms (±500ms) of drop; after successful reconnect, next drop also reconnects within 1500ms (confirming delay reset)
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [ ] 9. Implement prompt injection tests
+- [x] 9. Implement prompt injection tests
   - [x] 9.1 Create `test/browser/inject-prompt.spec.ts`
     - Seed with `seedSession({ live: true })` — MUST use live session via `sessionManager.createSession()` with FakeKiroBackend loaded with `test/scenarios/slow-multi-prompt.json` (inject endpoint calls `sessionMgr.getActiveSession()` and returns 409 without a live handle)
     - Call `page.goto(baseUrl)`, navigate to detail view
@@ -100,7 +100,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Test: non-active session (seed with `live: false, status: 'completed'`) → controls not rendered (no textarea, no Send button)
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
 
-- [ ] 10. Implement kill session tests
+- [x] 10. Implement kill session tests
   - [x] 10.1 Create `test/browser/kill-session.spec.ts`
     - Seed with `seedSession({ live: true })` — MUST use live session via `sessionManager.createSession()` with FakeKiroBackend loaded with `test/scenarios/slow-multi-prompt.json` (kill endpoint calls `sessionMgr.getActiveSession()` and `sessionMgr.terminateSession()` which require a live handle)
     - Call `page.goto(baseUrl)`, navigate to detail view
@@ -110,10 +110,10 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Test: simulate kill failure (terminate session first to make it non-active, then re-navigate to detail — controls should not be rendered; alternatively use a session where the ACP process has already exited) → error alert captured in `collector.dialogs`, controls remain visible
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 11. Checkpoint
+- [x] 11. Checkpoint
   - Ensure all tests pass so far with `npx playwright test`. Ask the user if questions arise.
 
-- [ ] 12. Implement visibility reconnection tests
+- [x] 12. Implement visibility reconnection tests
   - [x] 12.1 Create `test/browser/visibility-reconnect.spec.ts`
     - Seed with `seedSession({ live: false, status: 'active' })` — filesystem-only; SSE broker handles stream.log tailing
     - Call `page.goto(baseUrl)`, navigate to detail view, wait for SSE events (lastEventId > 0)
@@ -124,13 +124,13 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Do NOT use `page.evaluate(() => document.dispatchEvent(...))` — use CDP `Page.setWebLifecycleState` for real visibility transitions
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-- [ ] 13. Implement auth token tests
+- [x] 13. Implement auth token tests
   - [x] 13.1 Create `test/browser/auth-token.spec.ts`
     - Test (bindPublic: false, default): `page.evaluate(() => window.__DAEMON_TOKEN)` returns the provisioned daemon token for this test instance
     - Test (bindPublic: true): create a second fixture variant with `bindPublic: true`, use `page.setExtraHTTPHeaders({ Authorization: 'Bearer <token>' })`, verify `page.evaluate(() => window.__DAEMON_TOKEN)` returns `undefined`
     - _Requirements: 9.1, 9.2_
 
-- [ ] 14. Add `test:browser` script and verify compatibility
+- [x] 14. Add `test:browser` script and verify compatibility
   - [x] 14.1 Update `package.json` and verify existing tests pass
     - Add `"test:browser": "npx playwright test"` to the `scripts` section of `package.json`
     - Verify `npm test` still passes (vitest does not pick up `test/browser/*.spec.ts` files due to `.spec.ts` extension and include patterns)
@@ -138,7 +138,7 @@ Introduces a Playwright-based browser test tier (`test/browser/`) that launches 
     - Verify no modifications to `vitest.config.ts`, `test/tier1/`, `test/tier2/`, `test/tier3/`, `test/harness/`, `test/scenarios/`, or `test/fixtures/`
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6_
 
-- [ ] 15. Final checkpoint
+- [x] 15. Final checkpoint
   - Ensure all tests pass (`npm test` and `npm run test:browser`), ask the user if questions arise.
 
 ## Notes
