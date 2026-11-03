@@ -316,6 +316,12 @@ export interface OverviewResponse {
    * rows. See BACKLOG.md § P2.45.
    */
   readonly active_sessions_by_repo: SessionsByRepo[];
+  /**
+   * The most recent processed webhook events, ordered by `received_at DESC`,
+   * capped at 10. Always present; empty when no events have been processed.
+   * See BACKLOG.md § P2.47.
+   */
+  readonly recent_events: OverviewRecentEvent[];
 }
 
 /**
@@ -345,4 +351,24 @@ export interface SessionsByRepo {
    * identified by `completed_at >= nowS - 86400`.
    */
   readonly completed_24h: number;
+}
+
+/**
+ * A single recent processed webhook event in the `GET /overview` response,
+ * mirroring `OverviewRecentEvent` from `src/web-routes.ts` (BACKLOG.md § P2.47).
+ */
+export interface OverviewRecentEvent {
+  /** The raw GitHub event type, e.g. `check_run`, `issue_comment`. */
+  readonly event_type: string;
+  /** Repository in `owner/repo` format. */
+  readonly repo: string;
+  /** Pull request number, or `null` when the event is not PR-scoped. */
+  readonly pr_number: number | null;
+  /**
+   * Whether processing this event triggered an agent wake. `false` when no
+   * wake occurred.
+   */
+  readonly wake_triggered: boolean;
+  /** Unix epoch seconds when the event was received. */
+  readonly received_at: number;
 }

@@ -46,6 +46,7 @@ function makeOverview(overrides: Partial<OverviewResponse> = {}): OverviewRespon
     version: '0.1.0',
     uptime_s: 3600,
     active_sessions_by_repo: [],
+    recent_events: [],
     ...overrides,
   };
 }
@@ -689,5 +690,58 @@ describe('Overview', () => {
     // Each row should contain the repo name
     expect(rows[0]?.textContent).toContain('org/repo-a');
     expect(rows[1]?.textContent).toContain('org/repo-b');
+  });
+
+  // ---- Recent Events section (BACKLOG.md § P2.47) ----
+
+  it('does not show the Recent Events section when recent_events is empty', async () => {
+    getOverview.mockResolvedValue(makeOverview({ recent_events: [] }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, queryByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    expect(queryByTestId('recent-events')).toBeNull();
+  });
+
+  it('shows the Recent Events section when recent_events has entries', async () => {
+    const nowS = Math.floor(Date.now() / 1000);
+    getOverview.mockResolvedValue(
+      makeOverview({
+        recent_events: [
+          {
+            event_type: 'check_run',
+            repo: 'org/my-repo',
+            pr_number: 42,
+            wake_triggered: true,
+            received_at: nowS,
+          },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const section = await findByTestId('recent-events');
+    expect(section).toBeTruthy();
+  });
+
+  it('renders one row per event in recent_events', async () => {
+    const nowS = Math.floor(Date.now() / 1000);
+    getOverview.mockResolvedValue(
+      makeOverview({
+        recent_events: [
+          { event_type: 'check_run', repo: 'org/repo-a', pr_number: 1, wake_triggered: true, received_at: nowS },
+          { event_type: 'issue_comment', repo: 'org/repo-b', pr_number: null, wake_triggered: false, received_at: nowS - 60 },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('recent-events');
+    const rows = getAllByTestId('recent-events-row');
+    expect(rows).toHaveLength(2);
+    // First row should contain the event type and repo
+    expect(rows[0]?.textContent).toContain('check_run');
+    expect(rows[0]?.textContent).toContain('org/repo-a');
+    // Second row should show '—' for null pr_number
+    expect(rows[1]?.textContent).toContain('—');
   });
 });

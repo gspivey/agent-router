@@ -394,5 +394,51 @@
         </Card>
       </section>
     {/if}
+
+    <!-- Recent Events (BACKLOG.md § P2.47) — only shown when at least one event has been processed -->
+    {#if overview !== null && overview.recent_events.length > 0}
+      <section data-testid="recent-events">
+        <h2 class="mb-2 text-sm font-semibold text-[var(--text-primary)]">Recent Events</h2>
+        <Card>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr class="border-b border-[var(--border)] text-[var(--text-muted)]">
+                  <th class="px-2 py-2 font-medium">Event</th>
+                  <th class="px-2 py-2 font-medium">Repo</th>
+                  <th class="px-2 py-2 font-medium">PR</th>
+                  <th class="px-2 py-2 font-medium">Wake</th>
+                  <th class="px-2 py-2 font-medium">Received</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each overview.recent_events as ev (ev.received_at + ':' + ev.event_type + ':' + (ev.pr_number ?? 'null'))}
+                  <tr
+                    data-testid="recent-events-row"
+                    class="border-b border-[var(--border)] last:border-b-0"
+                  >
+                    <td class="px-2 py-2 font-mono text-xs text-[var(--text-primary)]">{ev.event_type}</td>
+                    <td class="px-2 py-2 font-mono text-xs text-[var(--text-muted)]">{ev.repo}</td>
+                    <td class="px-2 py-2 text-[var(--text-muted)]">
+                      {ev.pr_number !== null ? `#${ev.pr_number}` : '—'}
+                    </td>
+                    <td class="px-2 py-2">
+                      {#if ev.wake_triggered}
+                        <span class="text-xs font-medium text-[var(--success,#16a34a)]">Woke</span>
+                      {:else}
+                        <span class="text-xs text-[var(--text-muted)]">No wake</span>
+                      {/if}
+                    </td>
+                    <td class="px-2 py-2 text-xs text-[var(--text-muted)]">
+                      {new Date(ev.received_at * 1000).toLocaleTimeString()}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
+    {/if}
   {/if}
 </section>

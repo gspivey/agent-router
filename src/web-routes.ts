@@ -440,6 +440,26 @@ export interface TokenExpiryCondition {
   readonly expires_at: string;
 }
 
+/**
+ * A single recent processed webhook event as surfaced in the `GET /overview`
+ * response (BACKLOG.md § P2.47).
+ */
+export interface OverviewRecentEvent {
+  /** The raw GitHub event type, e.g. `check_run`, `issue_comment`. */
+  readonly event_type: string;
+  /** Repository in `owner/repo` format. */
+  readonly repo: string;
+  /** Pull request number, or `null` when the event is not PR-scoped. */
+  readonly pr_number: number | null;
+  /**
+   * Whether processing this event triggered an agent wake (`wake_triggered = 1`
+   * in the DB). `false` when `wake_triggered = 0` or `NULL`.
+   */
+  readonly wake_triggered: boolean;
+  /** Unix epoch seconds when the event was received. */
+  readonly received_at: number;
+}
+
 /** Per-repo session activity row in the `GET /overview` response (BACKLOG.md § P2.45). */
 export interface OverviewSessionsByRepo {
   /** Repository in `owner/repo` format. */
@@ -496,6 +516,45 @@ export function computeSessionsByRepo(
   });
 
   return result.slice(0, maxRows);
+}
+
+/**
+ * Collect the most recent processed webhook events from the `events` table,
+ * ordered by `received_at DESC`, capped at `limit` rows (default 10).
+ *
+ * Returns an empty array when `db` is absent, the query fails, or no processed
+ * events exist. Pure — takes all inputs as parameters for direct testability.
+ * See BACKLOG.md § P2.47.
+ */
+export function collectRecentEvents(db: Database | undefined, limit = 10): OverviewRecentEvent[] {
+  if (db === undefined) return [];
+  try {
+    const rows = db
+      .raw()
+      .prepare<[number]>(
+        `SELECT event_type, repo, pr_number, wake_triggered, received_at
+         FROM events
+         WHERE processed_at IS NOT NULL
+         ORDER BY received_at DESC
+         LIMIT ?`,
+      )
+      .all(limit) as Array<{
+        event_type: string;
+        repo: string;
+        pr_number: number | null;
+        wake_triggered: number | null;
+        received_at: number;
+      }>;
+    return rows.map((r) => ({
+      event_type: r.event_type,
+      repo: r.repo,
+      pr_number: r.pr_number ?? null,
+      wake_triggered: r.wake_triggered === 1,
+      received_at: r.received_at,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /** The `GET /overview` response body (Req 1.2). */
@@ -561,6 +620,15 @@ export interface OverviewResponse {
    * rows. See BACKLOG.md § P2.45.
    */
   readonly active_sessions_by_repo: OverviewSessionsByRepo[];
+  /**
+   * The most recent processed webhook events, ordered by `received_at DESC`,
+   * capped at 10. Always present (never undefined); empty when no events have
+   * been processed yet. Each row carries the event type, repo, PR number (or
+   * null for non-PR events), wake outcome, and timestamp. Useful for operators
+   * to confirm the webhook pipeline is receiving and processing events.
+   * See BACKLOG.md § P2.47.
+   */
+  readonly recent_events: OverviewRecentEvent[];
 }
 
 /**
@@ -1373,6 +1441,7 @@ export function createWebRoutes(deps: {
       version: overviewVersion,
       uptime_s: Math.floor((Date.now() - overviewStartedAt) / 1000),
       active_sessions_by_repo: computeSessionsByRepo(sessions, nowS),
+      recent_events: collectRecentEvents(db),
       ...(restartRequired !== undefined ? { restart_required: restartRequired } : {}),
       ...(tokenExpiry !== undefined ? { token_expiry: tokenExpiry } : {}),
       ...(continuousRuns !== undefined ? { continuous_runs: continuousRuns } : {}),
