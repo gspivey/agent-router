@@ -33,6 +33,18 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 138. Surface `recent_prs` as a compact table in the SPA Overview dashboard
+
+`GET /overview` returns `recent_prs: OverviewRecentPr[]` (title, repo, url, state,
+opened_at) but the SPA renders this data only as a scalar count in the "Recent PRs (24h)"
+stat card. The table is never shown. Adding a compact table follows the exact pattern of
+`recent_events` (P2.47, PR #207) and `active_sessions_by_repo` (P2.45, PR #205): the data
+is already in the API response; the SPA needs a new conditional section to render it. Pure
+client-side change — no backend modifications required.
+
+- Spec: `BACKLOG.md § P2.54`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed

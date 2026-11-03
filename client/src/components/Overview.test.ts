@@ -814,4 +814,140 @@ describe('Overview', () => {
     // Second row should show '—' for null pr_number
     expect(rows[1]?.textContent).toContain('—');
   });
+
+  // ---- Recent PRs section (BACKLOG.md § P2.54) ----
+
+  it('does not show the Recent PRs section when recent_prs is empty', async () => {
+    getOverview.mockResolvedValue(makeOverview({ recent_prs: [] }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, queryByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    expect(queryByTestId('recent-prs')).toBeNull();
+  });
+
+  it('shows the Recent PRs section when recent_prs has entries', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        recent_prs: [
+          {
+            title: 'Fix CI',
+            repo: 'org/my-repo',
+            url: 'https://github.com/org/my-repo/pull/42',
+            state: 'open',
+            opened_at: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    const section = await findByTestId('recent-prs');
+    expect(section).toBeTruthy();
+  });
+
+  it('renders one row per PR in recent_prs', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        recent_prs: [
+          {
+            title: 'Fix CI',
+            repo: 'org/repo-a',
+            url: 'https://github.com/org/repo-a/pull/1',
+            state: 'open',
+            opened_at: new Date().toISOString(),
+          },
+          {
+            title: 'Add feature',
+            repo: 'org/repo-b',
+            url: 'https://github.com/org/repo-b/pull/2',
+            state: 'merged',
+            opened_at: new Date(Date.now() - 3600 * 1000).toISOString(),
+          },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('recent-prs');
+    const rows = getAllByTestId('recent-prs-row');
+    expect(rows).toHaveLength(2);
+  });
+
+  it('each row contains the PR title text', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        recent_prs: [
+          {
+            title: 'Surface recent PRs table',
+            repo: 'org/repo',
+            url: 'https://github.com/org/repo/pull/10',
+            state: 'open',
+            opened_at: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('recent-prs');
+    const rows = getAllByTestId('recent-prs-row');
+    expect(rows[0]?.textContent).toContain('Surface recent PRs table');
+  });
+
+  it('each row contains a clickable link to the PR URL', async () => {
+    const prUrl = 'https://github.com/org/repo/pull/99';
+    getOverview.mockResolvedValue(
+      makeOverview({
+        recent_prs: [
+          {
+            title: 'My PR',
+            repo: 'org/repo',
+            url: prUrl,
+            state: 'open',
+            opened_at: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('recent-prs');
+    const rows = getAllByTestId('recent-prs-row');
+    const link = rows[0]?.querySelector('a');
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute('href')).toBe(prUrl);
+  });
+
+  it('shows a StatusBadge for open and merged PR states', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        recent_prs: [
+          {
+            title: 'Open PR',
+            repo: 'org/repo',
+            url: 'https://github.com/org/repo/pull/1',
+            state: 'open',
+            opened_at: new Date().toISOString(),
+          },
+          {
+            title: 'Merged PR',
+            repo: 'org/repo',
+            url: 'https://github.com/org/repo/pull/2',
+            state: 'merged',
+            opened_at: new Date(Date.now() - 3600 * 1000).toISOString(),
+          },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('recent-prs');
+    const rows = getAllByTestId('recent-prs-row');
+    // Both open and merged states should render a StatusBadge
+    expect(rows[0]?.querySelector('[data-testid="status-badge"]')).toBeTruthy();
+    expect(rows[1]?.querySelector('[data-testid="status-badge"]')).toBeTruthy();
+    // Open → 'active' state, Merged → 'paused' state
+    expect(rows[0]?.querySelector('[data-testid="status-badge"]')?.getAttribute('data-state')).toBe('active');
+    expect(rows[1]?.querySelector('[data-testid="status-badge"]')?.getAttribute('data-state')).toBe('paused');
+  });
 });

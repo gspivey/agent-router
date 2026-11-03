@@ -2386,3 +2386,63 @@ P2.36 to reflect the actual shipped state. Documentation-only: no code, no tests
 
 **Acceptance.** `BACKLOG.md § P2.36` carries a `✅ DONE (PRs #195, #210)` annotation. The
 ROADMAP item for this fix is ticked.
+
+---
+
+### P2.54 — Surface `recent_prs` as a compact table in the SPA Overview dashboard
+
+**Why this exists.** `GET /overview` already returns `recent_prs: OverviewRecentPr[]` (PR
+title, repo, URL, state, opened_at), but the SPA Overview dashboard renders this data only
+as a scalar stat card ("Recent PRs (24h)" — a count of PRs opened within the last 24 hours).
+The table is never shown. An operator who registered a PR and wants to confirm the agent
+picked it up, or who wants to jump directly to a PR from the dashboard, must navigate to the
+Sessions page and find the session manually.
+
+Adding a compact table follows the exact same pattern as `recent_events` (BACKLOG.md § P2.47,
+ROADMAP item 131, PR #207) and `active_sessions_by_repo` (BACKLOG.md § P2.45, ROADMAP item
+129, PR #205): the data is already in the API response; the SPA just needs a new `{#if}`
+section to render it.
+
+**What changes.**
+
+Client only (`client/src/components/Overview.svelte`):
+- Add a "Recent PRs" section after the "Recent Events" section. The section is only rendered
+  when `overview.recent_prs.length > 0` (so deployments with no registered PRs are unaffected).
+- The table renders one row per PR with columns: **Title** (the PR title as a clickable `<a>`
+  link to `pr.url`, `target="_blank" rel="noopener noreferrer"`), **Repo** (`pr.repo`),
+  **State** (a `StatusBadge` mapping `open` → `active`, `merged` → `completed`; any other value
+  renders as-is in muted text), and **Opened** (`pr.opened_at` formatted via
+  `formatNextFire(pr.opened_at)`, same formatter already used for cron next-fire times).
+- The section header is "Recent PRs". Use `data-testid="recent-prs"` on the `<section>` and
+  `data-testid="recent-prs-row"` on each `<tr>`.
+- No new backend changes, no new API fields, no new dependencies.
+
+`client/src/lib/types.ts`:
+- No changes needed — `OverviewRecentPr` is already declared and the `OverviewResponse`
+  field `recent_prs: OverviewRecentPr[]` is already present.
+
+**Tests.**
+
+Add to `client/src/components/Overview.test.ts`:
+- **Does not show the Recent PRs section when `recent_prs` is empty**: render with
+  `recent_prs: []`, assert `queryByTestId('recent-prs')` is null after load.
+- **Shows the Recent PRs section when `recent_prs` has entries**: render with one PR,
+  assert `findByTestId('recent-prs')` is truthy.
+- **Renders one row per PR in `recent_prs`**: render with two PRs, assert
+  `getAllByTestId('recent-prs-row')` has length 2.
+- **Each row contains the PR title**: render one PR with a known title, assert the title
+  text appears in the row.
+- **Each row contains a clickable link to the PR URL**: assert the `<a>` element in the row
+  has `href` equal to `pr.url`.
+- **State column shows a StatusBadge for open and merged states**: render one PR with
+  `state: 'open'` and one with `state: 'merged'`; assert both rows contain a
+  `[data-testid="status-badge"]`.
+
+**Acceptance.**
+- `npm --prefix client run check` emits 0 errors and 0 warnings.
+- `npm --prefix client run test` passes, including all new tests.
+- `npm run typecheck` passes.
+- `npm test` passes (no backend changes, but run for completeness).
+- When `recent_prs` is non-empty, the Overview shows a "Recent PRs" section with a clickable
+  link per PR.
+- When `recent_prs` is empty (`[]`), no section is shown.
