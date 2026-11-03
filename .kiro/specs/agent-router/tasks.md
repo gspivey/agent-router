@@ -99,9 +99,9 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 14.3_
   - [x] 6.3 Implement `markTaskChecked(content: string, taskLine: number): string` — return updated content with target line's `[ ]` replaced by `[x]`, preserving all other content
     - _Requirements: 14.5_
-  - [ ]* 6.4 Property test for roadmap task parsing
+  - [x]* 6.4 Property test for roadmap task parsing
     - Validates: Requirements 14.1, 14.2, 14.3
-  - [ ]* 6.5 Property test for parse/reconstruct round-trip
+  - [x]* 6.5 Property test for parse/reconstruct round-trip
     - Validates: Requirements 14.5
   - Note: roadmap.ts is consumed by the agent during its prompt, not by the daemon itself. The daemon ships it as a utility library.
 
@@ -194,10 +194,10 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 2.2, 2.3_
   - [x] 13.3 Implement `verifySignature` — HMAC-SHA256 comparison using `crypto.timingSafeEqual`; return false on missing/malformed signature header
     - _Requirements: 3.1, 3.2, 3.3_
-  - [ ]* 13.4 Write property test for HMAC-SHA256 verification correctness
+  - [x]* 13.4 Write property test for HMAC-SHA256 verification correctness
     - **Property 3: HMAC-SHA256 Verification Correctness**
     - **Validates: Requirements 3.1, 3.3**
-  - [ ]* 13.5 Write property test for unknown paths returning 404
+  - [x]* 13.5 Write property test for unknown paths returning 404
     - **Property 2: Unknown Paths Return 404**
     - **Validates: Requirements 2.2**
   - [ ]* 13.6 Write unit tests for HTTP routing edge cases

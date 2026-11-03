@@ -1002,6 +1002,69 @@ Documentation-only: no code, no tests.
 
 ---
 
+### P2.39 — Deferred property tests: server.ts and roadmap.ts
+
+The agent-router spec (`tasks.md` items `6.4`, `6.5`, `13.4`, `13.5`) specified four optional
+property-based tests that were deferred when their parent tasks shipped. This item delivers the
+fast-check coverage for HMAC-SHA256 verification correctness in `server.ts` and parse/round-trip
+correctness in `roadmap.ts`.
+
+**Why these.** `verifySignature` (server.ts) is the security gate for all incoming webhooks — if
+it ever accepts an invalid signature or rejects a valid one, agents either miss events or get
+spoofed. A fast-check property over arbitrary payloads and secrets provides stronger coverage than
+unit tests with a handful of example inputs. `parseRoadmap`/`markTaskChecked` (roadmap.ts) are
+the functions the daemon (and the agent prompt) use to parse and advance the work queue; a
+parse/reconstruct round-trip property ensures these functions are inverses for well-formed input.
+
+**Property 3 — HMAC-SHA256 Verification Correctness** (`verifySignature` in `src/server.ts`):
+- For any arbitrary secret string and arbitrary payload bytes, a signature computed with those
+  exact inputs is accepted by `verifySignature`.
+- For any arbitrary secret string, payload, and a different secret or payload, the computed
+  signature is rejected.
+- For any input not starting with `sha256=`, `verifySignature` returns `false`.
+- Invariant: the return value is always `boolean` (never throws).
+
+**Property 2 — Unknown Paths Return 404** (`createApp` in `src/server.ts`):
+- For any request path that is neither `/webhook` (POST) nor `/health` (GET), the app returns 404.
+- Variant: paths with arbitrary Unicode characters, query strings, or path segments all return 404.
+
+**Property 6.4 — Roadmap Task Parsing** (`parseRoadmap` in `src/roadmap.ts`):
+- For any content containing N markdown checkbox lines (`- [ ] ...` or `- [x] ...`),
+  `parseRoadmap` returns exactly N tasks.
+- Each returned task's `checked` field matches whether the source line had `[x]` or `[ ]`.
+- Each returned task's `line` field equals the 0-based line index of its source line in the
+  content.
+- Non-checkbox lines are not included in the output (invariant holds for arbitrary surrounding
+  prose).
+
+**Property 6.5 — Parse/Reconstruct Round-Trip** (`parseRoadmap` + `markTaskChecked` in `src/roadmap.ts`):
+- For any content containing at least one unchecked task, `markTaskChecked(content, task.line)`
+  produces content where the target line changes from `[ ]` to `[x]`, and all other lines are
+  unchanged.
+- For any content with an unchecked task at `line L`, after `markTaskChecked` the task at `L`
+  is checked; `parseRoadmap` on the result returns a task at line `L` with `checked: true`.
+
+**Mini spec.**
+
+- Add property tests to `test/tier1/server.test.ts` for Properties 3 and 2. Use `fc.string`,
+  `fc.uint8Array`, and `fc.webPath()` (or `fc.string` with path-like constraints) to generate
+  arbitrary inputs. Property 3 tests the `verifySignature` function directly. Property 2 uses
+  `createApp` (or a lightweight wrapper) to test HTTP routing. Minimum 100 runs per property.
+- Add property tests to `test/tier1/roadmap.test.ts` for Properties 6.4 and 6.5. Use
+  `fc.array` of task-line generators and `fc.string` for surrounding prose. Minimum 100 runs
+  per property.
+- All new tests are pure Tier 1 — no fake backends, no filesystem, no network.
+- Tick `tasks.md` items `6.4`, `6.5`, `13.4`, `13.5` in `.kiro/specs/agent-router/tasks.md`
+  to `[x]`.
+
+**Acceptance criteria.**
+- `npm test` passes with the new property tests included.
+- Each property runs at least 100 iterations (default `fc.assert` behaviour).
+- `npm run typecheck` passes — no `any` or stray `as` casts in the new test code.
+- Tasks `6.4`, `6.5`, `13.4`, `13.5` ticked in `.kiro/specs/agent-router/tasks.md`.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)

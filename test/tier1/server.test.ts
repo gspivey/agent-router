@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import crypto from 'node:crypto';
+import * as fc from 'fast-check';
 import { createApp, verifySignature, resolveWebhookSecret } from '../../src/server.js';
 import type { Database, NewEvent } from '../../src/db.js';
 import type { QueuedEvent } from '../../src/queue.js';
@@ -644,5 +645,134 @@ describe('GET /health', () => {
     });
     const res = await app.request('/health');
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 3: HMAC-SHA256 Verification Correctness (spec task 13.4)
+// ---------------------------------------------------------------------------
+
+describe('Property 3: HMAC-SHA256 Verification Correctness', () => {
+  // Arbitrary that generates a valid sha256= signature for a given secret+payload
+  function computeSignature(secret: string, payload: Uint8Array): string {
+    const hmac = crypto.createHmac('sha256', secret);
+    hmac.update(Buffer.from(payload));
+    return `sha256=${hmac.digest('hex')}`;
+  }
+
+  it('Property 3.1: valid signature is always accepted', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 100 }),
+        fc.uint8Array({ minLength: 0, maxLength: 1000 }),
+        (secret, payloadBytes) => {
+          const payload = Buffer.from(payloadBytes);
+          const sig = computeSignature(secret, payloadBytes);
+          return verifySignature(secret, payload, sig) === true;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 3.2: tampered signature (different secret) is always rejected', () => {
+    // Two secrets that are guaranteed to differ
+    const diffSecrets = fc.tuple(
+      fc.string({ minLength: 1, maxLength: 100 }),
+      fc.string({ minLength: 1, maxLength: 100 }),
+    ).filter(([a, b]) => a !== b);
+
+    fc.assert(
+      fc.property(
+        diffSecrets,
+        fc.uint8Array({ minLength: 0, maxLength: 1000 }),
+        ([secret, otherSecret], payloadBytes) => {
+          const payload = Buffer.from(payloadBytes);
+          // Compute signature with otherSecret, verify with secret — must fail
+          const wrongSig = computeSignature(otherSecret, payloadBytes);
+          return verifySignature(secret, payload, wrongSig) === false;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 3.3: inputs not starting with sha256= are always rejected', () => {
+    const nonPrefixed = fc.string({ minLength: 0, maxLength: 200 }).filter(
+      (s) => !s.startsWith('sha256='),
+    );
+
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 100 }),
+        fc.uint8Array({ minLength: 0, maxLength: 100 }),
+        nonPrefixed,
+        (secret, payloadBytes, badSig) => {
+          const payload = Buffer.from(payloadBytes);
+          return verifySignature(secret, payload, badSig) === false;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 3.4: verifySignature always returns a boolean (never throws)', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 0, maxLength: 200 }),
+        fc.uint8Array({ minLength: 0, maxLength: 500 }),
+        fc.string({ minLength: 0, maxLength: 200 }),
+        (secret, payloadBytes, sig) => {
+          const payload = Buffer.from(payloadBytes);
+          let result: unknown;
+          try {
+            result = verifySignature(secret, payload, sig);
+          } catch {
+            return false; // must not throw
+          }
+          return typeof result === 'boolean';
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 2: Unknown Paths Return 404 (spec task 13.5)
+// ---------------------------------------------------------------------------
+
+describe('Property 2: Unknown Paths Return 404', () => {
+  // Paths that are neither /webhook nor /health
+  const nonRoutedPath = fc
+    .string({ minLength: 1, maxLength: 100 })
+    .map((s) => {
+      // Ensure path starts with / and doesn't equal /webhook or /health
+      const p = '/' + s.replace(/\//g, '-');
+      return p;
+    })
+    .filter((p) => p !== '/webhook' && p !== '/health');
+
+  it('Property 2.1: arbitrary non-routed paths return 404', async () => {
+    // Build the app once and reuse it — constructing it inside fc.property is too heavy
+    const db = makeDb();
+    const app = createApp({
+      webhookSecret: WEBHOOK_SECRET,
+      db,
+      enqueue: vi.fn(),
+      log: makeLogger(),
+    });
+
+    await fc.assert(
+      fc.asyncProperty(
+        nonRoutedPath,
+        fc.constantFrom('GET', 'POST', 'PUT', 'DELETE', 'PATCH') as fc.Arbitrary<string>,
+        async (path, method) => {
+          const res = await app.request(path, { method });
+          return res.status === 404;
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 });
