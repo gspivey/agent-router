@@ -37,6 +37,18 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 142. Add unit tests for MessageBubble, PermissionCard, InternalPill, SystemPill, UnknownPill, and ReconnectPill
+
+Six SPA components (`MessageBubble`, `PermissionCard`, `InternalPill`, `SystemPill`,
+`UnknownPill`, `ReconnectPill`) have `data-testid` attributes and documented behaviors but
+no dedicated `*.test.ts` files. With the Composer and HelpOverlay test gap closed in
+ROADMAP item 140 (PR #216), these six are the remaining untested leaf components in the
+chat-view rendering pipeline. This item adds six new test files following the established
+`@testing-library/svelte` pattern (`StatusBadge.test.ts`, `Composer.test.ts`).
+
+- Spec: `BACKLOG.md § P2.58`
+- [x] Complete · PR: #218
+
 ### 141. Annotate BACKLOG.md § P2.55 as done
 
 `BACKLOG.md § P2.55` (Annotate BACKLOG.md § P2.54 as done) was fully implemented and
