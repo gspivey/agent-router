@@ -86,7 +86,7 @@ function spawnDaemon(rootDir: string, env?: Record<string, string>): DaemonProce
   return { proc, stdout, stderr };
 }
 
-async function waitForReady(port: number, timeoutMs = 15000): Promise<void> {
+async function waitForReady(port: number, timeoutMs = 30000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
