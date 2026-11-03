@@ -2917,7 +2917,7 @@ Both modes apply the same horizontal gutters (`px-4 sm:px-6 lg:px-8`).
 
 ---
 
-### P2.62 — Add client tests and svelte-check to CI
+### P2.62 — Add client tests and svelte-check to CI ✅ DONE (PR #222)
 
 **Why this exists.** The CI workflow (`.github/workflows/ci.yml`) runs `npm run typecheck` (daemon
 TypeScript) and `npx vitest run --project tier1 --project tier2` (daemon unit + integration tests),

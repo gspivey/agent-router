@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 146. Add client tests and svelte-check to CI
 
 The CI workflow runs `npm run typecheck` (daemon TypeScript) and the Tier 1 + Tier 2
@@ -45,11 +49,9 @@ changes. Follows the pattern of item 106 (PR #181) which added the tier3-pr.yml 
 to close the tier3 CI gap.
 
 - Spec: `BACKLOG.md § P2.62`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #222
 
 ---
-
-## Completed
 
 ### 145. Add property tests for overview data-processing pure functions
 
