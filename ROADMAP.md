@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 123. Deferred property tests: server.ts HMAC verification and roadmap.ts parse/round-trip
 
 The agent-router spec (`tasks.md` items `6.4`, `6.5`, `13.4`, `13.5`) specified four optional
@@ -48,11 +52,9 @@ the default 100 iterations. On completion, ticks `tasks.md` items `6.4`, `6.5`, 
 in `.kiro/specs/agent-router/tasks.md`.
 
 - Spec: `BACKLOG.md § P2.39`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #199
 
 ---
-
-## Completed
 
 ### 122. Fix stale parent task checkboxes in auth-credential-proxy and browser-test-harness specs
 
