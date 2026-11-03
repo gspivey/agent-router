@@ -37,6 +37,21 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 145. Add property tests for overview data-processing pure functions
+
+The pure functions `collectRecentPrs`, `computeSessionsByRepo`, `collectRecentEvents`,
+`buildCronSummary`, and `computeHealth` in `src/web-routes.ts` each have unit tests
+covering specific example inputs, but none have fast-check property tests. This follows
+the pattern of items 114–115 and 119–123 that added property tests for other daemon pure
+functions. Properties cover deduplication invariants (`collectRecentPrs`), active-count
+accuracy and 10-row cap (`computeSessionsByRepo`), result-count and ordering
+(`collectRecentEvents`), length and paused semantics (`buildCronSummary`), and the
+health-degraded/healthy invariants (`computeHealth`). All Tier 1 — no fake backends,
+no network.
+
+- Spec: `BACKLOG.md § P2.61`
+- [x] Complete · PR: #221
+
 ### 144. Surface queued tasks in the SPA Overview dashboard
 
 `GET /overview` returns `queue_depth: number` (the count of tasks in the `queued` state)

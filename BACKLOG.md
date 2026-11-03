@@ -2700,6 +2700,96 @@ Both modes apply the same horizontal gutters (`px-4 sm:px-6 lg:px-8`).
 
 ---
 
+### P2.61 — Add property tests for overview data-processing pure functions ✅ DONE (PR #221)
+
+The pure functions `collectRecentPrs`, `computeSessionsByRepo`, `collectRecentEvents`,
+`buildCronSummary`, and `computeHealth` in `src/web-routes.ts` each have unit tests
+covering specific example inputs, but none have fast-check property tests. This is the
+same gap that P2.31 (wake policy / ENV: resolution), P2.32 (prompt composers / config /
+logger), P2.36 (db / queue / session-files), and P2.39 (server / roadmap) addressed for
+other pure functions: property tests prove correctness invariants over the full input space,
+not just the handful of shapes unit tests exercise.
+
+**Why these five.**
+
+- `collectRecentPrs` — deduplicates `(repo, pr_number)` pairs across sessions and sorts
+  newest-first by `registered_at`. A fast-check property over arbitrary session arrays
+  proves the deduplication invariant (no `(repo, pr_number)` appears twice) and the
+  sort invariant (output is always descending by registration time) hold for any input.
+
+- `computeSessionsByRepo` — groups sessions by `repo`, counts active vs 24h-terminal,
+  sorts by active count descending, and caps at 10 rows. A property over arbitrary
+  session lists proves: the cap holds, sessions with `repo === null` are excluded, the
+  active count per row is always ≤ the number of sessions in that repo, and the sort
+  order is non-ascending by active count.
+
+- `collectRecentEvents` — reads processed events from the DB ordered by `received_at DESC`
+  capped at 10. Property: for any set of N processed events inserted into an in-memory DB,
+  `collectRecentEvents` returns min(N, 10) rows ordered by `received_at DESC`. Since this
+  function needs a DB, the property test uses a real in-memory SQLite database (same pattern
+  as `db.test.ts`).
+
+- `buildCronSummary` — maps `CronConfig[]` + `CronSummarySource[]` to
+  `OverviewCronSummary[]`. Properties: output length always equals `cronConfig.length`
+  (one row per cron entry); a paused cron always has `state === 'paused'` and
+  `next_fire === null`; an unparseable schedule produces `next_fire === null` without
+  throwing; a cron with `last_status === 'failed'` always has `state === 'error'`.
+
+- `computeHealth` — returns `'healthy'` or `'degraded'` based on cron states and session
+  age. Properties: any `cronSummary` entry with `state === 'paused' | 'error'` implies
+  `'degraded'`; any active session with `created_at < nowS - 7200` implies `'degraded'`;
+  an empty `cronSummary` and empty `activeSessions` always gives `'healthy'`.
+
+**Mini spec.**
+
+Add property tests to `test/tier1/web-server/overview-property-tests.test.ts` (new file).
+All tests are pure Tier 1 — no daemon, no network, no filesystem (except `collectRecentEvents`
+which uses an in-memory SQLite DB via `initDatabase(':memory:')` as in `db.test.ts`).
+
+- **Property A — `collectRecentPrs` deduplication**: for any array of sessions with
+  arbitrary `prs` arrays, the output contains at most one entry per unique `(repo, pr_number)`
+  pair.
+- **Property B — `collectRecentPrs` sort order**: for any non-empty sessions array, the
+  output is ordered by `registered_at` descending (i.e. `output[i]._ts >= output[i+1]._ts`
+  for all `i`, after recovering `_ts` from the `opened_at` ISO string).
+- **Property C — `computeSessionsByRepo` active-count invariant**: for any session list, the
+  `active` count for each repo row equals the number of sessions in that repo with
+  `status === 'active'`.
+- **Property D — `computeSessionsByRepo` cap**: for any session list, the output length is
+  at most 10 (the default cap).
+- **Property E — `computeSessionsByRepo` sort order**: the output is non-ascending by
+  `active` count (i.e. `output[i].active >= output[i+1].active` for all `i`).
+- **Property F — `buildCronSummary` length invariant**: for any `CronConfig` array of
+  length N, `buildCronSummary` returns exactly N rows.
+- **Property G — `buildCronSummary` paused semantics**: for any cron entry whose matching
+  `CronSummarySource` has `paused: true`, the output row has `state === 'paused'` and
+  `next_fire === null`.
+- **Property H — `computeHealth` degraded on paused/error cron**: for any `cronSummary`
+  array containing at least one entry with `state === 'paused'` or `state === 'error'`,
+  `computeHealth` returns `'degraded'`.
+- **Property I — `computeHealth` degraded on stale session**: for any active session with
+  `created_at < nowS - 7200`, `computeHealth` returns `'degraded'`.
+- **Property J — `computeHealth` healthy baseline**: with empty `cronSummary` and empty
+  `activeSessions`, `computeHealth` always returns `'healthy'`.
+
+Use `fc.record`, `fc.array`, `fc.string`, `fc.integer`, and `fc.constantFrom` from
+`fast-check`. Minimum 100 runs per property (the default `fc.assert` behaviour). All
+arbitraries must produce structurally valid inputs (no `undefined` where `string` is
+expected). For `collectRecentEvents`, use a real in-memory SQLite DB initialized with
+`initDatabase` + `insertEvent` helpers, exactly as in `db.test.ts`. For `computeSessionsByRepo`
+the input type is `SessionMeta`; a minimal stub with only the fields the function reads
+(`repo`, `status`, `created_at`) is sufficient (cast via `as unknown as SessionMeta[]`).
+
+**Acceptance criteria.**
+
+- `npm test` passes with the new property tests included in the Tier 1 run.
+- Each property runs at least 100 iterations.
+- `npm run typecheck` passes — no `any` or stray `as` casts in the new test code (except
+  the one `as unknown as SessionMeta[]` stub cast required to build minimal test fixtures).
+- No new runtime dependencies added.
+
+---
+
 ### P2.60 — Surface queued tasks in the SPA Overview dashboard ✅ DONE (PR #220)
 
 `GET /overview` returns `queue_depth: number` (the count of tasks in the `queued` state)
