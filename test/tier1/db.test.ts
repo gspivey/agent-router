@@ -5,6 +5,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import * as fc from 'fast-check';
 
 function makeTempDb(): { db: Database; dbPath: string; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), 'db-test-'));
@@ -408,5 +409,168 @@ describe('outbound comment tracking', () => {
 
     expect(db.isOutboundComment(222)).toBe(false); // pruned
     expect(db.isOutboundComment(333)).toBe(true);  // kept
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 4 — Event Storage Round-Trip (task 9.3)
+// ---------------------------------------------------------------------------
+// For any NewEvent with arbitrary repo, prNumber, eventType, payload,
+// receivedAt: insertEvent returns a positive id; updateEventProcessed sets
+// processed_at and wake_triggered correctly; payload is stored verbatim.
+// (BACKLOG.md § P2.36, BACKLOG.md § P2.50)
+//
+// Unlike the unit tests above, the property tests use a SINGLE database
+// instance per test (not per run). This is valid because each run inserts
+// a fresh event row (returned id is unique) and reads back only that row.
+// Using one DB per test avoids the 100× initDatabase overhead that caused
+// test timeouts in earlier Node 24 + NAN builds.
+
+describe('Property 4 — Event Storage Round-Trip', () => {
+  /**
+   * Arbitraries for NewEvent fields.
+   * - repo: non-empty string (must look like 'owner/repo' is not enforced by db)
+   * - prNumber: integer | null
+   * - eventType: non-empty string
+   * - payload: any string (JSON or not — db stores verbatim)
+   * - receivedAt: non-negative integer (unix seconds)
+   */
+  const arbitraryEvent = fc.record({
+    repo: fc.stringMatching(/^[a-z]{1,10}\/[a-z]{1,10}$/),
+    prNumber: fc.option(fc.integer({ min: 1, max: 999_999 }), { nil: null }),
+    eventType: fc.constantFrom('check_run', 'issue_comment', 'pull_request_review_comment', 'push'),
+    payload: fc.string({ maxLength: 200 }),
+    receivedAt: fc.integer({ min: 0, max: 2_000_000_000 }),
+  });
+
+  it('insertEvent returns a positive id and updateEventProcessed sets fields correctly (Property 4, ≥100 runs)', () => {
+    const { db, dbPath, dir } = makeTempDb();
+    try {
+      fc.assert(
+        fc.property(arbitraryEvent, fc.boolean(), (event, wakeTriggered) => {
+          const id = db.insertEvent(event);
+          if (id <= 0) return false;
+
+          db.updateEventProcessed(id, wakeTriggered);
+
+          // Read back via raw connection to verify the written values
+          const raw = new BetterSqlite3(dbPath);
+          const row = raw.prepare(
+            'SELECT processed_at, wake_triggered, payload FROM events WHERE id = ?',
+          ).get(id) as { processed_at: number | null; wake_triggered: number | null; payload: string };
+          raw.close();
+
+          return (
+            row.processed_at !== null &&
+            row.wake_triggered === (wakeTriggered ? 1 : 0) &&
+            row.payload === event.payload
+          );
+        }),
+        { numRuns: 100 },
+      );
+    } finally {
+      db.shutdown();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 8 — Atomic Rate Limit Acquisition (task 9.4)
+// ---------------------------------------------------------------------------
+// For any (repo, prNumber, cooldown, now): first call returns true; second
+// call before cooldown returns false; second call at/after cooldown returns
+// true; findSession reflects updated lastWakedAt.
+// (BACKLOG.md § P2.36, BACKLOG.md § P2.50)
+//
+// Uses a SINGLE database instance per test; each run uses a unique
+// (repo, prNumber) key derived by appending the run index so rows do not
+// conflict across runs.
+
+describe('Property 8 — Atomic Rate Limit Acquisition', () => {
+  /** Arbitrary session key + timing parameters. */
+  const arbitrarySlot = fc.record({
+    repo: fc.stringMatching(/^[a-z]{1,10}$/),
+    prNumber: fc.integer({ min: 1, max: 999_999 }),
+    cooldown: fc.integer({ min: 1, max: 3600 }),
+    now: fc.integer({ min: 1_000_000, max: 2_000_000_000 }),
+  });
+
+  it('first acquisition returns true and findSession reflects lastWakedAt (Properties 8a and 8d, ≥100 runs)', () => {
+    const { db, dir } = makeTempDb();
+    let runIndex = 0;
+    try {
+      fc.assert(
+        fc.property(arbitrarySlot, ({ repo, prNumber, cooldown, now }) => {
+          // Use a unique repo per run to avoid cross-run interference
+          const uniqueRepo = `${repo}/${runIndex++}`;
+          db.insertSession(uniqueRepo, prNumber, 'sess-prop');
+
+          // First acquisition must succeed
+          const acquired = db.tryAcquireWakeSlot(uniqueRepo, prNumber, cooldown, now);
+          if (!acquired) return false;
+
+          // findSession must reflect lastWakedAt = now
+          const session = db.findSession(uniqueRepo, prNumber);
+          return session !== null && session.lastWakedAt === now;
+        }),
+        { numRuns: 100 },
+      );
+    } finally {
+      db.shutdown();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('second call within cooldown returns false (Property 8b, ≥100 runs)', () => {
+    const { db, dir } = makeTempDb();
+    let runIndex = 0;
+    try {
+      fc.assert(
+        fc.property(
+          arbitrarySlot,
+          // delta is in [0, cooldown - 1] — strictly within the cooldown window
+          fc.integer({ min: 0, max: 99 }),
+          ({ repo, prNumber, cooldown: _cd, now }, delta) => {
+            const cooldown = 100; // fixed so delta < cooldown is guaranteed
+            const uniqueRepo = `${repo}/${runIndex++}`;
+            db.insertSession(uniqueRepo, prNumber, 'sess-prop');
+            db.tryAcquireWakeSlot(uniqueRepo, prNumber, cooldown, now);
+            // second call at now + delta (delta < 100 = cooldown) must return false
+            return db.tryAcquireWakeSlot(uniqueRepo, prNumber, cooldown, now + delta) === false;
+          },
+        ),
+        { numRuns: 100 },
+      );
+    } finally {
+      db.shutdown();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('second call at or after cooldown returns true (Property 8c, ≥100 runs)', () => {
+    const { db, dir } = makeTempDb();
+    let runIndex = 0;
+    try {
+      fc.assert(
+        fc.property(
+          arbitrarySlot,
+          // extra is in [0, 1000]; delta = cooldown + extra >= cooldown
+          fc.integer({ min: 0, max: 1000 }),
+          ({ repo, prNumber, cooldown, now }, extra) => {
+            const delta = cooldown + extra; // delta >= cooldown
+            const uniqueRepo = `${repo}/${runIndex++}`;
+            db.insertSession(uniqueRepo, prNumber, 'sess-prop');
+            db.tryAcquireWakeSlot(uniqueRepo, prNumber, cooldown, now);
+            // second call at now + delta (delta >= cooldown) must return true
+            return db.tryAcquireWakeSlot(uniqueRepo, prNumber, cooldown, now + delta) === true;
+          },
+        ),
+        { numRuns: 100 },
+      );
+    } finally {
+      db.shutdown();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

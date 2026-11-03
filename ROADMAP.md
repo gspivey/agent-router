@@ -37,6 +37,22 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 134. Upgrade better-sqlite3 to v13 and implement deferred db.ts property tests
+
+`better-sqlite3` v13.0.0 (released 2026-07-21) is the first version to run on the N-API,
+which removes the GC-finalizer-based destructor race that caused `Statement::~Statement()` →
+`RemoveEnvironmentCleanupHook` assertion failures in Node 24 + better-sqlite3 11.x + vitest.
+This crash was confirmed in ROADMAP item 120 (PR #196) and has blocked tasks 9.3 and 9.4
+(db.ts property tests) since ROADMAP item 119 (PR #195). This item upgrades the dependency,
+verifies the crash is resolved, and ships the two deferred property tests: Property 4 (Event
+Storage Round-Trip) and Property 8 (Atomic Rate Limit Acquisition), both in
+`test/tier1/db.test.ts`.
+
+- Spec: `BACKLOG.md § P2.50`
+- [x] Complete · PR: #210
+
+---
+
 ### 133. Add auto-refresh to the Sessions list page
 
 The SPA Overview page auto-refreshes every 30 seconds (ROADMAP item 117, PR #193) but the

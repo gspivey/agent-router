@@ -929,6 +929,11 @@ is required, `GET /overview` omits the `restart_required` key and the SPA shows 
 > Node 24.19.0 + better-sqlite3 11.10.0 + vitest 3.2.4. All test-level workarounds were
 > insufficient. A fix requires a better-sqlite3 or vitest change (see ROADMAP item 120 for
 > details). Tasks 9.3 and 9.4 are deferred until the underlying crash is resolved upstream.
+>
+> **Update (2026-11-03):** `better-sqlite3` v13.0.0 (released 2026-07-21) moved to the N-API
+> (`node-addon-api`), which provides synchronous cleanup on `db.close()` without relying on
+> GC finalizers. This resolves the destructor race. ROADMAP item 134 / BACKLOG.md § P2.50
+> upgrades to v13 and ships the deferred property tests.
 
 The agent-router spec (`tasks.md` items `9.3`, `9.4`, `10.2`, `11.7`, `11.8`, `11.9`, `11.10`)
 specified seven property-based tests that were deferred when their parent tasks shipped. This
@@ -2165,5 +2170,76 @@ No Tier 2 tests — this is a pure client-side polling change with no daemon beh
 - A "Last updated HH:MM:SS" timestamp and a "Refresh" button appear below the repo groups.
 - No new runtime dependencies added to `client/package.json`.
 - `npm run typecheck` and `npm test` pass (no daemon changes, but run for completeness).
+
+---
+
+### P2.50 — Upgrade better-sqlite3 to v13 and implement deferred db.ts property tests ✅ DONE (PR #210)
+
+`better-sqlite3` v13.0.0 (released 2026-07-21) is the first version to run on the N-API
+instead of the old NAN layer. The N-API provides ABI stability across Node.js versions and
+removes the GC-finalizer-based cleanup hooks that caused the `Statement::~Statement()` →
+`RemoveEnvironmentCleanupHook` assertion failure in Node 24.19.0 + better-sqlite3 11.10.0.
+
+**Context.** ROADMAP item 120 (PR #196) confirmed the crash was still present in Node
+24.19.0 + better-sqlite3 11.10.0 + vitest 3.2.4 with the `forks` pool. All test-level
+workarounds were insufficient. The root cause was that NAPI cleanup hooks for prepared
+`Statement` objects were registered lazily and removed asynchronously via GC finalizers;
+when the vitest worker process exited, the Node environment was torn down before the GC
+could remove the hooks, triggering the assert. `better-sqlite3` v13 moves to
+`node-addon-api` (the N-API C++ wrappers), which provides proper synchronous cleanup on
+`db.close()` without relying on GC finalizers.
+
+**What changes.**
+
+1. **Dependency upgrade**: change `"better-sqlite3": "^11.9.1"` to `"better-sqlite3":
+   "^13.0.3"` in `package.json`. Update the `allowScripts` entry from
+   `"better-sqlite3@11.10.0": true` to `"better-sqlite3@13.0.3": true`. Run `npm install`
+   to update `package-lock.json`.
+
+2. **Property 4 — Event Storage Round-Trip** (`db.ts`): add to `test/tier1/db.test.ts`.
+   - For any `NewEvent` (arbitrary `repo`, `prNumber` or null, `eventType`, `payload`,
+     `receivedAt`), `insertEvent` returns a positive integer id.
+   - `updateEventProcessed(id, wakeTriggered)` followed by a raw SQL read confirms
+     `processed_at` is set and `wake_triggered` equals the boolean argument.
+   - Invariant: the `payload` column stores the value exactly (no modification).
+   - Minimum 100 runs (`fc.assert` default).
+
+3. **Property 8 — Atomic Rate Limit Acquisition** (`db.ts`): add to `test/tier1/db.test.ts`.
+   - For any `(repo, prNumber)` with an inserted session, `tryAcquireWakeSlot(repo, pr,
+     limit, now)` returns `true` on the first call and sets `last_waked_at = now`.
+   - For any `delta < limit`, a second call at `now + delta` returns `false`.
+   - For any `delta >= limit`, a second call at `now + delta` returns `true` and updates
+     `last_waked_at`.
+   - Invariant: after a successful acquisition, `findSession` reflects the updated
+     `last_waked_at`.
+   - Minimum 100 runs.
+
+4. **Tick tasks.md**: tick items `9.3` and `9.4` in
+   `.kiro/specs/agent-router/tasks.md` to `[x]`.
+
+5. **Update BACKLOG.md § P2.36**: add a note that the crash is resolved in v13 and this
+   item ships the deferred tests.
+
+**Implementation notes.**
+- Keep the existing `setup()` pattern in `db.test.ts` (fresh temp directory per test,
+  `afterEach` cleanup with `db.shutdown()`). The property tests follow the same pattern:
+  one `initDatabase()` call per property run, cleaned up in the generated `afterEach`.
+  The key difference from the v11 crash is that v13 performs synchronous cleanup on
+  `db.close()` so vitest pool teardown no longer races the GC.
+- Use `fc.record` and `fc.string()` / `fc.integer()` for arbitrary event and session
+  generation.
+- Property 4 opens a second `BetterSqlite3` connection to read back the row — same
+  pattern as existing `updateEventProcessed` tests.
+- Property 8 is self-contained within the `Database` abstraction (`findSession` +
+  `tryAcquireWakeSlot`).
+- No new production dependencies. No Tier 2 tests (pure Tier 1).
+
+**Acceptance.**
+- `npm install` completes with better-sqlite3 v13.0.3 in node_modules.
+- `npm run typecheck` passes — no `any` or stray `as` casts.
+- `npm test` passes, including the new property tests.
+- Each property runs at least 100 iterations.
+- Tasks `9.3` and `9.4` are ticked in `.kiro/specs/agent-router/tasks.md`.
+- `BACKLOG.md § P2.36` carries a note that the crash is resolved in v13.
 
 ---
