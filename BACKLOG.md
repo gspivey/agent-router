@@ -2700,7 +2700,7 @@ Both modes apply the same horizontal gutters (`px-4 sm:px-6 lg:px-8`).
 
 ---
 
-### P2.61 — Add property tests for overview data-processing pure functions
+### P2.61 — Add property tests for overview data-processing pure functions ✅ DONE (PR #221)
 
 The pure functions `collectRecentPrs`, `computeSessionsByRepo`, `collectRecentEvents`,
 `buildCronSummary`, and `computeHealth` in `src/web-routes.ts` each have unit tests
