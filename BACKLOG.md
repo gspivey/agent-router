@@ -2973,3 +2973,70 @@ Updating the report script to include client results is out of scope for this it
   the overall CI job to fail.
 - `npm run typecheck` passes (no daemon changes).
 - `npm test` passes (no daemon code changes).
+
+---
+
+### P2.63 — Add client test outcomes to CI PR report ✅ DONE (PR #223)
+
+**Why this exists.** P2.62 (PR #222) added `Client svelte-check` and `Client unit tests` steps
+to `.github/workflows/ci.yml` so a broken Svelte component or failing client unit test fails CI.
+However, the `Generate Report` step still only inspects `typecheck` and `test` (the daemon suite)
+outcomes when building the PR comment. When the client steps fail, the PR comment reports
+`✅ All checks passed` (or omits the failure detail) because `OVERALL_STATUS` in `ci-report.sh`
+is computed solely from `--typecheck-outcome` and `--test-outcome`. An agent looking at the PR
+comment cannot tell whether the client checks failed — it must look at the raw workflow log.
+
+**What changes.**
+
+`scripts/ci-report.sh`:
+- Accept two new optional flags: `--svelte-check-outcome <outcome>` and
+  `--client-test-outcome <outcome>` (both `success | failure | skipped | cancelled`).
+- Include these outcomes in the `OVERALL_STATUS` calculation: if any of the four outcomes
+  is not `success`, `OVERALL_STATUS` is `fail`.
+- When `svelte-check-outcome` is `failure`, generate a `## Client svelte-check` section in
+  the report (after the `## Typecheck` section) that reads: `**Status:** ❌ Failed` with a
+  note directing the reader to the workflow log (there is no output file to parse for these
+  steps — only `npm --prefix client run check` exit code is available).
+- When `client-test-outcome` is `failure`, generate a `## Client Tests` section after the
+  `## Tests` section with `**Status:** ❌ Failed` and a similar note.
+- When both client outcomes are `success` (or absent), the report is unchanged from today.
+- The script must remain backward-compatible: callers that do not pass the new flags see no
+  change in behaviour.
+
+`.github/workflows/ci.yml`:
+- Pass the new flags to the `Generate Report` step:
+  ```yaml
+  --svelte-check-outcome "${{ steps.svelte-check.outcome }}" \
+  --client-test-outcome  "${{ steps.client-test.outcome }}"
+  ```
+
+**Mini spec.**
+
+- Extend the argument parsing block in `ci-report.sh` with `--svelte-check-outcome` and
+  `--client-test-outcome` cases (same pattern as `--typecheck-outcome`).
+- Extend the `OVERALL_STATUS` computation to include `SVELTE_CHECK_OUTCOME` and
+  `CLIENT_TEST_OUTCOME`.
+- Add `generate_svelte_check_section()` and `generate_client_test_section()` functions
+  (analogous to `generate_typecheck_section()`) that emit a minimal failure section when
+  their respective outcome is `failure`.
+- Wire the new sections into `generate_failure_report()` after the existing typecheck and
+  test sections.
+- Update the `Post PR Comment` generation in `ci.yml` to pass the two new flags.
+- Tier 1 tests (`test/tier1/ci-report.test.ts`): add test cases for:
+  - Success report is unchanged when both new outcomes are `success`.
+  - Report is `fail` when only `svelte-check-outcome` is `failure` (all others success).
+  - Report is `fail` when only `client-test-outcome` is `failure` (all others success).
+  - Failure report includes a `## Client svelte-check` section when svelte-check failed.
+  - Failure report includes a `## Client Tests` section when client-test failed.
+  - Both client sections appear when both client steps failed.
+  - Missing flags (not passed) produce the same output as today (backward compat).
+
+**Acceptance.**
+- A PR where `svelte-check` fails and `typecheck`/`test`/`client-test` succeed produces a
+  report with `## CI (test): ❌ Checks failed` and a `## Client svelte-check` section.
+- A PR where `client-test` fails produces a report with `## CI (test): ❌ Checks failed` and
+  a `## Client Tests` section.
+- A PR where all four steps succeed produces `## CI (test): ✅ All checks passed` (unchanged).
+- `npm run typecheck` passes (no daemon code changes).
+- `npm test` passes with the new Tier 1 test cases.
+- The `ci-report.sh` script exits 0 in all cases (report generation never fails the workflow).
