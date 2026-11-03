@@ -2449,6 +2449,91 @@ Add to `client/src/components/Overview.test.ts`:
 
 ---
 
+### P2.56 — Add unit tests for Composer and HelpOverlay client components ✅ DONE (PR #216)
+
+`Composer.svelte` and `HelpOverlay.svelte` are the only interactive SPA components that
+lack direct unit tests. The Composer handles the operator's primary action — injecting a
+prompt into an active session — and HelpOverlay handles keyboard-shortcut navigation. Both
+ship with `data-testid` attributes and documented props but have never been exercised by
+the vitest jsdom suite.
+
+**Why these two.** Every other non-trivial interactive component already has tests (see the
+`*.test.ts` pattern under `client/src/components/`). The pattern is: pure presentational
+components may skip tests if thoroughly covered by parent tests; components with significant
+event-handling logic or async state transitions need their own tests. Both `Composer` and
+`HelpOverlay` have branching logic worth covering directly.
+
+**Composer tests** (`client/src/components/Composer.test.ts`, new file):
+
+The Composer has three behavioral invariants worth testing independently of the ChatView:
+
+1. **Send path (happy path).** Typing a prompt and clicking Send (or pressing Enter) calls
+   `onSend` with the trimmed text. On `onSend` resolving, the input is cleared.
+
+2. **Disabled state.** When `disabled={true}`, the input and Send button are visible but
+   inert — clicking Send does not call `onSend`, the input is disabled (HTML attribute),
+   and the send button is disabled (HTML attribute).
+
+3. **Sending guard.** While `onSend` is in flight (promise not yet settled), a second
+   click on Send does not fire a second `onSend` call (the `sending` guard prevents
+   double-submit). The input retains its value while sending.
+
+4. **Error path.** When `onSend` rejects, the input value is NOT cleared (operator can
+   retry), and the component does not crash.
+
+5. **Empty input.** When the input is empty or whitespace-only, the Send button is
+   disabled (`canSend` is false). Submitting the form with an empty input does not call
+   `onSend`.
+
+Tests use `@testing-library/svelte` with `render`, `fireEvent`, `waitFor` — same pattern as
+`KillConfirmDialog.test.ts` and `ChatView.internals.test.ts`.
+
+**HelpOverlay tests** (`client/src/components/HelpOverlay.test.ts`, new file):
+
+The HelpOverlay has three close mechanisms and a keyboard shortcut list:
+
+1. **Close button.** Clicking the `[data-testid="help-close"]` button calls `onClose`.
+
+2. **Backdrop click.** Clicking the `[data-testid="help-backdrop"]` button calls `onClose`.
+
+3. **Escape key.** Pressing `Escape` calls `onClose` and prevents default (no scroll
+   interference). Other keys (e.g. `Enter`, `a`) do NOT call `onClose`.
+
+4. **Keyboard shortcut rows.** The rendered `<dl>` contains the three documented shortcuts:
+   `J`, `?`, `Esc`. All three `<dd>` text labels appear in the rendered output.
+
+5. **ARIA roles.** The overlay root has `role="dialog"` and `aria-modal="true"`.
+
+Tests use `@testing-library/svelte` and `vi.fn()` for `onClose`. Since `HelpOverlay` binds
+`<svelte:window onkeydown>`, tests must dispatch `KeyboardEvent` on the document/window with
+`fireEvent.keyDown` (which bubbles from `document`).
+
+**Mini spec.**
+
+- Create `client/src/components/Composer.test.ts` with all 5 test cases above. Use `vi.fn()`
+  for `onSend` returning `Promise.resolve()` (happy path) or `Promise.reject(new Error('fail'))`
+  (error path). No network calls, no real API.
+- Create `client/src/components/HelpOverlay.test.ts` with all 5 test cases above. Use
+  `vi.fn()` for `onClose`. For keyboard tests, use `fireEvent.keyDown(document.body, { key:
+  'Escape' })` — matches how `<svelte:window onkeydown>` receives events in jsdom.
+- No new production code changes. No new runtime dependencies.
+- `npm --prefix client run test` must pass with the new tests included.
+- `npm --prefix client run check` (svelte-check) must report 0 errors and 0 warnings.
+- `npm run typecheck` must pass (no daemon changes).
+- `npm test` must pass (no daemon changes).
+
+**Acceptance.**
+- `client/src/components/Composer.test.ts` exists with ≥ 5 test cases covering the send
+  path, disabled state, sending guard, error path, and empty-input guard.
+- `client/src/components/HelpOverlay.test.ts` exists with ≥ 5 test cases covering the
+  close button, backdrop click, Escape key, shortcut list content, and ARIA roles.
+- `npm --prefix client run test` passes (374 + N new tests, N ≥ 10).
+- `npm --prefix client run check` reports 0 warnings (no new Svelte 5 patterns introduced).
+- `npm run typecheck` passes.
+- `npm test` passes (existing 2343 tests, no daemon changes).
+
+---
+
 ### P2.55 — Annotate BACKLOG.md § P2.54 as done
 
 `BACKLOG.md § P2.54` (Surface `recent_prs` as a compact table in the SPA Overview dashboard)
