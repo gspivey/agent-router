@@ -2245,7 +2245,7 @@ could remove the hooks, triggering the assert. `better-sqlite3` v13 moves to
 
 ---
 
-### P2.51 — Annotate BACKLOG.md § P2.36 as done
+### P2.51 — Annotate BACKLOG.md § P2.36 as done ✅ DONE (PR #211)
 
 `BACKLOG.md § P2.36` (Deferred property tests: db.ts, queue.ts, and session-files.ts) was
 fully implemented across two ROADMAP items:

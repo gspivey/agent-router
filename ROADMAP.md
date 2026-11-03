@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 135. Annotate BACKLOG.md § P2.36 as done
 
 `BACKLOG.md § P2.36` (Deferred property tests: db.ts, queue.ts, and session-files.ts) was
@@ -43,11 +47,9 @@ but the BACKLOG.md entry was never annotated with a DONE marker. This item adds 
 Documentation-only: no code, no tests.
 
 - Spec: `BACKLOG.md § P2.51`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #211
 
 ---
-
-## Completed
 
 ### 134. Upgrade better-sqlite3 to v13 and implement deferred db.ts property tests
 
