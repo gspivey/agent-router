@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 128. Color-highlight task-outcome stat cards in the SPA Overview dashboard
 
 The "Tasks Failed (24h)" and "Tasks Done (24h)" stat cards in the SPA Overview render
@@ -44,11 +48,9 @@ whether the count is non-zero: red for any failed tasks, green for any succeeded
 Pure client-side change — no backend modifications required.
 
 - Spec: `BACKLOG.md § P2.44`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #204
 
 ---
-
-## Completed
 
 ### 127. Annotate BACKLOG.md § P2.39 and § P2.40 as done
 

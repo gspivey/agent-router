@@ -1745,7 +1745,7 @@ Tests:
 
 ---
 
-### P2.44 — Color-highlight task-outcome stat cards in the SPA Overview
+### P2.44 — Color-highlight task-outcome stat cards in the SPA Overview ✅ DONE (PR #204)
 
 The "Tasks Failed (24h)" and "Tasks Done (24h)" stat cards in the SPA Overview render the
 count value in the default `var(--text-primary)` color regardless of whether tasks succeeded
