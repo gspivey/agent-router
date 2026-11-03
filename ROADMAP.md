@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 138. Surface `recent_prs` as a compact table in the SPA Overview dashboard
 
 `GET /overview` returns `recent_prs: OverviewRecentPr[]` (title, repo, url, state,
@@ -43,11 +47,7 @@ is already in the API response; the SPA needs a new conditional section to rende
 client-side change — no backend modifications required.
 
 - Spec: `BACKLOG.md § P2.54`
-- [ ] Complete · PR: —
-
----
-
-## Completed
+- [x] Complete · PR: #214
 
 ### 137. Track `last_fired_at` in `cron_state` and surface it in the Overview dashboard
 
