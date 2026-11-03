@@ -1689,7 +1689,7 @@ did not start within Nms"` is the failure instead of a vitest timeout, and the f
 
 ---
 
-### P2.53 — Track `last_fired_at` in `cron_state` and surface it in the Overview dashboard
+### P2.53 — Track `last_fired_at` in `cron_state` and surface it in the Overview dashboard ✅ DONE (PR #213)
 
 **Why this exists.** The `cron_state` table only stores `name`, `paused`, and `updated_at` — it
 has no record of when a cron last actually fired. The `buildCronSummary` comment in

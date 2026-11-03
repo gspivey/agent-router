@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 137. Track `last_fired_at` in `cron_state` and surface it in the Overview dashboard
 
 The `cron_state` table (ROADMAP item 22, PR #62) stores `name`, `paused`, and `updated_at` but
@@ -44,9 +48,7 @@ adds a "Last fired" column to the cron summary table in `Overview.svelte`. Pure 
 (db logic, buildCronSummary) + Tier 2 (cron fire → dashboard) + client unit tests.
 
 - Spec: `BACKLOG.md § P2.53`
-- [ ] Complete · PR: —
-
----
+- [x] Complete · PR: #213
 
 ## Completed
 
