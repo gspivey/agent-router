@@ -2534,7 +2534,7 @@ Tests use `@testing-library/svelte` and `vi.fn()` for `onClose`. Since `HelpOver
 
 ---
 
-### P2.55 — Annotate BACKLOG.md § P2.54 as done
+### P2.55 — Annotate BACKLOG.md § P2.54 as done ✅ DONE (PR #215)
 
 `BACKLOG.md § P2.54` (Surface `recent_prs` as a compact table in the SPA Overview dashboard)
 was fully implemented and shipped as ROADMAP item 138 (PR #214), but the BACKLOG.md entry was
@@ -2542,4 +2542,16 @@ never annotated with a DONE marker. This item adds the `✅ DONE (PR #214)` anno
 to reflect the actual shipped state. Documentation-only: no code, no tests.
 
 **Acceptance.** `BACKLOG.md § P2.54` carries a `✅ DONE (PR #214)` annotation. The ROADMAP
+item for this fix is ticked.
+
+---
+
+### P2.57 — Annotate BACKLOG.md § P2.55 as done
+
+`BACKLOG.md § P2.55` (Annotate BACKLOG.md § P2.54 as done) was fully implemented and
+shipped as ROADMAP item 139 (PR #215), but the BACKLOG.md entry was never annotated with
+a DONE marker. This item adds the `✅ DONE (PR #215)` annotation to P2.55 to reflect the
+actual shipped state. Documentation-only: no code, no tests.
+
+**Acceptance.** `BACKLOG.md § P2.55` carries a `✅ DONE (PR #215)` annotation. The ROADMAP
 item for this fix is ticked.
