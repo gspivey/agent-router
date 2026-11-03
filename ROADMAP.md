@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 140. Add unit tests for Composer and HelpOverlay client components
 
 `Composer.svelte` (prompt-injection input bar) and `HelpOverlay.svelte` (keyboard-shortcut
@@ -46,11 +50,7 @@ for keyboard navigation. Both have `data-testid` attributes and documented props
 `ChatView.internals.test.ts`.
 
 - Spec: `BACKLOG.md § P2.56`
-- [ ] Complete · PR: —
-
----
-
-## Completed
+- [x] Complete · PR: #216
 
 ### 139. Annotate BACKLOG.md § P2.54 as done
 

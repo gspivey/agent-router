@@ -2449,7 +2449,7 @@ Add to `client/src/components/Overview.test.ts`:
 
 ---
 
-### P2.56 — Add unit tests for Composer and HelpOverlay client components
+### P2.56 — Add unit tests for Composer and HelpOverlay client components ✅ DONE (PR #216)
 
 `Composer.svelte` and `HelpOverlay.svelte` are the only interactive SPA components that
 lack direct unit tests. The Composer handles the operator's primary action — injecting a
