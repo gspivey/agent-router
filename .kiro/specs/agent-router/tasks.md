@@ -133,10 +133,10 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 8.1, 8.2, 9.1, 9.2, 9.3, 9.4_
   - [x] 9.2c Implement lifecycle helpers — `walCheckpoint`, `shutdown` (checkpoint + close)
     - _Requirements: 16.4_
-  - [ ]* 9.3 Write property test for event storage round-trip
+  - [x]* 9.3 Write property test for event storage round-trip
     - **Property 4: Event Storage Round-Trip**
     - **Validates: Requirements 4.1, 4.2**
-  - [ ]* 9.4 Write property test for atomic rate limit acquisition
+  - [x]* 9.4 Write property test for atomic rate limit acquisition
     - **Property 8: Atomic Rate Limit Acquisition**
     - **Validates: Requirements 9.1, 9.2, 9.3, 9.4**
   - [x]* 9.5 Write unit tests for stale event cleanup and session lookup
