@@ -449,6 +449,42 @@
       </section>
     {/if}
 
+    <!-- Queued Tasks (BACKLOG.md § P2.60) — only shown when at least one task is queued -->
+    {#if overview !== null && overview.queued_tasks.length > 0}
+      <section data-testid="queued-tasks">
+        <h2 class="mb-2 text-sm font-semibold text-[var(--text-primary)]">Queued Tasks</h2>
+        <Card>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr class="border-b border-[var(--border)] text-[var(--text-muted)]">
+                  <th class="px-2 py-2 font-medium">ID</th>
+                  <th class="px-2 py-2 font-medium">Repo</th>
+                  <th class="px-2 py-2 font-medium">Title</th>
+                  <th class="px-2 py-2 font-medium">Queued</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each overview.queued_tasks as task (task.id_prefix)}
+                  <tr
+                    data-testid="queued-tasks-row"
+                    class="border-b border-[var(--border)] last:border-b-0"
+                  >
+                    <td class="px-2 py-2 font-mono text-xs text-[var(--text-muted)]">{task.id_prefix}</td>
+                    <td class="px-2 py-2 font-mono text-xs text-[var(--text-muted)]">{task.repo}</td>
+                    <td class="px-2 py-2 text-[var(--text-primary)] truncate max-w-xs">{task.title}</td>
+                    <td class="px-2 py-2 text-xs text-[var(--text-muted)]">
+                      {new Date(task.created_at * 1000).toLocaleString()}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
+    {/if}
+
     <!-- Recent PRs (BACKLOG.md § P2.54) — only shown when at least one PR is registered -->
     {#if overview !== null && overview.recent_prs.length > 0}
       <section data-testid="recent-prs">

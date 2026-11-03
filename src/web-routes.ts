@@ -576,6 +576,44 @@ export function collectRecentEvents(db: Database | undefined, limit = 10): Overv
   }
 }
 
+/**
+ * Collect currently-queued tasks from the `tasks` table, ordered by
+ * `created_at ASC` (oldest-enqueued first), capped at `limit` rows (default 10).
+ *
+ * Returns an empty array when `db` is absent, the tasks table is unavailable
+ * (optional feature), the query fails, or no tasks are in the `queued` state.
+ * Pure — takes all inputs as parameters for direct testability.
+ * See BACKLOG.md § P2.60.
+ */
+export function collectQueuedTasks(db: Database | undefined, limit = 10): OverviewQueuedTask[] {
+  if (db === undefined) return [];
+  try {
+    const rows = db
+      .raw()
+      .prepare<[number]>(
+        `SELECT id, repo, title, created_at
+         FROM tasks
+         WHERE state = 'queued'
+         ORDER BY created_at ASC
+         LIMIT ?`,
+      )
+      .all(limit) as Array<{
+        id: string;
+        repo: string;
+        title: string;
+        created_at: number;
+      }>;
+    return rows.map((r) => ({
+      id_prefix: r.id.slice(0, 8),
+      repo: r.repo,
+      title: r.title,
+      created_at: Math.floor(r.created_at / 1000), // ms → seconds
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /** The `GET /overview` response body (Req 1.2). */
 export interface OverviewResponse {
   readonly active_sessions: number;
@@ -648,6 +686,30 @@ export interface OverviewResponse {
    * See BACKLOG.md § P2.47.
    */
   readonly recent_events: OverviewRecentEvent[];
+  /**
+   * The currently-queued tasks, ordered by `created_at ASC` (oldest first),
+   * capped at 10. Each row carries the task ID (prefix), repo, title, and
+   * creation timestamp. Always present (never undefined); empty when no tasks
+   * are in the `queued` state. Gives operators a fast view of what's waiting
+   * in the work queue without leaving the dashboard.
+   * See BACKLOG.md § P2.60.
+   */
+  readonly queued_tasks: OverviewQueuedTask[];
+}
+
+/**
+ * A single queued task as surfaced in the `GET /overview` response
+ * (BACKLOG.md § P2.60).
+ */
+export interface OverviewQueuedTask {
+  /** First 8 characters of the ULID task id — enough to identify it. */
+  readonly id_prefix: string;
+  /** Repository in `owner/repo` format. */
+  readonly repo: string;
+  /** Short human-readable title from the task record. */
+  readonly title: string;
+  /** Unix epoch seconds when the task was created. */
+  readonly created_at: number;
 }
 
 /**
@@ -1469,6 +1531,7 @@ export function createWebRoutes(deps: {
       uptime_s: Math.floor((Date.now() - overviewStartedAt) / 1000),
       active_sessions_by_repo: computeSessionsByRepo(sessions, nowS),
       recent_events: collectRecentEvents(db),
+      queued_tasks: collectQueuedTasks(db),
       ...(restartRequired !== undefined ? { restart_required: restartRequired } : {}),
       ...(tokenExpiry !== undefined ? { token_expiry: tokenExpiry } : {}),
       ...(continuousRuns !== undefined ? { continuous_runs: continuousRuns } : {}),

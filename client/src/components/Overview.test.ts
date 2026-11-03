@@ -47,6 +47,7 @@ function makeOverview(overrides: Partial<OverviewResponse> = {}): OverviewRespon
     uptime_s: 3600,
     active_sessions_by_repo: [],
     recent_events: [],
+    queued_tasks: [],
     ...overrides,
   };
 }
@@ -949,5 +950,80 @@ describe('Overview', () => {
     // Open → 'active' state, Merged → 'paused' state
     expect(rows[0]?.querySelector('[data-testid="status-badge"]')?.getAttribute('data-state')).toBe('active');
     expect(rows[1]?.querySelector('[data-testid="status-badge"]')?.getAttribute('data-state')).toBe('paused');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Queued Tasks section (BACKLOG.md § P2.60)
+// ---------------------------------------------------------------------------
+
+describe('Queued Tasks section', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listSessions.mockResolvedValue(makeSessionList([]));
+  });
+  afterEach(() => cleanup());
+
+  it('does not show the Queued Tasks section when queued_tasks is empty', async () => {
+    getOverview.mockResolvedValue(makeOverview({ queued_tasks: [] }));
+    const { queryByTestId } = render(Overview);
+    await waitFor(() => expect(getOverview).toHaveBeenCalled());
+    expect(queryByTestId('queued-tasks')).toBeNull();
+  });
+
+  it('shows the Queued Tasks section when queued_tasks has entries', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        queued_tasks: [
+          { id_prefix: 'abcd1234', repo: 'org/repo', title: 'Implement feature X', created_at: 1699000000 },
+        ],
+      }),
+    );
+    const { findByTestId } = render(Overview);
+    const section = await findByTestId('queued-tasks');
+    expect(section).toBeTruthy();
+  });
+
+  it('renders one row per task in queued_tasks', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        queued_tasks: [
+          { id_prefix: 'abcd1234', repo: 'org/repo', title: 'Task one',   created_at: 1699000000 },
+          { id_prefix: 'efgh5678', repo: 'org/repo', title: 'Task two',   created_at: 1699001000 },
+        ],
+      }),
+    );
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('queued-tasks');
+    const rows = getAllByTestId('queued-tasks-row');
+    expect(rows).toHaveLength(2);
+  });
+
+  it('each row contains the task title', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        queued_tasks: [
+          { id_prefix: 'abcd1234', repo: 'org/repo', title: 'My queued task', created_at: 1699000000 },
+        ],
+      }),
+    );
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('queued-tasks');
+    const rows = getAllByTestId('queued-tasks-row');
+    expect(rows[0]?.textContent).toContain('My queued task');
+  });
+
+  it('each row contains the id_prefix', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        queued_tasks: [
+          { id_prefix: 'abcd1234', repo: 'org/repo', title: 'Task', created_at: 1699000000 },
+        ],
+      }),
+    );
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('queued-tasks');
+    const rows = getAllByTestId('queued-tasks-row');
+    expect(rows[0]?.textContent).toContain('abcd1234');
   });
 });

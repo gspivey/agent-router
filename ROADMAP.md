@@ -37,6 +37,18 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 144. Surface queued tasks in the SPA Overview dashboard
+
+`GET /overview` returns `queue_depth: number` (the count of tasks in the `queued` state)
+but the SPA renders this only as a scalar stat card ("Queued Work"). An operator who wonders
+"which tasks are waiting?" must query SQLite or the `/v1/tasks?state=queued` endpoint manually.
+Adding a compact "Queued Tasks" table follows the exact pattern of `recent_events` (P2.47,
+PR #207), `active_sessions_by_repo` (P2.45, PR #205), and `recent_prs` (P2.54, PR #214):
+the data is already in the DB; the SPA needs a new conditional section to render it.
+
+- Spec: `BACKLOG.md § P2.60`
+- [x] Complete · PR: #220
+
 ### 143. Add unit tests for PageLayout component
 
 `PageLayout.svelte` is the only component in `client/src/components/` that has no test

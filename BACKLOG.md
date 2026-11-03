@@ -2697,3 +2697,130 @@ Both modes apply the same horizontal gutters (`px-4 sm:px-6 lg:px-8`).
 - `npm --prefix client run check` (svelte-check) reports 0 errors and 0 warnings.
 - `npm run typecheck` passes (no daemon changes).
 - `npm test` passes (no daemon changes).
+
+---
+
+### P2.60 — Surface queued tasks in the SPA Overview dashboard ✅ DONE (PR #220)
+
+`GET /overview` returns `queue_depth: number` (the count of tasks in the `queued` state)
+but the SPA renders this only as a scalar stat card ("Queued Work"). An operator who wonders
+"which tasks are waiting?" must query the SQLite `tasks` table or the `/v1/tasks?state=queued`
+endpoint manually. Adding a compact "Queued Tasks" table follows the exact pattern of
+`recent_events` (P2.47, PR #207), `active_sessions_by_repo` (P2.45, PR #205), and
+`recent_prs` (P2.54, PR #214): the data is already in the DB; the SPA needs a new
+conditional section to render it.
+
+**What changes.**
+
+Backend (`src/web-routes.ts`):
+- Export a new `OverviewQueuedTask` interface:
+  ```ts
+  export interface OverviewQueuedTask {
+    readonly id_prefix: string; // first 8 chars of the ULID task id
+    readonly repo: string;
+    readonly title: string;
+    readonly created_at: number; // unix epoch seconds
+  }
+  ```
+- Export a `collectQueuedTasks(db: Database | undefined, limit = 10): OverviewQueuedTask[]`
+  pure helper that runs:
+  ```sql
+  SELECT id, repo, title, created_at
+  FROM tasks
+  WHERE state = 'queued'
+  ORDER BY created_at ASC
+  LIMIT ?
+  ```
+  Returns an empty array when `db` is absent, the tasks table is unavailable (optional
+  feature), or the query fails. Returns `created_at` converted from unix-ms to unix
+  seconds. The `id_prefix` is the first 8 characters of the ULID.
+- Add `readonly queued_tasks: OverviewQueuedTask[]` to `OverviewResponse`. Always present
+  (never optional); empty array when no tasks are queued.
+- Wire `collectQueuedTasks(db)` into the `GET /overview` handler body alongside
+  `collectRecentEvents`.
+
+Client (`client/src/lib/types.ts`, `client/src/components/Overview.svelte`):
+- Add `OverviewQueuedTask` interface to `client/src/lib/types.ts`.
+- Add `readonly queued_tasks: OverviewQueuedTask[]` to `OverviewResponse` in
+  `client/src/lib/types.ts`.
+- In `Overview.svelte`, add a "Queued Tasks" section between the "Recent Events" and
+  "Recent PRs" sections. The section is only rendered when
+  `overview.queued_tasks.length > 0`. Each row shows: `id_prefix` (monospace), `repo`
+  (monospace), `title` (truncated), and `created_at` (locale timestamp). Use
+  `data-testid="queued-tasks"` on the `<section>` and `data-testid="queued-tasks-row"`
+  on each `<tr>`.
+
+Tests:
+- Tier 1 (`test/tier1/web-server/overview-queued-tasks.test.ts`, new file):
+  - Unit tests for `collectQueuedTasks` pure function:
+    returns `[]` when `db` is `undefined`, returns `[]` when the tasks table is empty,
+    returns `[]` when no tasks are `queued`, returns a row with the correct `id_prefix`/
+    `repo`/`title`/`created_at` (ms → s conversion), orders by `created_at ASC`,
+    excludes non-queued tasks (running/succeeded/failed/cancelled), caps at 10 by default,
+    respects a custom limit, `id_prefix` is always 8 characters.
+  - Integration tests via `GET /overview`: returns `queued_tasks: []` when empty, returns
+    `queued_tasks: []` when `db` is absent, returns `queued_tasks: []` when only non-queued
+    tasks exist, returns one row per queued task with correct fields, returns tasks
+    ordered oldest-first.
+- Client (`client/src/components/Overview.test.ts`):
+  - Add `queued_tasks: []` to the `makeOverview` fixture default.
+  - Does not show section when `queued_tasks` is empty.
+  - Shows section when `queued_tasks` has entries.
+  - Renders one row per task.
+  - Each row contains the task title.
+  - Each row contains the `id_prefix`.
+
+No new backend dependencies. No new client dependencies. No new DB schema — the `tasks`
+table already exists from the task-attempt-outcome spec (ROADMAP items 67–70).
+
+**Acceptance.**
+- `GET /overview` returns `{ ..., queued_tasks: [{id_prefix, repo, title, created_at}, ...] }`.
+- The array is ordered by `created_at ASC`, capped at 10, and always present.
+- The SPA Overview shows a "Queued Tasks" table when the array is non-empty.
+- When no tasks are queued, no section is shown.
+- `npm run typecheck` passes, `npm test` passes, `npm --prefix client run check` passes,
+  `npm --prefix client run test` passes.
+
+`PageLayout.svelte` is the only component in `client/src/components/` that has no test
+coverage at all — not even an indirect mention in a parent test. Every other component in
+that directory either has a dedicated `*.test.ts` file or is tested indirectly via
+`json-a11y.test.ts`, `streaming-controls.test.ts`, or `CardPageHeader.test.ts`. After
+the P2.56 (Composer/HelpOverlay) and P2.58 (six pill/bubble components) rounds, `PageLayout`
+is the last gap.
+
+`PageLayout` is a layout wrapper with two modes:
+
+- **`wide`** (default) — `max-w-6xl` with vertical padding (`py-6`). Used by list, config,
+  and overview views.
+- **`narrow`** — `max-w-4xl` with **no** vertical padding. Used by the chat (detail) view
+  because `py-6` would push the composer below the fold.
+
+Both modes apply the same horizontal gutters (`px-4 sm:px-6 lg:px-8`).
+
+**Testable behaviors (`client/src/components/PageLayout.test.ts`):**
+
+- `data-testid="page-layout"` is rendered on the wrapper `<div>` in both modes.
+- `data-width` reflects the `width` prop: `"wide"` (default) or `"narrow"`.
+- **Wide mode** (default): the container's `class` contains `max-w-6xl` and `py-6`.
+- **Wide mode** (default): the container's `class` does NOT contain `max-w-4xl`.
+- **Narrow mode**: the container's `class` contains `max-w-4xl`.
+- **Narrow mode**: the container's `class` does NOT contain `py-6` (no vertical padding —
+  this is the critical layout contract for the chat view).
+- Both modes render their slot children correctly.
+
+**Mini spec.**
+
+- Create one new test file: `client/src/components/PageLayout.test.ts`.
+- Follow the `@testing-library/svelte` pattern established by `CardPageHeader.test.ts` and
+  `StatCard.test.ts`: use `render`, `cleanup`, `afterEach(() => cleanup())`, import
+  `createRawSnippet` from `svelte` for the `children` snippet prop.
+- All tests are client-side only — no daemon, no fake backends, no network.
+- No new production code changes. No new runtime dependencies.
+
+**Acceptance.**
+- `client/src/components/PageLayout.test.ts` exists with ≥ 7 tests covering the behaviors
+  above.
+- `npm --prefix client run test` passes with the new tests included.
+- `npm --prefix client run check` (svelte-check) reports 0 errors and 0 warnings.
+- `npm run typecheck` passes (no daemon changes).
+- `npm test` passes (no daemon changes).
