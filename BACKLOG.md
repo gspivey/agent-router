@@ -1650,6 +1650,45 @@ Tests:
 
 ---
 
+### P2.52 — Fix flaky `token-store-startup.test.ts` under concurrent load ✅ DONE (PR #212)
+
+`test/tier2/token-store-startup.test.ts` spawns a real daemon subprocess and waits for
+`/health` to respond before proceeding. The helper function `waitForReady` uses a `15000ms`
+timeout. The individual vitest tests use `30000ms` as their timeout. Under concurrent test
+load — `maxForks: 3` and ~189 test files — daemon startup can exceed 15 seconds because the
+OS is busy with other test workers. This causes the test `'starts successfully in
+GITHUB_TOKEN fallback mode with credentialMode env'` to fail intermittently.
+
+The failure is non-deterministic: running `token-store-startup.test.ts` in isolation always
+passes; it only fails when the full test suite runs concurrently.
+
+**Fix.** Increase the `waitForReady` default timeout from `15000` to `30000` to match the
+vitest per-test timeout. A 30-second startup window is the most the test is allocated by
+vitest anyway; setting both to the same value means the descriptive error message `"Daemon
+did not start within Nms"` is the failure instead of a vitest timeout, and the full
+`timeoutMs` budget is actually used.
+
+**Mini spec.**
+
+- In `test/tier2/token-store-startup.test.ts`, change the default parameter in `waitForReady`:
+  ```typescript
+  // Before:
+  async function waitForReady(port: number, timeoutMs = 15000): Promise<void> {
+  // After:
+  async function waitForReady(port: number, timeoutMs = 30000): Promise<void> {
+  ```
+- No other changes needed.
+- Test coverage: this is a test-only change. The fix is verified by running `npm test` and
+  confirming the test passes consistently across multiple runs.
+
+**Acceptance.**
+
+- `npm test` passes reliably when run in full (`maxForks: 3`, ~189 files).
+- `test/tier2/token-store-startup.test.ts` passes in isolation.
+- No other test file is modified.
+
+---
+
 ### P3.3 — ACP server (PRODUCT.md Phase 2)
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.

@@ -37,6 +37,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 136. Fix flaky `token-store-startup.test.ts` startup timeout under load
+
+`test/tier2/token-store-startup.test.ts` spawns a real daemon process and polls `/health`
+with `waitForReady(port, 15000)`. The per-test vitest timeout is `30000ms`. Under concurrent
+load (`maxForks: 3`, ~189 test files) the daemon startup can exceed 15 seconds, causing the
+test `'starts successfully in GITHUB_TOKEN fallback mode with credentialMode env'` to fail
+intermittently. Fix: increase `waitForReady` default timeout from `15000` to `30000` to match
+the vitest test timeout.
+
+- Spec: `BACKLOG.md § P2.52`
+- [x] Complete · PR: #212
+
+---
+
 ### 135. Annotate BACKLOG.md § P2.36 as done
 
 `BACKLOG.md § P2.36` (Deferred property tests: db.ts, queue.ts, and session-files.ts) was
