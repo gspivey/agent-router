@@ -201,8 +201,16 @@
         <StatCard label="Queued Work" value={overview.queue_depth} />
         <StatCard label="Pending Wakes" value={overview.pending_wakes_count} />
         <StatCard label="Events (24h)" value={overview.events_processed_24h} />
-        <StatCard label="Tasks Done (24h)" value={overview.tasks_succeeded_24h} />
-        <StatCard label="Tasks Failed (24h)" value={overview.tasks_failed_24h} />
+        {#if overview.tasks_succeeded_24h > 0}
+          <StatCard label="Tasks Done (24h)" value={overview.tasks_succeeded_24h} highlight="success" />
+        {:else}
+          <StatCard label="Tasks Done (24h)" value={overview.tasks_succeeded_24h} />
+        {/if}
+        {#if overview.tasks_failed_24h > 0}
+          <StatCard label="Tasks Failed (24h)" value={overview.tasks_failed_24h} highlight="danger" />
+        {:else}
+          <StatCard label="Tasks Failed (24h)" value={overview.tasks_failed_24h} />
+        {/if}
         <StatCard label="Recent PRs (24h)" value={recentPrCount} />
         <StatCard label="Health" value="System" badge={healthBadge} />
         <StatCard label="Uptime" value={formatUptime(overview.uptime_s)} />

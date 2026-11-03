@@ -425,6 +425,54 @@ describe('Overview', () => {
     expect(value?.textContent?.trim()).toBe('0');
   });
 
+  // ---- stat card highlight behavior (BACKLOG.md § P2.44) ----
+
+  it('Tasks Failed (24h) has data-highlight="danger" when tasks_failed_24h > 0', async () => {
+    getOverview.mockResolvedValue(makeOverview({ tasks_failed_24h: 2 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const failedCard = cards[5];
+    expect(failedCard?.getAttribute('data-label')).toBe('Tasks Failed (24h)');
+    expect(failedCard?.getAttribute('data-highlight')).toBe('danger');
+  });
+
+  it('Tasks Failed (24h) has no highlight when tasks_failed_24h === 0', async () => {
+    getOverview.mockResolvedValue(makeOverview({ tasks_failed_24h: 0 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const failedCard = cards[5];
+    expect(failedCard?.getAttribute('data-label')).toBe('Tasks Failed (24h)');
+    // When value is 0, no highlight attribute should be set.
+    expect(failedCard?.getAttribute('data-highlight')).toBeNull();
+  });
+
+  it('Tasks Done (24h) has data-highlight="success" when tasks_succeeded_24h > 0', async () => {
+    getOverview.mockResolvedValue(makeOverview({ tasks_succeeded_24h: 5 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const doneCard = cards[4];
+    expect(doneCard?.getAttribute('data-label')).toBe('Tasks Done (24h)');
+    expect(doneCard?.getAttribute('data-highlight')).toBe('success');
+  });
+
+  it('Tasks Done (24h) has no highlight when tasks_succeeded_24h === 0', async () => {
+    getOverview.mockResolvedValue(makeOverview({ tasks_succeeded_24h: 0 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const doneCard = cards[4];
+    expect(doneCard?.getAttribute('data-label')).toBe('Tasks Done (24h)');
+    // When value is 0, no highlight attribute should be set.
+    expect(doneCard?.getAttribute('data-highlight')).toBeNull();
+  });
+
   // ---- auto-refresh and last-refreshed indicator (BACKLOG.md § P2.34) ----
 
   it('shows the last-refreshed timestamp after a successful load', async () => {
