@@ -37,6 +37,22 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 121. Add `events_processed_24h` stat to the SPA Overview dashboard
+
+`GET /overview` surfaces `pending_wakes_count` (deferred wake events) but has no visibility
+into recent webhook intake activity. An operator wondering "is the webhook pipeline actually
+receiving events?" must query SQLite manually. This item adds `events_processed_24h` to
+`OverviewResponse` in `src/web-routes.ts` (backed by a `SELECT count(*)` on the `events`
+table for `received_at >= now - 86400 AND processed_at IS NOT NULL`), updates the client
+type in `client/src/lib/types.ts`, and adds a "Events (24h)" sixth stat card in
+`Overview.svelte`. Includes Tier 1 (handler logic), Tier 2 (DB count), and client unit
+tests (stat card).
+
+- Spec: `BACKLOG.md § P2.37`
+- [x] Complete · PR: #197
+
+---
+
 ### 120. Confirm db.ts property test deferral — crash verified in better-sqlite3 11.10.0
 
 ROADMAP item 119 (PR #195) deferred tasks 9.3 and 9.4 (db.ts property tests) pending

@@ -457,6 +457,13 @@ export interface OverviewResponse {
    */
   readonly pending_wakes_count: number;
   /**
+   * Count of events processed (i.e. `processed_at IS NOT NULL`) in the last
+   * 24 hours (received_at >= now - 86400). Gives operators a fast health
+   * signal: a count of 0 on a busy repo suggests the webhook pipeline may be
+   * broken. Always `>= 0`. See BACKLOG.md § P2.37.
+   */
+  readonly events_processed_24h: number;
+  /**
    * Present when the daemon has detected a config change that requires a
    * restart to take effect (e.g. `port`, `kiroPath`). Mirrors the shape from
    * `GET /health`. Absent when no restart is required.
@@ -667,6 +674,28 @@ export function createWebRoutes(deps: {
         .raw()
         .prepare(`SELECT count(*) AS n FROM pending_wakes`)
         .get() as { n?: number } | undefined;
+      return typeof row?.n === 'number' ? row.n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Count events processed in the last 24 hours — rows in the `events` table
+   * with `processed_at IS NOT NULL AND received_at >= nowS - 86400`
+   * (BACKLOG.md § P2.37). Returns `0` when the DB is unavailable or the table
+   * cannot be read.
+   */
+  function countEventsProcessed24h(nowS: number): number {
+    if (db === undefined) return 0;
+    try {
+      const cutoff = nowS - 86400;
+      const row = db
+        .raw()
+        .prepare(
+          `SELECT count(*) AS n FROM events WHERE processed_at IS NOT NULL AND received_at >= ?`,
+        )
+        .get(cutoff) as { n?: number } | undefined;
       return typeof row?.n === 'number' ? row.n : 0;
     } catch {
       return 0;
@@ -1210,6 +1239,7 @@ export function createWebRoutes(deps: {
       active_sessions: active.length,
       queue_depth: computeQueueDepth(),
       pending_wakes_count: countPendingWakes(),
+      events_processed_24h: countEventsProcessed24h(nowS),
       recent_prs: collectRecentPrs(sessions),
       cron_summary: cronSummary,
       health,

@@ -37,6 +37,7 @@ function makeOverview(overrides: Partial<OverviewResponse> = {}): OverviewRespon
     active_sessions: 2,
     queue_depth: 5,
     pending_wakes_count: 0,
+    events_processed_24h: 0,
     recent_prs: [],
     cron_summary: [],
     health: 'healthy',
@@ -96,9 +97,9 @@ describe('Overview', () => {
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
     const cards = getAllByTestId('stat-card');
-    expect(cards).toHaveLength(5);
+    expect(cards).toHaveLength(6);
     const labels = cards.map((c) => c.getAttribute('data-label'));
-    expect(labels).toEqual(['Active Sessions', 'Queued Work', 'Pending Wakes', 'Recent PRs (24h)', 'Health']);
+    expect(labels).toEqual(['Active Sessions', 'Queued Work', 'Pending Wakes', 'Events (24h)', 'Recent PRs (24h)', 'Health']);
   });
 
   it('counts only recent PRs opened within the last 24h (Req 12.2)', async () => {
@@ -116,8 +117,8 @@ describe('Overview', () => {
     listSessions.mockResolvedValue(makeSessionList([]));
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
-    // The "Recent PRs (24h)" card is the fourth stat card (index 3).
-    const value = getAllByTestId('stat-card-value')[3];
+    // The "Recent PRs (24h)" card is the fifth stat card (index 4).
+    const value = getAllByTestId('stat-card-value')[4];
     expect(value?.textContent?.trim()).toBe('2');
   });
 
@@ -341,6 +342,32 @@ describe('Overview', () => {
     const cards = getAllByTestId('stat-card');
     const pendingCard = cards[2];
     const value = pendingCard?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('0');
+  });
+
+  // ---- events_processed_24h stat card (BACKLOG.md § P2.37) ----
+
+  it('shows events_processed_24h in the Events (24h) stat card', async () => {
+    getOverview.mockResolvedValue(makeOverview({ events_processed_24h: 42 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    // "Events (24h)" is the fourth card (index 3)
+    const eventsCard = cards[3];
+    expect(eventsCard?.getAttribute('data-label')).toBe('Events (24h)');
+    const value = eventsCard?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('42');
+  });
+
+  it('shows events_processed_24h of 0 when no events have been processed in 24h', async () => {
+    getOverview.mockResolvedValue(makeOverview({ events_processed_24h: 0 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const eventsCard = cards[3];
+    const value = eventsCard?.querySelector('[data-testid="stat-card-value"]');
     expect(value?.textContent?.trim()).toBe('0');
   });
 

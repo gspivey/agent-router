@@ -263,6 +263,13 @@ export interface OverviewResponse {
    * Always `>= 0`.
    */
   readonly pending_wakes_count: number;
+  /**
+   * Count of events processed in the last 24 hours — webhook events that were
+   * received and processed within the prior 86 400 seconds (BACKLOG.md § P2.37).
+   * Gives operators a fast health signal: a count of 0 on a busy repo suggests
+   * the webhook pipeline may be broken. Always `>= 0`.
+   */
+  readonly events_processed_24h: number;
   readonly recent_prs: OverviewRecentPr[];
   readonly cron_summary: OverviewCronSummary[];
   readonly health: 'healthy' | 'degraded';
