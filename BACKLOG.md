@@ -2558,7 +2558,7 @@ item for this fix is ticked.
 
 ---
 
-### P2.58 — Add unit tests for MessageBubble, PermissionCard, InternalPill, SystemPill, UnknownPill, and ReconnectPill
+### P2.58 — Add unit tests for MessageBubble, PermissionCard, InternalPill, SystemPill, UnknownPill, and ReconnectPill ✅ DONE (PR #218)
 
 Six SPA components have `data-testid` attributes and documented behaviors but no dedicated
 `*.test.ts` file. With the Composer and HelpOverlay test gap closed in BACKLOG.md § P2.56

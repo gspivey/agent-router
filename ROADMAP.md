@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 142. Add unit tests for MessageBubble, PermissionCard, InternalPill, SystemPill, UnknownPill, and ReconnectPill
 
 Six SPA components (`MessageBubble`, `PermissionCard`, `InternalPill`, `SystemPill`,
@@ -43,11 +47,7 @@ chat-view rendering pipeline. This item adds six new test files following the es
 `@testing-library/svelte` pattern (`StatusBadge.test.ts`, `Composer.test.ts`).
 
 - Spec: `BACKLOG.md § P2.58`
-- [ ] Complete · PR: —
-
----
-
-## Completed
+- [x] Complete · PR: #218
 
 ### 141. Annotate BACKLOG.md § P2.55 as done
 
