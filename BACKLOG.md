@@ -1745,7 +1745,7 @@ Tests:
 
 ---
 
-### P2.43 — Annotate BACKLOG.md § P2.39 and § P2.40 as done
+### P2.43 — Annotate BACKLOG.md § P2.39 and § P2.40 as done ✅ DONE (PR #203)
 
 `BACKLOG.md § P2.39` (Deferred property tests: server.ts and roadmap.ts) was fully
 implemented and shipped as ROADMAP item 123 (PR #199), but the BACKLOG.md entry was

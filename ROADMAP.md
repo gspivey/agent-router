@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 127. Annotate BACKLOG.md § P2.39 and § P2.40 as done
 
 `BACKLOG.md § P2.39` (Deferred property tests: server.ts and roadmap.ts) was fully
@@ -45,11 +49,9 @@ pretty-print flag handling) was fully implemented and shipped as ROADMAP item 12
 the actual shipped state. Documentation-only: no code, no tests.
 
 - Spec: `BACKLOG.md § P2.43`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #203
 
 ---
-
-## Completed
 
 ### 126. Surface `tasks_succeeded_24h` and `tasks_failed_24h` in the SPA Overview dashboard
 
