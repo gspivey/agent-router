@@ -2649,3 +2649,51 @@ reconnect indicator — and are exercised only indirectly by parent component te
 - `npm --prefix client run check` (svelte-check) reports 0 errors and 0 warnings.
 - `npm run typecheck` passes (no daemon changes).
 - `npm test` passes (no daemon changes).
+
+---
+
+### P2.59 — Add unit tests for PageLayout component ✅ DONE (PR #219)
+
+`PageLayout.svelte` is the only component in `client/src/components/` that has no test
+coverage at all — not even an indirect mention in a parent test. Every other component in
+that directory either has a dedicated `*.test.ts` file or is tested indirectly via
+`json-a11y.test.ts`, `streaming-controls.test.ts`, or `CardPageHeader.test.ts`. After
+the P2.56 (Composer/HelpOverlay) and P2.58 (six pill/bubble components) rounds, `PageLayout`
+is the last gap.
+
+`PageLayout` is a layout wrapper with two modes:
+
+- **`wide`** (default) — `max-w-6xl` with vertical padding (`py-6`). Used by list, config,
+  and overview views.
+- **`narrow`** — `max-w-4xl` with **no** vertical padding. Used by the chat (detail) view
+  because `py-6` would push the composer below the fold.
+
+Both modes apply the same horizontal gutters (`px-4 sm:px-6 lg:px-8`).
+
+**Testable behaviors (`client/src/components/PageLayout.test.ts`):**
+
+- `data-testid="page-layout"` is rendered on the wrapper `<div>` in both modes.
+- `data-width` reflects the `width` prop: `"wide"` (default) or `"narrow"`.
+- **Wide mode** (default): the container's `class` contains `max-w-6xl` and `py-6`.
+- **Wide mode** (default): the container's `class` does NOT contain `max-w-4xl`.
+- **Narrow mode**: the container's `class` contains `max-w-4xl`.
+- **Narrow mode**: the container's `class` does NOT contain `py-6` (no vertical padding —
+  this is the critical layout contract for the chat view).
+- Both modes render their slot children correctly.
+
+**Mini spec.**
+
+- Create one new test file: `client/src/components/PageLayout.test.ts`.
+- Follow the `@testing-library/svelte` pattern established by `CardPageHeader.test.ts` and
+  `StatCard.test.ts`: use `render`, `cleanup`, `afterEach(() => cleanup())`, import
+  `createRawSnippet` from `svelte` for the `children` snippet prop.
+- All tests are client-side only — no daemon, no fake backends, no network.
+- No new production code changes. No new runtime dependencies.
+
+**Acceptance.**
+- `client/src/components/PageLayout.test.ts` exists with ≥ 7 tests covering the behaviors
+  above.
+- `npm --prefix client run test` passes with the new tests included.
+- `npm --prefix client run check` (svelte-check) reports 0 errors and 0 warnings.
+- `npm run typecheck` passes (no daemon changes).
+- `npm test` passes (no daemon changes).
