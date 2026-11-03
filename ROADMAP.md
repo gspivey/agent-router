@@ -37,6 +37,16 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 139. Annotate BACKLOG.md § P2.54 as done
+
+`BACKLOG.md § P2.54` (Surface `recent_prs` as a compact table in the SPA Overview dashboard)
+was fully implemented and shipped as ROADMAP item 138 (PR #214), but the BACKLOG.md entry was
+never annotated with a DONE marker. This item adds the `✅ DONE (PR #214)` annotation to P2.54
+to reflect the actual shipped state. Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.55`
+- [x] Complete · PR: #215
+
 ### 138. Surface `recent_prs` as a compact table in the SPA Overview dashboard
 
 `GET /overview` returns `recent_prs: OverviewRecentPr[]` (title, repo, url, state,

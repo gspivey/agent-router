@@ -2389,7 +2389,7 @@ ROADMAP item for this fix is ticked.
 
 ---
 
-### P2.54 — Surface `recent_prs` as a compact table in the SPA Overview dashboard
+### P2.54 — Surface `recent_prs` as a compact table in the SPA Overview dashboard ✅ DONE (PR #214)
 
 **Why this exists.** `GET /overview` already returns `recent_prs: OverviewRecentPr[]` (PR
 title, repo, URL, state, opened_at), but the SPA Overview dashboard renders this data only
@@ -2446,3 +2446,15 @@ Add to `client/src/components/Overview.test.ts`:
 - When `recent_prs` is non-empty, the Overview shows a "Recent PRs" section with a clickable
   link per PR.
 - When `recent_prs` is empty (`[]`), no section is shown.
+
+---
+
+### P2.55 — Annotate BACKLOG.md § P2.54 as done
+
+`BACKLOG.md § P2.54` (Surface `recent_prs` as a compact table in the SPA Overview dashboard)
+was fully implemented and shipped as ROADMAP item 138 (PR #214), but the BACKLOG.md entry was
+never annotated with a DONE marker. This item adds the `✅ DONE (PR #214)` annotation to P2.54
+to reflect the actual shipped state. Documentation-only: no code, no tests.
+
+**Acceptance.** `BACKLOG.md § P2.54` carries a `✅ DONE (PR #214)` annotation. The ROADMAP
+item for this fix is ticked.
