@@ -327,6 +327,12 @@ export interface OverviewResponse {
    * See BACKLOG.md § P2.47.
    */
   readonly recent_events: OverviewRecentEvent[];
+  /**
+   * The currently-queued tasks, ordered by `created_at ASC` (oldest-enqueued
+   * first), capped at 10. Always present (never undefined); empty when no tasks
+   * are in the `queued` state. See BACKLOG.md § P2.60.
+   */
+  readonly queued_tasks: OverviewQueuedTask[];
 }
 
 /**
@@ -381,4 +387,19 @@ export interface OverviewRecentEvent {
   readonly wake_triggered: boolean;
   /** Unix epoch seconds when the event was received. */
   readonly received_at: number;
+}
+
+/**
+ * A single queued task in the `GET /overview` response,
+ * mirroring `OverviewQueuedTask` from `src/web-routes.ts` (BACKLOG.md § P2.60).
+ */
+export interface OverviewQueuedTask {
+  /** First 8 characters of the ULID task id — enough to identify it. */
+  readonly id_prefix: string;
+  /** Repository in `owner/repo` format. */
+  readonly repo: string;
+  /** Short human-readable title from the task record. */
+  readonly title: string;
+  /** Unix epoch seconds when the task was created. */
+  readonly created_at: number;
 }
