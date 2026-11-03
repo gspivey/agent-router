@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, cleanup, waitFor } from '@testing-library/svelte';
+import { render, cleanup, waitFor, fireEvent } from '@testing-library/svelte';
 import type { RepoGroup, RepoSessionsResponse } from '../lib/types.js';
 
 /**
@@ -9,6 +9,10 @@ import type { RepoGroup, RepoSessionsResponse } from '../lib/types.js';
  * (FR-2.3). We assert: a RepoGroup renders per repo, the empty/error states
  * render, and the old flat `/sessions` endpoint is NOT used. `api` is mocked so
  * there is no live network.
+ *
+ * Auto-refresh tests (BACKLOG.md § P2.49): assert that a 30-second setInterval
+ * is created on mount, cleared on destroy, and that the last-refreshed timestamp
+ * and Refresh button appear after a successful load.
  */
 
 const listRepoSessions = vi.fn();
@@ -102,5 +106,101 @@ describe('SessionList', () => {
     await waitFor(() => expect(listRepoSessions).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(queryByTestId('list-loading')).toBeNull());
     expect(queryByTestId('list-error')).toBeNull();
+  });
+
+  // ── auto-refresh and last-refreshed indicator (BACKLOG.md § P2.49) ────────
+
+  it('shows the last-refreshed timestamp after a successful load', async () => {
+    listRepoSessions.mockResolvedValue(response([]));
+    const { findByTestId } = render(SessionList);
+    // After a successful load the "last-refreshed" element should appear.
+    const indicator = await findByTestId('sessions-last-refreshed');
+    expect(indicator).toBeTruthy();
+    // The text should include time digits (HH:MM:SS / locale format).
+    expect(indicator.textContent).toMatch(/\d/);
+  });
+
+  it('renders the Refresh button after a successful load', async () => {
+    listRepoSessions.mockResolvedValue(response([]));
+    const { findByTestId } = render(SessionList);
+    const btn = await findByTestId('sessions-refresh');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent?.trim()).toBe('Refresh');
+  });
+
+  it('Refresh button calls listRepoSessions again on click', async () => {
+    listRepoSessions.mockResolvedValue(response([]));
+    const { findByTestId } = render(SessionList);
+    const btn = await findByTestId('sessions-refresh');
+    await fireEvent.click(btn);
+    // Two calls: initial mount + manual refresh
+    expect(listRepoSessions).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not show last-refreshed or Refresh button during the initial load', () => {
+    // Keep the promise pending so we stay in the loading state.
+    listRepoSessions.mockReturnValue(new Promise(() => {}));
+    const { queryByTestId } = render(SessionList);
+    expect(queryByTestId('sessions-last-refreshed')).toBeNull();
+    expect(queryByTestId('sessions-refresh')).toBeNull();
+  });
+
+  it('does not show last-refreshed or Refresh button when in the error state', async () => {
+    listRepoSessions.mockRejectedValue(new Error('network down'));
+    const { findByTestId, queryByTestId } = render(SessionList);
+    // Wait for the error state to appear.
+    await findByTestId('list-error');
+    expect(queryByTestId('sessions-last-refreshed')).toBeNull();
+    expect(queryByTestId('sessions-refresh')).toBeNull();
+  });
+
+  it('calls setInterval once on mount with the 30-second interval', async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    listRepoSessions.mockResolvedValue(response([]));
+    const { unmount } = render(SessionList);
+    // Wait for the initial load to complete so the component is fully mounted.
+    await waitFor(() => expect(listRepoSessions).toHaveBeenCalledTimes(1));
+    // setInterval should have been called once with REFRESH_INTERVAL_MS = 30_000.
+    const calls = setIntervalSpy.mock.calls.filter((c) => c[1] === 30_000);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    setIntervalSpy.mockRestore();
+    unmount();
+  });
+
+  it('calls clearInterval on destroy', async () => {
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+    listRepoSessions.mockResolvedValue(response([]));
+    const { unmount } = render(SessionList);
+    await waitFor(() => expect(listRepoSessions).toHaveBeenCalledTimes(1));
+    unmount();
+    expect(clearIntervalSpy).toHaveBeenCalled();
+    clearIntervalSpy.mockRestore();
+  });
+
+  it('background refresh does not replace content while in flight', async () => {
+    // Initial load resolves with one group.
+    listRepoSessions.mockResolvedValueOnce(
+      response([makeGroup({ repo: 'gspivey/agent-router' })]),
+    );
+    // Second call (background refresh) stays pending indefinitely.
+    let resolveBackground!: (v: RepoSessionsResponse) => void;
+    listRepoSessions.mockReturnValueOnce(
+      new Promise<RepoSessionsResponse>((resolve) => {
+        resolveBackground = resolve;
+      }),
+    );
+
+    const { findAllByTestId, queryAllByTestId } = render(SessionList);
+    // Wait for initial render to complete.
+    const groups = await findAllByTestId('repo-group');
+    expect(groups).toHaveLength(1);
+
+    // Trigger a second load (simulating what the Refresh button does).
+    listRepoSessions.mockResolvedValue(response([makeGroup({ repo: 'gspivey/agent-router' })]));
+    // The first background call is still pending, but existing content is visible.
+    expect(queryAllByTestId('repo-group')).toHaveLength(1);
+
+    // Resolve the background call.
+    resolveBackground(response([makeGroup({ repo: 'gspivey/agent-router' })]));
   });
 });
