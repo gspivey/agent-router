@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 132. Add `last_started_at` to Activity by Repo rows in the SPA Overview
 
 The "Activity by Repo" table in the Overview dashboard shows active session count and
@@ -47,11 +51,9 @@ updates the client DTO in `client/src/lib/types.ts`, and adds a third column to 
 unit tests.
 
 - Spec: `BACKLOG.md § P2.48`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #208
 
 ---
-
-## Completed
 
 ### 131. Surface recent webhook events in the SPA Overview dashboard
 

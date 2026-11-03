@@ -2056,7 +2056,7 @@ Tests:
 - The SPA Overview shows a "Recent Events" table when the array is non-empty.
 - `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
 
-### P2.48 — Add `last_started_at` to Activity by Repo rows in the SPA Overview
+### P2.48 — Add `last_started_at` to Activity by Repo rows in the SPA Overview ✅ DONE (PR #208)
 
 **Why this exists.** The "Activity by Repo" table in the Overview dashboard shows `active`
 session count and `completed_24h` terminal count per repo, but gives no timestamp. An
