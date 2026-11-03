@@ -37,6 +37,25 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 123. Deferred property tests: server.ts HMAC verification and roadmap.ts parse/round-trip
+
+The agent-router spec (`tasks.md` items `6.4`, `6.5`, `13.4`, `13.5`) specified four optional
+property-based tests deferred when their parent tasks shipped. This item delivers fast-check
+coverage for `verifySignature` (correctness for valid signatures, rejection for tampered inputs,
+and the always-false invariant for non-`sha256=` prefixes), HTTP routing correctness (arbitrary
+paths not matching `/webhook` or `/health` return 404), `parseRoadmap` (N checkbox lines produce
+exactly N tasks with matching checked/line fields regardless of surrounding prose), and
+`markTaskChecked` parse/reconstruct round-trip (marking a task checked updates exactly the target
+line without touching others). All tests go into existing Tier 1 test files
+(`test/tier1/server.test.ts` and `test/tier1/roadmap.test.ts`), are pure with no I/O, and run at
+the default 100 iterations. On completion, ticks `tasks.md` items `6.4`, `6.5`, `13.4`, `13.5`
+in `.kiro/specs/agent-router/tasks.md`.
+
+- Spec: `BACKLOG.md § P2.39`
+- [x] Complete · PR: #199
+
+---
+
 ### 122. Fix stale parent task checkboxes in auth-credential-proxy and browser-test-harness specs
 
 Two DEPRECATED specs have stale top-level task checkboxes: their sub-tasks are all `[x]` but

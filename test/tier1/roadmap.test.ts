@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as fc from 'fast-check';
 import { parseRoadmap, findNextTask, markTaskChecked } from '../../src/roadmap.js';
 
 describe('parseRoadmap', () => {
@@ -113,5 +114,175 @@ describe('markTaskChecked', () => {
     const content = '- [ ] Only task';
     const result = markTaskChecked(content, 5);
     expect(result).toBe('- [ ] Only task');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 6.4: Roadmap Task Parsing (spec task 6.4)
+// ---------------------------------------------------------------------------
+
+describe('Property 6.4: Roadmap Task Parsing', () => {
+  // Arbitrary that generates a single checkbox line text (no newlines in task text)
+  const taskText = fc.string({ minLength: 0, maxLength: 80 }).map((s) => s.replace(/\n/g, ' '));
+
+  // Arbitrary that generates a single checkbox line: either unchecked or checked
+  const checkboxLine = fc.record({
+    text: taskText,
+    checked: fc.boolean(),
+    bullet: fc.constantFrom('-', '*') as fc.Arbitrary<string>,
+  }).map(({ text, checked, bullet }) => {
+    const marker = checked ? '[x]' : '[ ]';
+    return { line: `${bullet} ${marker} ${text}`.trimEnd(), checked, text: text.trim() };
+  });
+
+  // Arbitrary that generates a non-checkbox prose line (doesn't look like a checkbox)
+  const proseLine = fc
+    .string({ minLength: 0, maxLength: 80 })
+    .map((s) => s.replace(/\n/g, ' '))
+    .filter((s) => {
+      const trimmed = s.trim();
+      return (
+        !trimmed.startsWith('- [ ]') &&
+        !trimmed.startsWith('- [x]') &&
+        !trimmed.startsWith('- [X]') &&
+        !trimmed.startsWith('* [ ]') &&
+        !trimmed.startsWith('* [x]') &&
+        !trimmed.startsWith('* [X]')
+      );
+    });
+
+  it('Property 6.4.1: N checkbox lines produce exactly N tasks', () => {
+    fc.assert(
+      fc.property(
+        fc.array(checkboxLine, { minLength: 0, maxLength: 20 }),
+        (items) => {
+          const content = items.map((item) => item.line).join('\n');
+          const tasks = parseRoadmap(content);
+          return tasks.length === items.length;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.4.2: checked field matches source line marker', () => {
+    fc.assert(
+      fc.property(
+        fc.array(checkboxLine, { minLength: 1, maxLength: 20 }),
+        (items) => {
+          const content = items.map((item) => item.line).join('\n');
+          const tasks = parseRoadmap(content);
+          return tasks.every((task, i) => {
+            const expected = items[i];
+            return expected !== undefined && task.checked === expected.checked;
+          });
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.4.3: line index matches 0-based position in content', () => {
+    fc.assert(
+      fc.property(
+        fc.array(checkboxLine, { minLength: 1, maxLength: 15 }),
+        (items) => {
+          const content = items.map((item) => item.line).join('\n');
+          const tasks = parseRoadmap(content);
+          // Each task's line field must be the exact line index in the split content
+          return tasks.every((task, i) => task.line === i);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.4.4: surrounding prose lines are not included in results', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.oneof(
+          checkboxLine.map((c) => ({ kind: 'task' as const, data: c })),
+          proseLine.map((p) => ({ kind: 'prose' as const, data: p })),
+        ), { minLength: 1, maxLength: 20 }),
+        (mixed) => {
+          const lines = mixed.map((item) =>
+            item.kind === 'task' ? item.data.line : item.data,
+          );
+          const content = lines.join('\n');
+          const tasks = parseRoadmap(content);
+          const taskCount = mixed.filter((item) => item.kind === 'task').length;
+          return tasks.length === taskCount;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 6.5: Parse/Reconstruct Round-Trip (spec task 6.5)
+// ---------------------------------------------------------------------------
+
+describe('Property 6.5: Parse/Reconstruct Round-Trip', () => {
+  const checkboxLine = fc.record({
+    text: fc.string({ minLength: 0, maxLength: 60 }).map((s) => s.replace(/\n/g, ' ')),
+    checked: fc.boolean(),
+    bullet: fc.constantFrom('-', '*') as fc.Arbitrary<string>,
+  }).map(({ text, checked, bullet }) => {
+    const marker = checked ? '[x]' : '[ ]';
+    return `${bullet} ${marker} ${text}`.trimEnd();
+  });
+
+  it('Property 6.5.1: markTaskChecked changes exactly the target line from [ ] to [x]', () => {
+    // Generate content with at least one unchecked task
+    fc.assert(
+      fc.property(
+        fc.array(checkboxLine, { minLength: 1, maxLength: 10 }),
+        (lines) => {
+          const content = lines.join('\n');
+          const tasks = parseRoadmap(content);
+          const unchecked = tasks.find((t) => !t.checked);
+          if (!unchecked) return true; // skip if all already checked
+
+          const result = markTaskChecked(content, unchecked.line);
+          const resultLines = result.split('\n');
+          const originalLines = content.split('\n');
+
+          // The target line changed from [ ] to [x]
+          const targetOriginal = originalLines[unchecked.line] ?? '';
+          const targetResult = resultLines[unchecked.line] ?? '';
+          if (!targetOriginal.includes('[ ]')) return false;
+          if (!targetResult.includes('[x]')) return false;
+          if (targetResult !== targetOriginal.replace('[ ]', '[x]')) return false;
+
+          // All other lines are unchanged
+          for (let i = 0; i < Math.max(originalLines.length, resultLines.length); i++) {
+            if (i !== unchecked.line && originalLines[i] !== resultLines[i]) return false;
+          }
+          return true;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('Property 6.5.2: after markTaskChecked, parseRoadmap sees the task as checked', () => {
+    fc.assert(
+      fc.property(
+        fc.array(checkboxLine, { minLength: 1, maxLength: 10 }),
+        (lines) => {
+          const content = lines.join('\n');
+          const tasks = parseRoadmap(content);
+          const unchecked = tasks.find((t) => !t.checked);
+          if (!unchecked) return true; // skip if all already checked
+
+          const result = markTaskChecked(content, unchecked.line);
+          const updatedTasks = parseRoadmap(result);
+          const updatedTask = updatedTasks.find((t) => t.line === unchecked.line);
+          return updatedTask !== undefined && updatedTask.checked === true;
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 });
