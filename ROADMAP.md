@@ -37,6 +37,16 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 141. Annotate BACKLOG.md § P2.55 as done
+
+`BACKLOG.md § P2.55` (Annotate BACKLOG.md § P2.54 as done) was fully implemented and
+shipped as ROADMAP item 139 (PR #215), but the BACKLOG.md entry was never annotated with
+a DONE marker. This item adds the `✅ DONE (PR #215)` annotation to P2.55 to reflect the
+actual shipped state. Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.57`
+- [x] Complete · PR: #217
+
 ### 140. Add unit tests for Composer and HelpOverlay client components
 
 `Composer.svelte` (prompt-injection input bar) and `HelpOverlay.svelte` (keyboard-shortcut
