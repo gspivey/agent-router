@@ -20,6 +20,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { api, AuthError } from '../lib/api.js';
   import type { OverviewResponse, SessionSummary } from '../lib/types.js';
+  import { formatUptime } from '../lib/uptime.js';
   import Card from './Card.svelte';
   import PageHeader from './PageHeader.svelte';
   import StatCard from './StatCard.svelte';
@@ -110,7 +111,7 @@
 </script>
 
 <section data-testid="overview" class="flex flex-col gap-6">
-  <PageHeader title="Overview" subtitle="Daemon activity and health at a glance" />
+  <PageHeader title="Overview" subtitle={overview !== null ? `Daemon activity and health at a glance — v${overview.version}` : 'Daemon activity and health at a glance'} />
 
   {#if error !== null}
     <div data-testid="overview-error" role="alert" class="flex flex-col items-start gap-3">
@@ -187,21 +188,22 @@
     {#if loading}
       <div
         data-testid="stat-row-skeleton"
-        class="grid grid-cols-2 gap-4 lg:grid-cols-6"
+        class="grid grid-cols-2 gap-4 lg:grid-cols-7"
         aria-hidden="true"
       >
-        {#each Array(6) as _unused}
+        {#each Array(7) as _unused}
           <div class="h-20 animate-pulse rounded-lg bg-[var(--surface)]"></div>
         {/each}
       </div>
     {:else if overview !== null}
-      <div data-testid="stat-row" class="grid grid-cols-2 gap-4 lg:grid-cols-6">
+      <div data-testid="stat-row" class="grid grid-cols-2 gap-4 lg:grid-cols-7">
         <StatCard label="Active Sessions" value={overview.active_sessions} />
         <StatCard label="Queued Work" value={overview.queue_depth} />
         <StatCard label="Pending Wakes" value={overview.pending_wakes_count} />
         <StatCard label="Events (24h)" value={overview.events_processed_24h} />
         <StatCard label="Recent PRs (24h)" value={recentPrCount} />
         <StatCard label="Health" value="System" badge={healthBadge} />
+        <StatCard label="Uptime" value={formatUptime(overview.uptime_s)} />
       </div>
       <!-- Last-refreshed indicator + manual refresh button (BACKLOG.md § P2.34) -->
       <div class="flex items-center gap-3">

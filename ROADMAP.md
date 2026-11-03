@@ -37,6 +37,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 125. Surface `uptime_s` as a stat card and `version` in the SPA Overview dashboard
+
+`GET /overview` already returns `uptime_s: number` and `version: string` and the client
+`OverviewResponse` type already declares them, but neither field is rendered in the SPA.
+This item adds a formatted "Uptime" stat card to the Overview stat row, extracts a pure
+`formatUptime(seconds: number): string` helper with Tier 1 unit tests, and adds the
+daemon version to the `PageHeader` subtitle. Pure client-side change — no backend
+modifications required.
+
+- Spec: `BACKLOG.md § P2.41`
+- [x] Complete · PR: #201
+
+---
+
 ### 124. Deferred unit tests: config error paths, session file edge cases, ACP errors, CLI IPC ops, MCP dispatch, and pretty-print flag handling
 
 The agent-router spec (`tasks.md` items `3.6`, `9.5`, `11.11`, `13.6`, `14.6`, `16.2`,
