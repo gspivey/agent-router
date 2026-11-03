@@ -1640,7 +1640,7 @@ to the session manager routing logic beyond adapter selection at spawn time.
 
 ---
 
-### P2.41 — Surface `uptime_s` as a stat card and `version` in the SPA Overview dashboard
+### P2.41 — Surface `uptime_s` as a stat card and `version` in the SPA Overview dashboard ✅ DONE (PR #201)
 
 `GET /overview` already returns `uptime_s: number` and `version: string` in the
 `OverviewResponse` (added when the overview endpoint was built), and the client-side

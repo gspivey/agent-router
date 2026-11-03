@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 125. Surface `uptime_s` as a stat card and `version` in the SPA Overview dashboard
 
 `GET /overview` already returns `uptime_s: number` and `version: string` and the client
@@ -43,11 +47,9 @@ daemon version to the `PageHeader` subtitle. Pure client-side change — no back
 modifications required.
 
 - Spec: `BACKLOG.md § P2.41`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #201
 
 ---
-
-## Completed
 
 ### 124. Deferred unit tests: config error paths, session file edge cases, ACP errors, CLI IPC ops, MCP dispatch, and pretty-print flag handling
 
