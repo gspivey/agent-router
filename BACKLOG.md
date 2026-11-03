@@ -1002,7 +1002,7 @@ Documentation-only: no code, no tests.
 
 ---
 
-### P2.39 — Deferred property tests: server.ts and roadmap.ts
+### P2.39 — Deferred property tests: server.ts and roadmap.ts ✅ DONE (PR #199)
 
 The agent-router spec (`tasks.md` items `6.4`, `6.5`, `13.4`, `13.5`) specified four optional
 property-based tests that were deferred when their parent tasks shipped. This item delivers the
@@ -1065,7 +1065,7 @@ parse/reconstruct round-trip property ensures these functions are inverses for w
 
 ---
 
-### P2.40 — Deferred unit tests: config error paths, session file edge cases, ACP errors, CLI IPC ops, MCP dispatch, and pretty-print flag handling
+### P2.40 — Deferred unit tests: config error paths, session file edge cases, ACP errors, CLI IPC ops, MCP dispatch, and pretty-print flag handling ✅ DONE (PR #200)
 
 The agent-router spec (`tasks.md` items `3.6`, `9.5`, `11.11`, `13.6`, `14.6`, `16.2`,
 `17.2`, `21.10`) specified eight optional unit test batches that were deferred when their
@@ -1742,3 +1742,20 @@ Tests:
   `updated_at >= (now_s - 86400) * 1000`.
 - The SPA Overview shows \"Tasks Done (24h)\" and \"Tasks Failed (24h)\" stat cards.
 - `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
+
+---
+
+### P2.43 — Annotate BACKLOG.md § P2.39 and § P2.40 as done
+
+`BACKLOG.md § P2.39` (Deferred property tests: server.ts and roadmap.ts) was fully
+implemented and shipped as ROADMAP item 123 (PR #199), but the BACKLOG.md entry was
+never annotated with a DONE marker. `BACKLOG.md § P2.40` (Deferred unit tests: config
+error paths, session file edge cases, ACP errors, CLI IPC ops, MCP dispatch, and
+pretty-print flag handling) was fully implemented and shipped as ROADMAP item 124
+(PR #200), but its BACKLOG.md entry was also never annotated. This item adds the
+`✅ DONE (PR #199)` annotation to P2.39 and `✅ DONE (PR #200)` to P2.40 to reflect
+the actual shipped state. Documentation-only: no code, no tests.
+
+**Acceptance.** `BACKLOG.md § P2.39` carries a `✅ DONE (PR #199)` annotation.
+`BACKLOG.md § P2.40` carries a `✅ DONE (PR #200)` annotation. The ROADMAP item for
+this fix is ticked.

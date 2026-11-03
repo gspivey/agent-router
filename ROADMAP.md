@@ -33,6 +33,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 127. Annotate BACKLOG.md § P2.39 and § P2.40 as done
+
+`BACKLOG.md § P2.39` (Deferred property tests: server.ts and roadmap.ts) was fully
+implemented and shipped as ROADMAP item 123 (PR #199), but the BACKLOG.md entry was
+never annotated with a DONE marker. `BACKLOG.md § P2.40` (Deferred unit tests: config
+error paths, session file edge cases, ACP errors, CLI IPC ops, MCP dispatch, and
+pretty-print flag handling) was fully implemented and shipped as ROADMAP item 124
+(PR #200), but its BACKLOG.md entry was also never annotated. This item adds the
+`✅ DONE (PR #199)` annotation to P2.39 and `✅ DONE (PR #200)` to P2.40 to reflect
+the actual shipped state. Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.43`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
