@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 143. Add unit tests for PageLayout component
 
 `PageLayout.svelte` is the only component in `client/src/components/` that has no test
@@ -44,11 +48,7 @@ item adds `PageLayout.test.ts` covering both modes, the `data-testid`/`data-widt
 attributes, and the critical no-`py-6` invariant for narrow mode.
 
 - Spec: `BACKLOG.md § P2.59`
-- [ ] Complete · PR: —
-
----
-
-## Completed
+- [x] Complete · PR: #219
 
 ### 142. Add unit tests for MessageBubble, PermissionCard, InternalPill, SystemPill, UnknownPill, and ReconnectPill
 

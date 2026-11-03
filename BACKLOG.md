@@ -2652,7 +2652,7 @@ reconnect indicator — and are exercised only indirectly by parent component te
 
 ---
 
-### P2.59 — Add unit tests for PageLayout component
+### P2.59 — Add unit tests for PageLayout component ✅ DONE (PR #219)
 
 `PageLayout.svelte` is the only component in `client/src/components/` that has no test
 coverage at all — not even an indirect mention in a parent test. Every other component in
