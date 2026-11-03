@@ -361,3 +361,103 @@ describe('MCP relay never falls back to the operator socket (Fix 1 / AC-1)', () 
     expect(daemon.frames.length).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 17.2 — MCP tool dispatch for register_pr, session_status, complete_session
+// ---------------------------------------------------------------------------
+// These tools send ops to the *daemon* socket (not the agent relay socket).
+// We use a FakeAgentSocket (which replies { ok: true } to every frame) as the
+// daemon socket so we can assert the correct op is dispatched with the right
+// arguments and the tool returns a success response to the caller.
+
+describe('MCP daemon-socket tools: register_pr, session_status, complete_session (task 17.2)', () => {
+  let tmpDir: string;
+  let daemonSocket: FakeAgentSocket; // records frames, replies { ok: true }
+  let agentSocket: FakeAgentSocket;
+  let mcp: McpSubprocess;
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-task17-'));
+    const daemonSocketPath = path.join(tmpDir, 'daemon.sock');
+    const agentSocketPath = path.join(tmpDir, 'agent.sock');
+
+    // Use FakeAgentSocket for daemon so it records frames AND replies { ok: true }
+    daemonSocket = new FakeAgentSocket(daemonSocketPath);
+    await daemonSocket.start();
+
+    agentSocket = new FakeAgentSocket(agentSocketPath);
+    await agentSocket.start();
+
+    mcp = new McpSubprocess(daemonSocketPath, agentSocketPath, CAP_TOKEN);
+    await mcp.start();
+  });
+
+  afterEach(async () => {
+    await mcp.stop();
+    await agentSocket.stop();
+    await daemonSocket.stop();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('register_pr sends op=register_pr with session_id, repo, and pr_number', async () => {
+    const resp = await mcp.callTool('register_pr', {
+      repo: 'owner/repo',
+      pr_number: 42,
+    });
+
+    // The tool must not return isError
+    expect(resp.result?.isError).toBeFalsy();
+
+    // The daemon socket must have received the correct op
+    const frame = daemonSocket.frames.find((f) => f['op'] === 'register_pr');
+    expect(frame).toBeDefined();
+    expect(frame!['session_id']).toBe(SESSION_ID);
+    expect(frame!['repo']).toBe('owner/repo');
+    expect(frame!['pr_number']).toBe(42);
+
+    // Agent relay socket must not have been contacted for this tool
+    expect(agentSocket.frames.some((f) => f['op'] === 'register_pr')).toBe(false);
+  });
+
+  it('register_pr returns isError when repo argument is missing', async () => {
+    const resp = await mcp.callTool('register_pr', { pr_number: 42 });
+    expect(resp.result?.isError).toBe(true);
+    const text = resp.result?.content?.[0]?.text ?? '';
+    expect(text).toContain('repo');
+  });
+
+  it('register_pr returns isError when pr_number is invalid', async () => {
+    const resp = await mcp.callTool('register_pr', { repo: 'owner/repo', pr_number: 0 });
+    expect(resp.result?.isError).toBe(true);
+  });
+
+  it('session_status sends op=session_status with session_id', async () => {
+    const resp = await mcp.callTool('session_status', {});
+
+    // Response must not be an error
+    expect(resp.result?.isError).toBeFalsy();
+
+    // Daemon socket received the correct op
+    const frame = daemonSocket.frames.find((f) => f['op'] === 'session_status');
+    expect(frame).toBeDefined();
+    expect(frame!['session_id']).toBe(SESSION_ID);
+  });
+
+  it('complete_session sends op=complete_session with session_id and reason', async () => {
+    const resp = await mcp.callTool('complete_session', { reason: 'merged' });
+
+    expect(resp.result?.isError).toBeFalsy();
+
+    const frame = daemonSocket.frames.find((f) => f['op'] === 'complete_session');
+    expect(frame).toBeDefined();
+    expect(frame!['session_id']).toBe(SESSION_ID);
+    expect(frame!['reason']).toBe('merged');
+  });
+
+  it('complete_session returns isError when reason is missing', async () => {
+    const resp = await mcp.callTool('complete_session', {});
+    expect(resp.result?.isError).toBe(true);
+    const text = resp.result?.content?.[0]?.text ?? '';
+    expect(text).toContain('reason');
+  });
+});

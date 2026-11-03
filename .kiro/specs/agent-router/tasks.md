@@ -51,7 +51,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x]* 3.5 Write property test for configuration validation
     - **Property 12: Configuration Validation**
     - **Validates: Requirements 15.1, 15.2, 15.3, 15.4**
-  - [ ]* 3.6 Write unit tests for config error paths
+  - [x]* 3.6 Write unit tests for config error paths
     - Test missing config file throws FatalError
     - Test invalid JSON throws FatalError
     - Test missing env var throws FatalError with variable name
@@ -139,7 +139,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [ ]* 9.4 Write property test for atomic rate limit acquisition
     - **Property 8: Atomic Rate Limit Acquisition**
     - **Validates: Requirements 9.1, 9.2, 9.3, 9.4**
-  - [ ]* 9.5 Write unit tests for stale event cleanup and session lookup
+  - [x]* 9.5 Write unit tests for stale event cleanup and session lookup
     - Test `markStaleEvents` marks old unprocessed events
     - Test `findSession` returns null when no session exists
     - _Requirements: 5.3, 8.2_
@@ -176,7 +176,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x]* 11.10 Write property test for prompt log completeness
     - **Property 19: Prompt Log Completeness**
     - **Validates: Requirements 19.7**
-  - [ ]* 11.11 Write unit tests for session file edge cases
+  - [x]* 11.11 Write unit tests for session file edge cases
     - Test session directory creation failure returns error
     - Test no secrets in stream entries
     - Test meta.json initial state
@@ -200,7 +200,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
   - [x]* 13.5 Write property test for unknown paths returning 404
     - **Property 2: Unknown Paths Return 404**
     - **Validates: Requirements 2.2**
-  - [ ]* 13.6 Write unit tests for HTTP routing edge cases
+  - [x]* 13.6 Write unit tests for HTTP routing edge cases
     - Test 405 for GET, PUT, DELETE, PATCH on `/webhook` with `Allow: POST` header
     - Test 401 for missing `X-Hub-Signature-256` header
     - _Requirements: 2.3, 3.2_
@@ -220,7 +220,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 10.5_
   - [x] 14.5 Implement stderr line capture — translate each stderr line into a StreamEntry with source: "agent", type: "stderr"
     - _Requirements: 10.13_
-  - [ ]* 14.6 Write unit tests for ACP error paths
+  - [x]* 14.6 Write unit tests for ACP error paths
     - Test protocol version mismatch handling
     - Test spawn failure handling
     - Test non-zero exit code handling
@@ -255,7 +255,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 21.1, 21.2, 21.4_
   - [x] 16.1b Implement mutation ops — `new_session`, `inject_prompt`, `terminate_session`
     - _Requirements: 21.3, 21.5, 21.7_
-  - [ ]* 16.2 Write unit tests for CLI IPC ops
+  - [x]* 16.2 Write unit tests for CLI IPC ops
     - Test new_session returns session_id and paths
     - Test list_sessions returns sorted SessionMeta array
     - Test terminate_session returns ok
@@ -269,7 +269,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 21.1_
   - [x] 17.1b Implement mutation tools — `register_pr` and `complete_session`
     - _Requirements: 20.3, 20.4_
-  - [ ]* 17.2 Write unit tests for MCP tool dispatch
+  - [x]* 17.2 Write unit tests for MCP tool dispatch
     - Test register_pr, session_status, complete_session return expected results
     - _Requirements: 20.3_
   - [x] 17.3 Tier 2 test for register_pr
@@ -337,7 +337,7 @@ Testing discipline: Production code tasks are not complete until their Tier 2 te
     - _Requirements: 21.5_
   - [x] 21.9 Implement CLI SIGINT handling — on Ctrl-C during tail, stop file watching and exit 0; session continues
     - _Requirements: 21.13_
-  - [ ]* 21.10 Unit tests for pretty-print formatting and flag handling
+  - [x]* 21.10 Unit tests for pretty-print formatting and flag handling
   - [x] 21.11 Tier 2 test invoking CLI as subprocess
     - _Requirements: 21.3, 21.4, 21.5, 24.6_
 

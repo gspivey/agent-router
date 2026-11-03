@@ -137,3 +137,43 @@ describe('prettyPrint', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 21.10 — Additional edge-case pretty-print tests
+// ---------------------------------------------------------------------------
+
+describe('prettyPrint edge cases (task 21.10)', () => {
+  it('router source entries begin with the ANSI gray escape sequence', () => {
+    const entry = {
+      ts: '2026-11-03T00:00:00Z',
+      source: 'router',
+      type: 'session_started',
+    };
+    const result = prettyPrint(entry);
+    // Must start with the gray ANSI escape (not plain text)
+    expect(result.startsWith('\x1b[90m')).toBe(true);
+  });
+
+  it('non-standard entry type falls through to the plain-text path', () => {
+    const entry = {
+      ts: '2026-11-03T00:00:00Z',
+      source: 'agent',
+      type: 'unknown_custom_type',
+      message: 'custom text',
+    };
+    const result = prettyPrint(entry);
+    // Plain text path: no error-red or cyan tool coloring
+    expect(result).not.toContain('\x1b[31m'); // no RED
+    expect(result).not.toContain('\x1b[36m'); // no CYAN
+    // Contains the message text
+    expect(result).toContain('custom text');
+  });
+
+  it('missing ts, source, and type fall back to empty strings', () => {
+    const entry = {};
+    const result = prettyPrint(entry);
+    // Does not throw, returns the bracket prefix at minimum
+    expect(typeof result).toBe('string');
+    expect(result).toContain('['); // contains timestamp bracket
+  });
+});

@@ -640,3 +640,49 @@ describe('Property 19: Prompt Log Completeness', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 11.11 — Session file edge cases (optional deferred unit tests)
+// ---------------------------------------------------------------------------
+
+describe('createSession — error paths (task 11.11)', () => {
+  it('throws when a file already occupies the session directory path', () => {
+    // Simulate the case where a file exists where the directory should go.
+    // Write a regular file at the sessions/<id> path before calling createSession.
+    const sessionsDir = path.join(tmpDir, 'sessions');
+    const blockerPath = path.join(sessionsDir, 'blocked-sess');
+    fs.writeFileSync(blockerPath, 'blocker');
+
+    // createSession must throw with a descriptive message (Req 18.8)
+    expect(() => sf.createSession('blocked-sess', 'some prompt')).toThrow();
+  });
+
+  it('stream entries are written as-is — no unexpected field mutation', () => {
+    // Verify that appendStream serialises the entry verbatim.
+    // (session-files has no secret-filtering layer; that is the logger's job.)
+    sf.createSession('sess-nomut', 'test prompt');
+    const entry: import('../../src/session-files.js').StreamEntry = {
+      ts: '2026-11-03T00:00:00Z',
+      source: 'agent',
+      type: 'agent-message',
+      content: 'response text',
+      extra_field: 'extra_value',
+    };
+    sf.appendStream('sess-nomut', entry);
+
+    const paths = sf.createSession('sess-nomut-read', 'read test');
+    // Read the stream.log of sess-nomut directly
+    const streamLog = path.join(tmpDir, 'sessions', 'sess-nomut', 'stream.log');
+    const raw = fs.readFileSync(streamLog, 'utf-8').trim();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    expect(parsed['ts']).toBe('2026-11-03T00:00:00Z');
+    expect(parsed['source']).toBe('agent');
+    expect(parsed['type']).toBe('agent-message');
+    expect(parsed['content']).toBe('response text');
+    expect(parsed['extra_field']).toBe('extra_value');
+
+    // Suppress unused variable warning
+    void paths;
+  });
+});
