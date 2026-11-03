@@ -1065,6 +1065,108 @@ parse/reconstruct round-trip property ensures these functions are inverses for w
 
 ---
 
+### P2.40 — Deferred unit tests: config error paths, session file edge cases, ACP errors, CLI IPC ops, MCP dispatch, and pretty-print flag handling
+
+The agent-router spec (`tasks.md` items `3.6`, `9.5`, `11.11`, `13.6`, `14.6`, `16.2`,
+`17.2`, `21.10`) specified eight optional unit test batches that were deferred when their
+parent tasks shipped. Items `3.6`, `9.5`, and `13.6` are already covered by existing tests
+(`load-config.test.ts`, `db.test.ts`, and `server.test.ts` respectively) — this item ticks
+those three checkboxes, adds the missing tests for the other five, and ticks all eight.
+
+**Tasks already covered (tick only):**
+- `3.6` — Config error paths: missing config file, invalid JSON, missing ENV: var — all
+  tested in `test/tier1/load-config.test.ts`.
+- `9.5` — Stale event cleanup (`markStaleEvents`) and session lookup (`findSession`) — both
+  tested in `test/tier1/db.test.ts`.
+- `13.6` — HTTP routing edge cases: 405 for non-POST `/webhook` (GET, PUT, DELETE, PATCH),
+  401 for missing signature — all tested in `test/tier1/server.test.ts`.
+
+**Tests to add:**
+
+**`11.11` — Session file edge cases** (`test/tier1/session-files.test.ts`):
+- Session directory creation failure: when the filesystem path is not writable (e.g., a
+  file already exists at the session dir path), `createSession` throws with a descriptive
+  message.
+- Meta.json initial state: new session has `status: "active"`, `prs: []`,
+  `completed_at: null` — already tested (`session-files.test.ts:69`). Tick without new code.
+- No secrets in stream entries: `appendStream` serializes entries to NDJSON lines; none of
+  the emitted lines should contain a webhook secret string when a secret value is embedded
+  in an extra field. Test that a stream entry containing a known secret string is written
+  verbatim (session-files has no filtering — the logger handles secret filtering; the test
+  verifies the module boundary is correctly understood by confirming the module does NOT
+  add its own filtering layer). Actually: confirm stream entries are written exactly as
+  passed (no unexpected mutation of values).
+
+**`14.6` — ACP error paths** (`test/tier1/` — new `acp.test.ts` or additions to
+`acp-permission.test.ts`):
+- Protocol version mismatch: when `initialize()` receives a response with
+  `protocolVersion !== 1`, it throws `Error("ACP protocol version mismatch…")`.
+- Spawn failure handling: `spawnACPClient` with a non-existent `kiroPath` results in the
+  process immediately exiting. The ACP `initialize()` call then rejects (stdin closed).
+- Non-zero exit code handling: when the subprocess exits with code 1 after `initialize()`,
+  the `sessionEnded` promise resolves and `kill()` no longer hangs.
+
+**`16.2` — CLI IPC ops unit tests** (`test/tier1/cli-ipc-ops.test.ts` — new file):
+These supplement the Tier 2 `cli-server.test.ts` with isolated unit tests for the pure
+data-transformation logic:
+- `new_session` op: returns `{ ok: true, session_id, paths }` when session manager accepts.
+- `list_sessions` op: returns sessions sorted by `created_at` descending.
+- `terminate_session` op: returns `{ ok: true }` when session is active; error when not found.
+- `inject_prompt` op: dispatches to `sessionMgr.injectPrompt`; returns `{ ok: true }`.
+Use a minimal mock `sessionMgr` (plain object with stubbed methods) — no real daemon, no
+socket. The tests exercise the CLI server's request-dispatch logic in isolation.
+
+**`17.2` — MCP tool dispatch** (`test/tier1/mcp-server.test.ts` additions):
+The existing `mcp-server.test.ts` verifies relay ops (`github_http_forward`, `push_branch`,
+`pr_create`, `pr_view`). It does NOT call `register_pr`, `session_status`, or
+`complete_session` and verify their return values. Add three tests:
+- `register_pr` tool: calling it sends `op: 'register_pr'` to the agent socket with
+  `pr_number` and `repo`; the response text contains a success indication.
+- `session_status` tool: calling it sends `op: 'session_status'` to the agent socket;
+  the response text contains `session_id`.
+- `complete_session` tool: calling it sends `op: 'complete_session'` to the agent socket
+  with `reason`; the response text contains a success indication.
+
+**`21.10` — Pretty-print formatting and flag handling** (`test/tier1/pretty-print.test.ts`
+additions):
+The existing tests cover all entry types. Add tests for the `raw` mode behavior — since
+`tailFile` in `bin/agent-router.ts` directly does `process.stdout.write`, the testable
+surface is the `prettyPrint` function's output contract: when `raw: false`, JSON is
+formatted; when `raw: true`, output is the raw JSON string. Test this at the
+`prettyPrint` level rather than the `tailFile` level (the function is the testable unit):
+- Entry type coverage for all branches: `router` (gray), `error`/`stderr` (red), tool
+  calls (cyan), agent messages (plain text with content field).
+- Non-JSON line handling: a non-JSON string passed through the raw path is printed as-is.
+These are already substantially covered. Add: a test confirming that `prettyPrint` output
+for a router entry starts with the gray ANSI escape, and one confirming that a non-standard
+entry type (neither router, error, tool call, nor agent-message) falls through to the plain
+text path.
+
+**Mini spec.**
+
+- `test/tier1/session-files.test.ts`: add one new test for directory creation failure in
+  a new `describe('createSession — error paths')` block.
+- `test/tier1/acp.test.ts` (new file): add tests for protocol version mismatch using
+  `createACPClientFromStreams` with an in-memory fake subprocess; for spawn failure and
+  non-zero exit using `spawnACPClient` with a script that exits immediately.
+- `test/tier1/cli-ipc-ops.test.ts` (new file): add unit tests for `createCliServer` op
+  dispatch using stub `sessionMgr` and `sessionFiles`. Tests issue raw NDJSON over a
+  real Unix socket to the server and verify the response.
+- `test/tier1/mcp-server.test.ts`: add three tests for `register_pr`, `session_status`,
+  `complete_session` dispatch using the existing `FakeAgentSocket` pattern.
+- `test/tier1/pretty-print.test.ts`: add two tests for edge-case entry types.
+- `.kiro/specs/agent-router/tasks.md`: tick items `3.6`, `9.5`, `11.11`, `13.6`, `14.6`,
+  `16.2`, `17.2`, `21.10`.
+
+**Acceptance criteria.**
+- `npm test` passes with all new tests included.
+- `npm run typecheck` passes — no `any` or stray `as` casts.
+- Tasks `3.6`, `9.5`, `11.11`, `13.6`, `14.6`, `16.2`, `17.2`, `21.10` ticked in
+  `.kiro/specs/agent-router/tasks.md`.
+- No new runtime dependencies added.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)
