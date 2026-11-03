@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 147. Add client test outcomes to CI PR report
 
 P2.62 (PR #222) added `Client svelte-check` and `Client unit tests` steps to CI, but the
@@ -46,11 +50,9 @@ either step fails. Also updates `ci.yml` to pass the new flags. Tier 1 tests in
 `ci-report.test.ts` for all new scenarios.
 
 - Spec: `BACKLOG.md § P2.63`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #223
 
 ---
-
-## Completed
 
 ### 146. Add client tests and svelte-check to CI
 

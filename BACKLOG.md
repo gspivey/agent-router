@@ -2976,7 +2976,7 @@ Updating the report script to include client results is out of scope for this it
 
 ---
 
-### P2.63 — Add client test outcomes to CI PR report
+### P2.63 — Add client test outcomes to CI PR report ✅ DONE (PR #223)
 
 **Why this exists.** P2.62 (PR #222) added `Client svelte-check` and `Client unit tests` steps
 to `.github/workflows/ci.yml` so a broken Svelte component or failing client unit test fails CI.
