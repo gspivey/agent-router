@@ -448,5 +448,56 @@
         </Card>
       </section>
     {/if}
+
+    <!-- Recent PRs (BACKLOG.md § P2.54) — only shown when at least one PR is registered -->
+    {#if overview !== null && overview.recent_prs.length > 0}
+      <section data-testid="recent-prs">
+        <h2 class="mb-2 text-sm font-semibold text-[var(--text-primary)]">Recent PRs</h2>
+        <Card>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr class="border-b border-[var(--border)] text-[var(--text-muted)]">
+                  <th class="px-2 py-2 font-medium">Title</th>
+                  <th class="px-2 py-2 font-medium">Repo</th>
+                  <th class="px-2 py-2 font-medium">State</th>
+                  <th class="px-2 py-2 font-medium">Opened</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each overview.recent_prs as pr (pr.title + ':' + pr.url + ':' + pr.opened_at)}
+                  <tr
+                    data-testid="recent-prs-row"
+                    class="border-b border-[var(--border)] last:border-b-0"
+                  >
+                    <td class="px-2 py-2 text-[var(--text-primary)]">
+                      <a
+                        href={pr.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="underline hover:text-[var(--text-muted)]"
+                      >{pr.title}</a>
+                    </td>
+                    <td class="px-2 py-2 font-mono text-xs text-[var(--text-muted)]">{pr.repo}</td>
+                    <td class="px-2 py-2">
+                      {#if pr.state === 'open'}
+                        <StatusBadge state="active" label="Open" />
+                      {:else if pr.state === 'merged'}
+                        <StatusBadge state="paused" label="Merged" />
+                      {:else}
+                        <span class="text-xs text-[var(--text-muted)]">{pr.state}</span>
+                      {/if}
+                    </td>
+                    <td class="px-2 py-2 text-xs text-[var(--text-muted)]">
+                      {formatNextFire(pr.opened_at)}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
+    {/if}
   {/if}
 </section>
