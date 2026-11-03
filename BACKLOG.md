@@ -2546,7 +2546,7 @@ item for this fix is ticked.
 
 ---
 
-### P2.57 — Annotate BACKLOG.md § P2.55 as done
+### P2.57 — Annotate BACKLOG.md § P2.55 as done ✅ DONE (PR #217)
 
 `BACKLOG.md § P2.55` (Annotate BACKLOG.md § P2.54 as done) was fully implemented and
 shipped as ROADMAP item 139 (PR #215), but the BACKLOG.md entry was never annotated with
@@ -2555,3 +2555,97 @@ actual shipped state. Documentation-only: no code, no tests.
 
 **Acceptance.** `BACKLOG.md § P2.55` carries a `✅ DONE (PR #215)` annotation. The ROADMAP
 item for this fix is ticked.
+
+---
+
+### P2.58 — Add unit tests for MessageBubble, PermissionCard, InternalPill, SystemPill, UnknownPill, and ReconnectPill
+
+Six SPA components have `data-testid` attributes and documented behaviors but no dedicated
+`*.test.ts` file. With the Composer and HelpOverlay test gap closed in BACKLOG.md § P2.56
+(ROADMAP item 140, PR #216), these six are the remaining untested interactive and presentational
+components in `client/src/components/`. They span the chat-view rendering pipeline — agent
+markdown bubbles, permission prompts, metadata pills, system events, unknown entries, and the
+reconnect indicator — and are exercised only indirectly by parent component tests today.
+
+**Why these six.** Direct unit tests for leaf components:
+- Isolate rendering regressions to the component level (rather than hunting through ChatView or
+  MessageRow tests for the root cause).
+- Serve as living documentation of the prop contracts and rendering behaviors.
+- Provide a fast feedback loop: a leaf test is milliseconds, not the seconds a full ChatView
+  test tree takes.
+
+**Components and their testable behaviors.**
+
+**`MessageBubble`** (`client/src/components/MessageBubble.test.ts`):
+- **Default mode** (`bare = false`): the bubble container has `data-testid="message-bubble"` and
+  `class` containing `flex w-full justify-end` (right-aligned). The text is rendered as plain
+  text (no `{@html}` in this path), so `<script>` tags in `text` appear as literal characters.
+- **Bare mode** (`bare = true`): the container has `data-testid="message-bubble"` but does NOT
+  have the outer right-aligning wrapper class. The text is rendered via `renderMarkdown`, so
+  markdown syntax such as `**bold**` produces a `<strong>` element.
+- **Cursor in default mode**: when `cursor = true`, a `[data-testid="stream-cursor"]` element
+  is rendered inside the bubble with `aria-hidden="true"`. When `cursor = false`, that element
+  is absent.
+- **Cursor in bare mode**: when `cursor = true` in bare mode, the cursor span is rendered.
+  (Caveat: per the source code comment, the cursor is rendered; `MessageRow` manages streaming
+  affordances, but the cursor is still present in the DOM.)
+- **Empty text**: `text = ""` renders without error; the bubble is present but empty.
+
+**`PermissionCard`** (`client/src/components/PermissionCard.test.ts`):
+- `data-testid="permission-card"` is rendered on the outer `<div>`.
+- The `title` prop text appears in the card body (`<p class="... text-sm ...">`).
+- The card contains a "Permission requested" label (`<p class="... uppercase ...">`).
+- No action buttons are present (read-only — per the spec comment, Accept/Decline are out of
+  scope).
+
+**`InternalPill`** (`client/src/components/InternalPill.test.ts`):
+- `data-testid="internal-pill"` is rendered on the outer `<div>`.
+- The toggle button has `data-testid="internal-pill-toggle"` and `aria-expanded="false"` by
+  default.
+- By default, the text is shown in `truncate` mode (collapsed).
+- After clicking the toggle button, `aria-expanded` becomes `"true"` and the text changes to
+  `break-words text-left` (expanded).
+- A second click collapses it back (`aria-expanded="false"`).
+
+**`SystemPill`** (`client/src/components/SystemPill.test.ts`):
+- `data-testid="system-pill"` is rendered on the outer `<div>`.
+- `data-badge` reflects the `badge` prop, or `"none"` when `badge` is absent.
+- Without a `badge` prop, the inner `<span>` uses `color: var(--system-pill-text)`.
+- With `badge="green"`, the `<span>` uses `color: var(--success)`.
+- With `badge="yellow"`, the `<span>` uses `color: var(--warning)`.
+- With `badge="red"`, the `<span>` uses `color: var(--error)`.
+- The `text` prop appears as the text content of the inner `<span>`.
+
+**`UnknownPill`** (`client/src/components/UnknownPill.test.ts`):
+- `data-testid="unknown-pill"` is rendered on the outer `<div>`.
+- The `typeLabel` prop text appears as the text content of the inner `<span>`.
+- The inner `<span>` has `class` containing `truncate` (labels are not expanded).
+
+**`ReconnectPill`** (`client/src/components/ReconnectPill.test.ts`):
+- `data-testid="reconnect-pill"` is rendered on the outer `<div>`.
+- The inner `<span>` has `role="status"` and `aria-live="polite"`.
+- The text content is `"Reconnecting…"`.
+- No props are accepted (purely presentational).
+
+**Mini spec.**
+
+- Create six new test files in `client/src/components/`:
+  `MessageBubble.test.ts`, `PermissionCard.test.ts`, `InternalPill.test.ts`,
+  `SystemPill.test.ts`, `UnknownPill.test.ts`, `ReconnectPill.test.ts`.
+- Follow the `@testing-library/svelte` pattern established by `StatusBadge.test.ts`,
+  `KillConfirmDialog.test.ts`, and `Composer.test.ts`: use `render`, `fireEvent`, `cleanup`,
+  `afterEach(() => cleanup())`. Mock `renderMarkdown` in `MessageBubble.test.ts` (via
+  `vi.mock('../lib/logic.js', ...)`) to avoid bringing in the full markdown dependency in
+  the jsdom environment, or verify the markdown output shape directly against the
+  `renderMarkdown` pure function.
+- All tests are client-side only — no daemon, no fake backends, no network.
+- Each test file covers all the behavioral invariants listed above for its component.
+- No new production code changes. No new runtime dependencies.
+
+**Acceptance.**
+- Six new `*.test.ts` files are created in `client/src/components/`.
+- `npm --prefix client run test` passes with the new tests included (currently 402 tests
+  across 32 files; after this item: ≥ 420 tests across 38 files).
+- `npm --prefix client run check` (svelte-check) reports 0 errors and 0 warnings.
+- `npm run typecheck` passes (no daemon changes).
+- `npm test` passes (no daemon changes).
