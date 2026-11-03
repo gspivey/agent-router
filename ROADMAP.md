@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 133. Add auto-refresh to the Sessions list page
 
 The SPA Overview page auto-refreshes every 30 seconds (ROADMAP item 117, PR #193) but the
@@ -44,11 +48,9 @@ HH:MM:SS" timestamp footer, and a manual "Refresh" button. Pure client-side chan
 backend modifications required.
 
 - Spec: `BACKLOG.md § P2.49`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #209
 
 ---
-
-## Completed
 
 ### 132. Add `last_started_at` to Activity by Repo rows in the SPA Overview
 

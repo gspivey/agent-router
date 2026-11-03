@@ -2105,7 +2105,7 @@ Tests:
 
 ---
 
-### P2.49 — Add auto-refresh to the Sessions list page
+### P2.49 — Add auto-refresh to the Sessions list page ✅ DONE (PR #209)
 
 **Why this exists.** The SPA Overview page auto-refreshes every 30 seconds (ROADMAP item 117,
 PR #193) — an operator checking on overnight cron runs always sees current data. The Sessions
