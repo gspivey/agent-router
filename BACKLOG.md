@@ -324,6 +324,109 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
+### P2.46 — Fix `RepoGroup.svelte` Svelte-state-referenced-locally warnings
+
+`client/src/components/RepoGroup.svelte` initializes three `$state()` variables directly
+from the `group` prop object:
+
+```svelte
+let collapsed = $state(loadCollapsed(group.repo));
+let terminalSessions = $state<SessionSummary[]>([...group.terminal_sessions]);
+let terminalTotal = $state(group.terminal_total);
+```
+
+Svelte 5's `svelte-check` emits four `state_referenced_locally` warnings for these lines:
+"This reference only captures the initial value of `group`. Did you mean to reference it
+inside a derived instead?" These warnings are not cosmetic — they flag a real reactivity
+gap. When the parent component receives a fresh `group` prop (e.g., on the 30-second
+auto-refresh in `SessionList`), the three `$state` variables are **not updated**: they
+retain the stale values from the first render. Concretely:
+
+- `terminalSessions` stays frozen at the initial list even when the server returns new or
+  removed sessions.
+- `terminalTotal` shows the count from the first load regardless of new data.
+- `collapsed` keeps the initial collapse state even if `loadCollapsed` would now return a
+  different value for the same repo (e.g., the repo went from active to idle and crossed
+  the staleness threshold between refreshes).
+
+**Why this matters in practice.** The Overview auto-refresh (ROADMAP item 117, PR #193)
+fetches fresh data every 30 seconds. The SessionList page also auto-refreshes. When a
+running session completes between refreshes, the RepoGroup header will correctly show
+"idle" (because `group.active_sessions.length` comes from the re-rendered prop), but the
+`terminalSessions` list rendered below it still reflects the stale initial snapshot — the
+newly-completed session won't appear until a full page reload.
+
+**Fix.** Replace the three `$state(group.*)` initializations with `$derived` expressions
+that remain reactive across prop changes. The `collapsed` variable is the tricky one:
+`loadCollapsed` reads `localStorage` and should only run once per repo key (not on every
+render). The correct pattern for a value that is *initially* derived from a prop but then
+mutated locally (by `toggleCollapsed`) is to use `$derived` for the initialization seed
+and track mutations separately, or to watch for repo changes and reset.
+
+Preferred approach:
+- `terminalSessions`: derive from `group.terminal_sessions` on each render, but append
+  `loadMore` results on top. Use `$derived` as the base and a separate `$state` for the
+  extra pages loaded via "Show more". Merge the two in a third `$derived`.
+- `terminalTotal`: use `$derived(group.terminal_total)` but also update it when `loadMore`
+  returns a new total. A single `$derived` with a writable override works via the `$state +
+  $effect` pattern.
+- `collapsed`: the local mutation (via `toggleCollapsed`) means we need a `$state` for the
+  user's explicit override, plus a `$derived` for the auto-collapse seed that runs only
+  when `group.repo` changes.
+
+**Mini spec.**
+
+- Change `terminalSessions` from `$state([...group.terminal_sessions])` to a pattern that
+  tracks the server-provided list reactively AND appends `loadMore` results. One clean
+  approach: `$state` for `extraSessions` (pages loaded via "Show more"), and
+  `$derived(() => [...group.terminal_sessions, ...extraSessions])` for the rendered list.
+  Reset `extraSessions` when `group.repo` changes (via `$effect`).
+- Change `terminalTotal` from `$state(group.terminal_total)` to track the server value with
+  an optional local override from `loadMore`. A simple `$state<number | null>(null)` for the
+  override (null = use server value) plus `$derived(override ?? group.terminal_total)` works.
+  Reset the override on repo change.
+- Change `collapsed` to use a `$state` for the user's explicit override
+  (`'1' | '0' | 'auto'`, default `'auto'`), derive the auto-collapse result from
+  `group.active_sessions.length` and the newest `terminal_sessions.completed_at` (both
+  reactive), and combine: if override is `'auto'`, use the derived auto-collapse; else use
+  the stored value. `toggleCollapsed` now writes to the `$state` override. Reset override
+  to `'auto'` when `group.repo` changes.
+- `svelte-check` (via `npm --prefix client run check`) must emit zero warnings after the fix.
+- The `loadMore` flow must continue to work: clicking "Show more" appends sessions and
+  updates the total.
+- No new client dependencies.
+
+**Tests.**
+
+Add to `client/src/components/RepoGroup.test.ts` (new file or additions to an existing
+component test):
+
+- **Prop-update reactivity for terminal sessions**: render `RepoGroup` with `group.terminal_sessions = [A]`,
+  then re-render with `group.terminal_sessions = [A, B]` (simulating an auto-refresh), and
+  assert that session B is now visible in the rendered output.
+- **Prop-update reactivity for terminal total**: render with `group.terminal_total = 5`,
+  re-render with `group.terminal_total = 6`, assert the "Show more" button shows the
+  updated count.
+- **loadMore still appends**: render with initial sessions, simulate a `loadMore` call that
+  returns additional sessions, assert the combined list is rendered (not just the server
+  page).
+- **collapsed auto-collapse**: render a group with no active sessions and an old terminal
+  session (`completed_at` > 1 day ago), assert the group is rendered collapsed.
+- **svelte-check passes**: running `npm --prefix client run check` emits 0 warnings (this
+  is an acceptance gate, not a unit test, but document it as part of the acceptance
+  criteria).
+
+**Acceptance.**
+- `npm --prefix client run check` emits 0 errors and **0 warnings** (currently 4 warnings,
+  all from `RepoGroup.svelte`).
+- `npm --prefix client run test` passes, including the new `RepoGroup` prop-reactivity tests.
+- `npm run typecheck` passes (no daemon changes, but run for completeness).
+- `npm test` passes.
+- When `SessionList` auto-refreshes with a new `group` prop, newly-completed sessions appear
+  in the `terminalSessions` list without a full page reload.
+
+---
+
 ### P2.3 — Workflow_dispatch perf tests validation
 
 **New (this session uncovered).**

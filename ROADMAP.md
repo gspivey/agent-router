@@ -33,6 +33,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 130. Fix `RepoGroup.svelte` Svelte-state-referenced-locally warnings
+
+`RepoGroup.svelte` initializes `collapsed`, `terminalSessions`, and `terminalTotal` via
+`$state(group.*)` — a pattern Svelte 5 flags with four `state_referenced_locally` warnings
+because those variables capture the initial prop value but do not update when `group`
+changes on auto-refresh. This means newly-completed sessions don't appear in the
+`terminalSessions` list, and `terminalTotal` stays stale, until a full page reload. The
+fix replaces the `$state(group.*)` initializations with reactive `$derived`-based patterns
+that stay in sync with prop updates while still supporting local mutation (`toggleCollapsed`,
+`loadMore`). Includes new `RepoGroup` component tests for prop-update reactivity.
+
+- Spec: `BACKLOG.md § P2.46`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
