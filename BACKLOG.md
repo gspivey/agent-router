@@ -2055,3 +2055,52 @@ Tests:
 - The array is ordered by `received_at DESC`, capped at 10, and always present (may be empty).
 - The SPA Overview shows a "Recent Events" table when the array is non-empty.
 - `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
+
+### P2.48 — Add `last_started_at` to Activity by Repo rows in the SPA Overview
+
+**Why this exists.** The "Activity by Repo" table in the Overview dashboard shows `active`
+session count and `completed_24h` terminal count per repo, but gives no timestamp. An
+operator running cron mode wants to verify that the agent actually fired on schedule: "when
+was the last session for this repo?" A stale `last_started_at` — e.g. 3 days ago on a
+daily cron — is the first signal that something is broken. Without this field, operators
+must navigate to the Sessions page and filter by repo manually.
+
+**What changes.**
+
+Backend (`src/web-routes.ts`):
+- Add `readonly last_started_at: number | null` to `OverviewSessionsByRepo`.
+  - `null` when no sessions exist for the repo (shouldn't happen given the grouping
+    logic, but kept for type safety).
+  - Unix epoch seconds of the `created_at` of the most recently created session for the
+    repo across all statuses.
+- Update `computeSessionsByRepo` to track the maximum `created_at` per repo group and
+  populate `last_started_at`. No DB changes — `created_at` is already present on every
+  `SessionMeta` row returned by `sessionFiles.listSessions()`.
+
+Client (`client/src/lib/types.ts`, `client/src/components/Overview.svelte`):
+- Add `readonly last_started_at: number | null` to the `SessionsByRepo` interface in
+  `client/src/lib/types.ts`.
+- In `Overview.svelte`, add a third column to the "Activity by Repo" table: render
+  `last_started_at` as a relative or locale timestamp (same pattern as other timestamp
+  columns in the table). Show `"—"` when `null`.
+
+Tests:
+- Tier 1 (`test/tier1/web-server/overview-sessions-by-repo.test.ts`, existing file):
+  add test cases:
+  - `last_started_at` is the maximum `created_at` across all sessions for the repo.
+  - Sessions with `repo === null` do not affect any repo's `last_started_at`.
+  - When a repo has only one session, `last_started_at` equals that session's `created_at`.
+  - When a repo has multiple sessions, `last_started_at` equals the most recent `created_at`.
+  - `last_started_at` is `null` when the repo map entry has no sessions (defensive case).
+  Minimum 100 iterations for any property test added.
+- Client (`client/src/components/Overview.test.ts`): update the existing "Activity by Repo"
+  test cases to assert the `last_started_at` column renders a non-empty string when the
+  value is non-null, and `"—"` when `null`.
+
+**Acceptance.**
+- `GET /overview` returns `active_sessions_by_repo: [{repo, active, completed_24h, last_started_at}, ...]`.
+- `last_started_at` is the unix-second timestamp of the most recently created session for the repo.
+- The SPA Overview "Activity by Repo" table renders a timestamp (or `"—"`) in a new third column.
+- `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
+
+---
