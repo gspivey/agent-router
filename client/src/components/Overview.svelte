@@ -188,19 +188,21 @@
     {#if loading}
       <div
         data-testid="stat-row-skeleton"
-        class="grid grid-cols-2 gap-4 lg:grid-cols-7"
+        class="grid grid-cols-2 gap-4 lg:grid-cols-9"
         aria-hidden="true"
       >
-        {#each Array(7) as _unused}
+        {#each Array(9) as _unused}
           <div class="h-20 animate-pulse rounded-lg bg-[var(--surface)]"></div>
         {/each}
       </div>
     {:else if overview !== null}
-      <div data-testid="stat-row" class="grid grid-cols-2 gap-4 lg:grid-cols-7">
+      <div data-testid="stat-row" class="grid grid-cols-2 gap-4 lg:grid-cols-9">
         <StatCard label="Active Sessions" value={overview.active_sessions} />
         <StatCard label="Queued Work" value={overview.queue_depth} />
         <StatCard label="Pending Wakes" value={overview.pending_wakes_count} />
         <StatCard label="Events (24h)" value={overview.events_processed_24h} />
+        <StatCard label="Tasks Done (24h)" value={overview.tasks_succeeded_24h} />
+        <StatCard label="Tasks Failed (24h)" value={overview.tasks_failed_24h} />
         <StatCard label="Recent PRs (24h)" value={recentPrCount} />
         <StatCard label="Health" value="System" badge={healthBadge} />
         <StatCard label="Uptime" value={formatUptime(overview.uptime_s)} />

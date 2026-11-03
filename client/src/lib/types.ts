@@ -270,6 +270,18 @@ export interface OverviewResponse {
    * the webhook pipeline may be broken. Always `>= 0`.
    */
   readonly events_processed_24h: number;
+  /**
+   * Count of tasks that reached `state = 'succeeded'` in the last 24 hours
+   * (BACKLOG.md § P2.42). Returns 0 when the tasks feature is not configured.
+   * Always `>= 0`.
+   */
+  readonly tasks_succeeded_24h: number;
+  /**
+   * Count of tasks that reached `state = 'failed'` in the last 24 hours
+   * (BACKLOG.md § P2.42). Returns 0 when the tasks feature is not configured.
+   * Always `>= 0`.
+   */
+  readonly tasks_failed_24h: number;
   readonly recent_prs: OverviewRecentPr[];
   readonly cron_summary: OverviewCronSummary[];
   readonly health: 'healthy' | 'degraded';

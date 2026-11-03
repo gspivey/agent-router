@@ -464,6 +464,20 @@ export interface OverviewResponse {
    */
   readonly events_processed_24h: number;
   /**
+   * Count of tasks that reached `state = 'succeeded'` in the last 24 hours
+   * (updated_at >= (now_s - 86400) * 1000). Returns 0 when the tasks table is
+   * unavailable (the tasks feature is optional). Always `>= 0`.
+   * See BACKLOG.md § P2.42.
+   */
+  readonly tasks_succeeded_24h: number;
+  /**
+   * Count of tasks that reached `state = 'failed'` in the last 24 hours
+   * (updated_at >= (now_s - 86400) * 1000). Returns 0 when the tasks table is
+   * unavailable (the tasks feature is optional). Always `>= 0`.
+   * See BACKLOG.md § P2.42.
+   */
+  readonly tasks_failed_24h: number;
+  /**
    * Present when the daemon has detected a config change that requires a
    * restart to take effect (e.g. `port`, `kiroPath`). Mirrors the shape from
    * `GET /health`. Absent when no restart is required.
@@ -696,6 +710,52 @@ export function createWebRoutes(deps: {
           `SELECT count(*) AS n FROM events WHERE processed_at IS NOT NULL AND received_at >= ?`,
         )
         .get(cutoff) as { n?: number } | undefined;
+      return typeof row?.n === 'number' ? row.n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Count tasks that reached `state = 'succeeded'` in the last 24 hours —
+   * rows in the `tasks` table with `state = 'succeeded' AND updated_at >=
+   * (nowS - 86400) * 1000` (tasks use unix-ms timestamps).
+   * Returns `0` when the DB is unavailable or the `tasks` table cannot be read
+   * (the tasks feature is optional). See BACKLOG.md § P2.42.
+   */
+  function countTasksSucceeded24h(nowS: number): number {
+    if (db === undefined) return 0;
+    try {
+      const cutoffMs = (nowS - 86400) * 1000;
+      const row = db
+        .raw()
+        .prepare(
+          `SELECT count(*) AS n FROM tasks WHERE state = 'succeeded' AND updated_at >= ?`,
+        )
+        .get(cutoffMs) as { n?: number } | undefined;
+      return typeof row?.n === 'number' ? row.n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Count tasks that reached `state = 'failed'` in the last 24 hours —
+   * rows in the `tasks` table with `state = 'failed' AND updated_at >=
+   * (nowS - 86400) * 1000` (tasks use unix-ms timestamps).
+   * Returns `0` when the DB is unavailable or the `tasks` table cannot be read
+   * (the tasks feature is optional). See BACKLOG.md § P2.42.
+   */
+  function countTasksFailed24h(nowS: number): number {
+    if (db === undefined) return 0;
+    try {
+      const cutoffMs = (nowS - 86400) * 1000;
+      const row = db
+        .raw()
+        .prepare(
+          `SELECT count(*) AS n FROM tasks WHERE state = 'failed' AND updated_at >= ?`,
+        )
+        .get(cutoffMs) as { n?: number } | undefined;
       return typeof row?.n === 'number' ? row.n : 0;
     } catch {
       return 0;
@@ -1240,6 +1300,8 @@ export function createWebRoutes(deps: {
       queue_depth: computeQueueDepth(),
       pending_wakes_count: countPendingWakes(),
       events_processed_24h: countEventsProcessed24h(nowS),
+      tasks_succeeded_24h: countTasksSucceeded24h(nowS),
+      tasks_failed_24h: countTasksFailed24h(nowS),
       recent_prs: collectRecentPrs(sessions),
       cron_summary: cronSummary,
       health,

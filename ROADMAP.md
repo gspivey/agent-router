@@ -33,6 +33,21 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 126. Surface `tasks_succeeded_24h` and `tasks_failed_24h` in the SPA Overview dashboard
+
+`GET /overview` surfaces `events_processed_24h` (event pipeline health) and `queue_depth`
+(tasks waiting) but has no visibility into recently-completed task outcomes. An operator
+wondering "did any tasks finish in the last day?" must query the SQLite `tasks` table
+manually. This item adds `tasks_succeeded_24h` and `tasks_failed_24h` to `OverviewResponse`
+in `src/web-routes.ts` (backed by `SELECT count(*)` on the `tasks` table filtered by
+`state` and `updated_at >= (nowS - 86400) * 1000`), updates the client type in
+`client/src/lib/types.ts`, and adds \"Tasks Done (24h)\" and \"Tasks Failed (24h)\" stat cards
+to `Overview.svelte`. Includes Tier 1 (handler logic), Tier 2 (DB count), and client unit
+tests (stat cards).
+
+- Spec: `BACKLOG.md § P2.42`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed

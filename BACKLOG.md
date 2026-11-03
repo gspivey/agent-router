@@ -1694,3 +1694,51 @@ No Tier 2 or server changes — this is a pure client rendering gap for already-
 - The "Uptime" stat card appears in the SPA Overview stat row when the daemon is running.
 - The `PageHeader` subtitle shows the daemon version string.
 - No new runtime dependencies added to `client/package.json`.
+
+---
+
+### P2.42 — Surface `tasks_succeeded_24h` and `tasks_failed_24h` in the SPA Overview dashboard
+
+`GET /overview` surfaces `events_processed_24h` (event pipeline health) and `queue_depth`
+(tasks waiting) but has no visibility into recently-completed task outcomes. An operator
+wondering "did any tasks finish in the last day?" must query the SQLite `tasks` table
+manually. Adding 24-hour task-outcome counts gives operators a fast health signal: if
+`tasks_failed_24h` is non-zero, something in the task pipeline may need attention.
+
+**What changes.**
+
+Backend (`src/web-routes.ts`):
+- Add `countTasksSucceeded24h(nowS: number): number` helper that runs
+  `SELECT count(*) AS n FROM tasks WHERE state = 'succeeded' AND updated_at >= @cutoff`
+  with `cutoff = (nowS - 86400) * 1000` (tasks use unix-ms timestamps). Returns `0` on any
+  DB error or when the `tasks` table is unavailable (the tasks feature is optional).
+- Add `countTasksFailed24h(nowS: number): number` helper with the equivalent query for
+  `state = 'failed'`.
+- Add `readonly tasks_succeeded_24h: number` and `readonly tasks_failed_24h: number` to
+  the `OverviewResponse` interface. Always present (`>= 0`), never optional.
+- Wire both into the `GET /overview` handler alongside `events_processed_24h`.
+
+Client (`client/src/lib/types.ts`, `client/src/components/Overview.svelte`):
+- Add `tasks_succeeded_24h: number` and `tasks_failed_24h: number` to the `OverviewResponse`
+  type in `client/src/lib/types.ts`.
+- Add two new stat cards after \"Events (24h)\": \"Tasks Done (24h)\" and \"Tasks Failed (24h)\".
+  Update the stat-row grid from `grid-cols-2 lg:grid-cols-7` to `grid-cols-2 lg:grid-cols-9`.
+
+Tests:
+- Tier 1 (`test/tier1/web-server/overview-task-stats.test.ts`, new file): tests asserting
+  `GET /overview` returns the correct `tasks_succeeded_24h` and `tasks_failed_24h` counts
+  when tasks with those states are inserted with `updated_at >= nowS - 86400` (milliseconds),
+  and returns `0` when the table is empty, the DB is absent, or tasks are older than 24h.
+  Follows the same pattern as `overview-events-processed.test.ts`.
+- Tier 2 (`test/tier2/overview-task-stats.test.ts`, new file): full web-server stack test
+  that inserts tasks via the task DB, calls `GET /overview`, and asserts the counts are
+  reflected. Follows the same pattern as `test/tier2/overview-events-processed.test.ts`.
+- Client (`client/src/components/Overview.test.ts`): two test cases asserting the
+  \"Tasks Done (24h)\" and \"Tasks Failed (24h)\" stat cards render the correct values.
+
+**Acceptance.**
+- `GET /overview` returns `{ ..., tasks_succeeded_24h: N, tasks_failed_24h: M }` where N
+  and M are the counts of `tasks` rows with `state = 'succeeded'` / `state = 'failed'` and
+  `updated_at >= (now_s - 86400) * 1000`.
+- The SPA Overview shows \"Tasks Done (24h)\" and \"Tasks Failed (24h)\" stat cards.
+- `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
