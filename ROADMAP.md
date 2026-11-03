@@ -33,6 +33,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 145. Add property tests for overview data-processing pure functions
+
+The pure functions `collectRecentPrs`, `computeSessionsByRepo`, `collectRecentEvents`,
+`buildCronSummary`, and `computeHealth` in `src/web-routes.ts` have unit tests but no
+fast-check property tests. This follows the pattern of items 114–115 and 119–123 that
+added property tests for other daemon pure functions. Properties cover deduplication
+invariants (`collectRecentPrs`), active-count accuracy and 10-row cap
+(`computeSessionsByRepo`), result-count and ordering (`collectRecentEvents`), length and
+paused semantics (`buildCronSummary`), and the health-degraded/healthy invariants
+(`computeHealth`). All Tier 1 — no fake backends, no network.
+
+- Spec: `BACKLOG.md § P2.61`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
