@@ -97,9 +97,9 @@ describe('Overview', () => {
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
     const cards = getAllByTestId('stat-card');
-    expect(cards).toHaveLength(6);
+    expect(cards).toHaveLength(7);
     const labels = cards.map((c) => c.getAttribute('data-label'));
-    expect(labels).toEqual(['Active Sessions', 'Queued Work', 'Pending Wakes', 'Events (24h)', 'Recent PRs (24h)', 'Health']);
+    expect(labels).toEqual(['Active Sessions', 'Queued Work', 'Pending Wakes', 'Events (24h)', 'Recent PRs (24h)', 'Health', 'Uptime']);
   });
 
   it('counts only recent PRs opened within the last 24h (Req 12.2)', async () => {
@@ -480,5 +480,66 @@ describe('Overview', () => {
     await findByTestId('continuous-runs');
     const rows = getAllByTestId('continuous-run-row');
     expect(rows).toHaveLength(2);
+  });
+
+  // ---- uptime_s stat card (BACKLOG.md § P2.41) ----
+
+  it('shows the Uptime stat card as the 7th card with a formatted value', async () => {
+    getOverview.mockResolvedValue(makeOverview({ uptime_s: 5400 })); // 1h 30m
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    // "Uptime" is the seventh card (index 6)
+    const uptimeCard = cards[6];
+    expect(uptimeCard?.getAttribute('data-label')).toBe('Uptime');
+    const value = uptimeCard?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('1h 30m');
+  });
+
+  it('shows "<1m" in Uptime card when uptime_s is 0', async () => {
+    getOverview.mockResolvedValue(makeOverview({ uptime_s: 0 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const uptimeCard = cards[6];
+    const value = uptimeCard?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('<1m');
+  });
+
+  it('shows "2d 3h" in Uptime card for multi-day uptime', async () => {
+    getOverview.mockResolvedValue(makeOverview({ uptime_s: 2 * 86400 + 3 * 3600 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const uptimeCard = cards[6];
+    const value = uptimeCard?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('2d 3h');
+  });
+
+  // ---- version in PageHeader subtitle (BACKLOG.md § P2.41) ----
+
+  it('shows the daemon version in the PageHeader subtitle', async () => {
+    getOverview.mockResolvedValue(makeOverview({ version: '1.2.3' }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    // Wait for the stat row to appear (means data has loaded)
+    await findByTestId('stat-row');
+    const header = await findByTestId('page-header');
+    const subtitle = header.querySelector('[data-testid="page-header-subtitle"]');
+    expect(subtitle?.textContent).toContain('v1.2.3');
+  });
+
+  it('shows a different version string when the version changes', async () => {
+    getOverview.mockResolvedValue(makeOverview({ version: '2.0.0-beta.1' }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId } = render(Overview);
+    // Wait for the stat row to appear (means data has loaded)
+    await findByTestId('stat-row');
+    const header = await findByTestId('page-header');
+    const subtitle = header.querySelector('[data-testid="page-header-subtitle"]');
+    expect(subtitle?.textContent).toContain('v2.0.0-beta.1');
   });
 });

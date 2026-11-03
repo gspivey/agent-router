@@ -1637,3 +1637,60 @@ to the session manager routing logic beyond adapter selection at spawn time.
 **The week after:** P1.7 (worktrees) replaces P0.4. Architecturally cleaner; worth doing once P0/early-P1 stuff is stable.
 
 **Then start running cron-mode for real, monitor, iterate.**
+
+---
+
+### P2.41 — Surface `uptime_s` as a stat card and `version` in the SPA Overview dashboard
+
+`GET /overview` already returns `uptime_s: number` and `version: string` in the
+`OverviewResponse` (added when the overview endpoint was built), and the client-side
+`OverviewResponse` type in `client/src/lib/types.ts` already declares them, but neither
+field is rendered anywhere in the SPA. An operator checking the dashboard cannot see how
+long the daemon has been running or which build is deployed — information that is
+immediately useful for diagnosing restarts and confirming deploys.
+
+**What changes.**
+
+Client only (`client/src/components/Overview.svelte`, `client/src/components/Overview.test.ts`):
+
+- Replace the current 6-card stat row (`grid-cols-2 lg:grid-cols-6`) with a 7-card row
+  (`grid-cols-2 lg:grid-cols-7`) by adding a new "Uptime" stat card after "Health".
+  The value should be formatted as a human-readable string: `"Xd Yh Zm"` for days/hours/minutes
+  when uptime is ≥ 1 minute, `"<1m"` when less than 60 seconds.
+- Add the daemon `version` string to the `PageHeader` subtitle (e.g.
+  `"Daemon activity and health at a glance — v1.2.3"`) rather than adding an 8th stat card.
+  This keeps the stat row at 7 cards and avoids making the grid unwieldy on mobile.
+
+No backend changes — `uptime_s` and `version` are already served by `GET /overview`.
+
+**Pure functions (Tier 1).**
+
+Extract `formatUptime(seconds: number): string` as a pure exported function in a new file
+`client/src/lib/uptime.ts` (or alongside the existing `logic.ts` helpers) so it can be
+unit-tested independently. The function must handle:
+- Negative or non-finite inputs: return `"—"` (defensive; the daemon always sends ≥ 0).
+- `0–59 s`: return `"<1m"`.
+- `60 s – 59m 59s`: return `"Xm"` (minutes only).
+- `1h – 23h 59m`: return `"Xh Ym"`.
+- `≥ 1 day`: return `"Xd Yh Zm"` (include minutes only when `< 1d`; for `≥ 1d` show
+  `"Xd Yh"` — minutes are noise at that scale).
+
+**Tests.**
+
+- Tier 1 (`client/src/lib/uptime.test.ts`, new file): unit tests for `formatUptime` covering:
+  boundary values (`0`, `59`, `60`, `3599`, `3600`, `86399`, `86400`), typical values
+  (`90s → "1m"`, `5400s → "1h 30m"`, `90000s → "1d 1h"`), and defensive values
+  (`-1 → "—"`, `NaN → "—"`). At least 10 cases.
+- Client component test (`client/src/components/Overview.test.ts`): add test cases asserting:
+  - The "Uptime" stat card is rendered with the correct formatted value when `uptime_s` is
+    provided in the overview response fixture.
+  - The `PageHeader` subtitle includes the `version` string from the overview response.
+
+No Tier 2 or server changes — this is a pure client rendering gap for already-served data.
+
+**Acceptance criteria.**
+- `npm --prefix client run check` passes (svelte-check, typecheck).
+- `npm --prefix client run test` passes with the new tests included.
+- The "Uptime" stat card appears in the SPA Overview stat row when the daemon is running.
+- The `PageHeader` subtitle shows the daemon version string.
+- No new runtime dependencies added to `client/package.json`.

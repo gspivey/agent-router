@@ -33,6 +33,18 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 125. Surface `uptime_s` as a stat card and `version` in the SPA Overview dashboard
+
+`GET /overview` already returns `uptime_s: number` and `version: string` and the client
+`OverviewResponse` type already declares them, but neither field is rendered in the SPA.
+This item adds a formatted "Uptime" stat card to the Overview stat row, extracts a pure
+`formatUptime(seconds: number): string` helper with Tier 1 unit tests, and adds the
+daemon version to the `PageHeader` subtitle. Pure client-side change — no backend
+modifications required.
+
+- Spec: `BACKLOG.md § P2.41`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
