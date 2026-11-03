@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 126. Surface `tasks_succeeded_24h` and `tasks_failed_24h` in the SPA Overview dashboard
 
 `GET /overview` surfaces `events_processed_24h` (event pipeline health) and `queue_depth`
@@ -46,11 +50,7 @@ to `Overview.svelte`. Includes Tier 1 (handler logic), Tier 2 (DB count), and cl
 tests (stat cards).
 
 - Spec: `BACKLOG.md § P2.42`
-- [ ] Complete · PR: —
-
----
-
-## Completed
+- [x] Complete · PR: #202
 
 ### 125. Surface `uptime_s` as a stat card and `version` in the SPA Overview dashboard
 

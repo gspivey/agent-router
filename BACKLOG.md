@@ -1697,7 +1697,7 @@ No Tier 2 or server changes — this is a pure client rendering gap for already-
 
 ---
 
-### P2.42 — Surface `tasks_succeeded_24h` and `tasks_failed_24h` in the SPA Overview dashboard
+### P2.42 — Surface `tasks_succeeded_24h` and `tasks_failed_24h` in the SPA Overview dashboard ✅ DONE (PR #202)
 
 `GET /overview` surfaces `events_processed_24h` (event pipeline health) and `queue_depth`
 (tasks waiting) but has no visibility into recently-completed task outcomes. An operator
