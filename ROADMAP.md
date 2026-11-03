@@ -33,6 +33,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 128. Color-highlight task-outcome stat cards in the SPA Overview dashboard
+
+The "Tasks Failed (24h)" and "Tasks Done (24h)" stat cards in the SPA Overview render
+the count value in the default text color regardless of outcome. An operator glancing at
+the dashboard cannot immediately tell that a non-zero failure count warrants attention
+without reading the label carefully. This item adds an optional `highlight` prop to
+`StatCard` (`'success' | 'danger'`), then passes it from `Overview.svelte` based on
+whether the count is non-zero: red for any failed tasks, green for any succeeded tasks.
+Pure client-side change — no backend modifications required.
+
+- Spec: `BACKLOG.md § P2.44`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed

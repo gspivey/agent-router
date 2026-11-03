@@ -1745,6 +1745,54 @@ Tests:
 
 ---
 
+### P2.44 — Color-highlight task-outcome stat cards in the SPA Overview
+
+The "Tasks Failed (24h)" and "Tasks Done (24h)" stat cards in the SPA Overview render the
+count value in the default `var(--text-primary)` color regardless of whether tasks succeeded
+or failed. An operator glancing at the dashboard cannot immediately tell that `tasks_failed_24h: 3`
+warrants attention without reading the label. A non-zero failure count should be visually
+distinct (red) to catch the operator's eye; a non-zero success count should be visually
+distinct (green) as a positive signal.
+
+**What changes.**
+
+Client only (`client/src/components/StatCard.svelte`, `client/src/components/StatCard.test.ts`,
+`client/src/components/Overview.svelte`, `client/src/components/Overview.test.ts`):
+
+- Add an optional `highlight?: 'success' | 'danger'` prop to `StatCard`. When `highlight`
+  is `'success'`, the value text changes from `var(--text-primary)` to `var(--success,#16a34a)`.
+  When `highlight` is `'danger'`, the value text changes to `var(--error,#dc2626)`. When
+  absent, the value renders unchanged in `var(--text-primary)`.
+- In `Overview.svelte`, pass `highlight="danger"` to the "Tasks Failed (24h)" stat card when
+  `overview.tasks_failed_24h > 0`, and `highlight="success"` to the "Tasks Done (24h)" stat
+  card when `overview.tasks_succeeded_24h > 0`. No change when the value is `0`.
+- No backend changes. No new dependencies. Pure client-side change.
+
+**Tests.**
+
+- `StatCard.test.ts`: add three test cases:
+  - `highlight="success"` renders the value in the success color class/variable.
+  - `highlight="danger"` renders the value in the error color class/variable.
+  - When `highlight` is absent, the value renders in the default primary color.
+- `Overview.test.ts`: add test cases asserting:
+  - "Tasks Failed (24h)" stat card gets `data-highlight="danger"` (or the
+    corresponding class/attribute) when `tasks_failed_24h > 0`.
+  - "Tasks Failed (24h)" stat card renders without the danger highlight when
+    `tasks_failed_24h === 0`.
+  - "Tasks Done (24h)" stat card gets `data-highlight="success"` when
+    `tasks_succeeded_24h > 0`.
+  - "Tasks Done (24h)" stat card renders without the success highlight when
+    `tasks_succeeded_24h === 0`.
+
+**Acceptance.**
+- `npm --prefix client run check` passes (svelte-check, typecheck).
+- `npm --prefix client run test` passes with the new tests included.
+- "Tasks Failed (24h)" value is red when non-zero; default color when zero.
+- "Tasks Done (24h)" value is green when non-zero; default color when zero.
+- No new runtime dependencies added to `client/package.json`.
+
+---
+
 ### P2.43 — Annotate BACKLOG.md § P2.39 and § P2.40 as done ✅ DONE (PR #203)
 
 `BACKLOG.md § P2.39` (Deferred property tests: server.ts and roadmap.ts) was fully
