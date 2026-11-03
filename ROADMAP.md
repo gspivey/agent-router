@@ -33,6 +33,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 146. Add client tests and svelte-check to CI
+
+The CI workflow runs `npm run typecheck` (daemon TypeScript) and the Tier 1 + Tier 2
+vitest suites, but never runs `npm --prefix client run check` (svelte-check over 39 Svelte
+component files) or `npm --prefix client run test` (468 client unit tests across 39 test
+files). A broken Svelte component type or a failing client unit test would never surface in
+CI — only local development catches these failures today. Adding two steps to `ci.yml`
+closes this coverage gap. Pure CI configuration change: no production code, no test code
+changes. Follows the pattern of item 106 (PR #181) which added the tier3-pr.yml workflow
+to close the tier3 CI gap.
+
+- Spec: `BACKLOG.md § P2.62`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed

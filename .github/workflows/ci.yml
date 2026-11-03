@@ -25,6 +25,14 @@ jobs:
 
       - run: npm ci
 
+      - name: Client svelte-check
+        id: svelte-check
+        run: npm --prefix client run check
+
+      - name: Client unit tests
+        id: client-test
+        run: npm --prefix client run test
+
       - name: Lint SPA no-{@html} invariant (NFR-6.3)
         run: npm --prefix client run lint:no-html
 

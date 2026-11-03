@@ -2914,3 +2914,62 @@ Both modes apply the same horizontal gutters (`px-4 sm:px-6 lg:px-8`).
 - `npm --prefix client run check` (svelte-check) reports 0 errors and 0 warnings.
 - `npm run typecheck` passes (no daemon changes).
 - `npm test` passes (no daemon changes).
+
+---
+
+### P2.62 — Add client tests and svelte-check to CI
+
+**Why this exists.** The CI workflow (`.github/workflows/ci.yml`) runs `npm run typecheck` (daemon
+TypeScript) and `npx vitest run --project tier1 --project tier2` (daemon unit + integration tests),
+but it never runs:
+
+- `npm --prefix client run check` — `svelte-check` type-checks all 39 Svelte component files and
+  their TypeScript. A broken Svelte component type that passes `tsc --noEmit` (which only sees
+  `.ts` files) would slip through undetected.
+- `npm --prefix client run test` — Vitest running 468 unit tests across 39 test files in the
+  `client/` subtree. A failing client test (e.g. a component prop renamed, a logic regression in
+  `uptime.ts`, a broken `StatCard`) would never surface in CI.
+
+The client build (`npm --prefix client run build`, invoked via the `prepare` lifecycle) already
+runs during `npm ci`, so the client is compiled. But compilation only proves the Svelte-to-JS
+transform doesn't error at the Vite level; it doesn't run `svelte-check` (which exercises the
+TypeScript analysis layer) or the Vitest test suite. This means every merged PR touching
+`client/` has been tested only by `npm run typecheck` (which doesn't cover Svelte files) and the
+build step (which doesn't run tests).
+
+**What changes.** Pure CI configuration change — no production code, no test code.
+
+Add two steps to `.github/workflows/ci.yml` between the `npm ci` step and the `Lint SPA
+no-{@html} invariant` step:
+
+```yaml
+- name: Client svelte-check
+  id: svelte-check
+  run: npm --prefix client run check
+
+- name: Client unit tests
+  id: client-test
+  run: npm --prefix client run test
+```
+
+These steps:
+- Run in the same job as the existing typecheck and test steps, after `npm ci` (which also builds
+  `client/dist/` via the `prepare` hook) and before the post-comment step.
+- Use the same Node.js installation and npm cache already configured for the job.
+- Do not require any new secrets, environment variables, or permissions.
+- Follow the existing pattern (each step has an `id:` so the Generate Report step could reference
+  outcomes if needed in the future, though the current report script doesn't include client results).
+
+The `Post PR Comment` step currently reports `typecheck` and `test` outcomes. The client steps are
+independent of the report script — they fail the build if they fail, which is the primary goal.
+Updating the report script to include client results is out of scope for this item.
+
+**Acceptance.**
+- `.github/workflows/ci.yml` contains a `Client svelte-check` step and a `Client unit tests` step.
+- Both steps run on every PR and push, after `npm ci`.
+- A PR that introduces a Svelte type error causes the `Client svelte-check` step to fail and the
+  overall CI job to fail.
+- A PR that introduces a failing client unit test causes the `Client unit tests` step to fail and
+  the overall CI job to fail.
+- `npm run typecheck` passes (no daemon changes).
+- `npm test` passes (no daemon code changes).
