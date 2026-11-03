@@ -440,6 +440,64 @@ export interface TokenExpiryCondition {
   readonly expires_at: string;
 }
 
+/** Per-repo session activity row in the `GET /overview` response (BACKLOG.md § P2.45). */
+export interface OverviewSessionsByRepo {
+  /** Repository in `owner/repo` format. */
+  readonly repo: string;
+  /** Number of sessions currently in `status='active'`. */
+  readonly active: number;
+  /**
+   * Number of sessions that reached a terminal state (`completed`, `failed`,
+   * or `abandoned`) in the last 24 hours, identified by `completed_at >= nowS - 86400`.
+   */
+  readonly completed_24h: number;
+}
+
+/**
+ * Compute per-repo session activity from the full session list.
+ *
+ * Groups all sessions that have a non-null `repo` field, counts active and
+ * recently-terminal sessions per repo, sorts descending by `active` then
+ * `completed_24h`, and returns at most `maxRows` rows (default 10) to avoid
+ * response bloat in large multi-repo deployments.
+ *
+ * Pure — takes all inputs as parameters for direct testability.
+ */
+export function computeSessionsByRepo(
+  sessions: Array<{ repo?: string; status: string; completed_at: number | null }>,
+  nowS: number,
+  maxRows = 10,
+): OverviewSessionsByRepo[] {
+  const cutoffS = nowS - 86400;
+  const map = new Map<string, { active: number; completed_24h: number }>();
+
+  for (const s of sessions) {
+    if (s.repo === undefined || s.repo === null || s.repo === '') continue;
+    const row = map.get(s.repo) ?? { active: 0, completed_24h: 0 };
+    if (s.status === 'active') {
+      row.active += 1;
+    } else if (
+      s.completed_at !== null &&
+      s.completed_at >= cutoffS
+    ) {
+      row.completed_24h += 1;
+    }
+    map.set(s.repo, row);
+  }
+
+  const result: OverviewSessionsByRepo[] = [];
+  for (const [repo, counts] of map) {
+    result.push({ repo, active: counts.active, completed_24h: counts.completed_24h });
+  }
+
+  result.sort((a, b) => {
+    const diff = b.active - a.active;
+    return diff !== 0 ? diff : b.completed_24h - a.completed_24h;
+  });
+
+  return result.slice(0, maxRows);
+}
+
 /** The `GET /overview` response body (Req 1.2). */
 export interface OverviewResponse {
   readonly active_sessions: number;
@@ -496,6 +554,13 @@ export interface OverviewResponse {
    * in tests that don't supply the getter). See BACKLOG.md § P2.35.
    */
   readonly continuous_runs?: ContinuousRunDTO[];
+  /**
+   * Per-repo session activity breakdown. Always an array (never undefined);
+   * empty when no sessions have a non-null `repo` field. Sorted by active
+   * count descending, then by 24h-terminal count descending; capped at 10
+   * rows. See BACKLOG.md § P2.45.
+   */
+  readonly active_sessions_by_repo: OverviewSessionsByRepo[];
 }
 
 /**
@@ -1307,6 +1372,7 @@ export function createWebRoutes(deps: {
       health,
       version: overviewVersion,
       uptime_s: Math.floor((Date.now() - overviewStartedAt) / 1000),
+      active_sessions_by_repo: computeSessionsByRepo(sessions, nowS),
       ...(restartRequired !== undefined ? { restart_required: restartRequired } : {}),
       ...(tokenExpiry !== undefined ? { token_expiry: tokenExpiry } : {}),
       ...(continuousRuns !== undefined ? { continuous_runs: continuousRuns } : {}),

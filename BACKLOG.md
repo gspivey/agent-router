@@ -1807,3 +1807,71 @@ the actual shipped state. Documentation-only: no code, no tests.
 **Acceptance.** `BACKLOG.md § P2.39` carries a `✅ DONE (PR #199)` annotation.
 `BACKLOG.md § P2.40` carries a `✅ DONE (PR #200)` annotation. The ROADMAP item for
 this fix is ticked.
+
+---
+
+### P2.45 — Surface `active_sessions_by_repo` in the SPA Overview dashboard
+
+`GET /overview` reports `active_sessions` (a scalar count) but gives no per-repo
+breakdown. An operator running three repos simultaneously cannot tell from the dashboard
+which repos have active sessions or which have the most activity in the last 24 hours.
+They must fall back to `agent-router ls` or filter the Sessions page manually. This item
+adds `active_sessions_by_repo` to `OverviewResponse` — an array of per-repo rows sorted
+by active-session count descending — and renders a compact "Activity by Repo" table in
+`Overview.svelte` that shows each configured or recently-active repo alongside its active
+session count and 24-hour session total.
+
+**Why this matters.** Cron mode can run against multiple repos on the same schedule. The
+Overview dashboard is the operator's first stop when checking on overnight runs; a per-repo
+view lets them immediately see whether each repo had recent work and whether any repo still
+has a live session. The scalar `active_sessions` alone doesn't provide this triage signal.
+
+**What changes.**
+
+Backend (`src/web-routes.ts`):
+- Add `OverviewSessionsByRepo` interface:
+  ```ts
+  export interface OverviewSessionsByRepo {
+    readonly repo: string;
+    readonly active: number;          // sessions with status='active'
+    readonly completed_24h: number;   // sessions completed/failed/abandoned in last 24h
+  }
+  ```
+- Add a `computeSessionsByRepo(sessions: SessionMeta[], nowS: number): OverviewSessionsByRepo[]`
+  pure function that groups sessions by `repo` (skipping sessions with `repo === null`),
+  counts `status === 'active'` sessions and sessions whose `completed_at` is within the
+  last 86400 seconds, sorts descending by `active` then by `completed_24h`, and returns
+  at most 10 rows (cap avoids response bloat in multi-repo deployments).
+- Add `readonly active_sessions_by_repo: OverviewSessionsByRepo[]` to `OverviewResponse`.
+  Always an array (never undefined); empty array when no sessions have a non-null repo.
+- Wire `computeSessionsByRepo(sessions, nowS)` into the `GET /overview` handler.
+
+Client (`client/src/lib/types.ts`, `client/src/components/Overview.svelte`):
+- Add `SessionsByRepo` interface and `active_sessions_by_repo: SessionsByRepo[]` field to
+  `OverviewResponse` in `client/src/lib/types.ts`.
+- In `Overview.svelte`, add an "Activity by Repo" section after the stat row (before
+  the Recent Sessions list). The section is only rendered when
+  `overview.active_sessions_by_repo.length > 0`. Each row shows: repo name, active badge
+  (number in green if > 0, muted if 0), and 24h count. Use existing CSS tokens. No new
+  dependencies.
+
+Tests:
+- Tier 1 (`test/tier1/web-server/overview-sessions-by-repo.test.ts`, new file): unit tests
+  for `computeSessionsByRepo` covering empty sessions (returns `[]`), sessions with null
+  repo (excluded), multi-repo grouping and sort order, 24h cutoff (sessions with
+  `completed_at` older than 86400s ago are not counted), and the 10-row cap. Run as pure
+  function tests — no daemon, no fake backends.
+- Tier 2 (`test/tier2/overview-sessions-by-repo.test.ts`, new file): full web-server stack
+  test that creates sessions with a test `SessionFiles` instance, calls `GET /overview`,
+  and asserts `active_sessions_by_repo` has the expected shape and sort order. Follows the
+  same pattern as `test/tier2/overview-continuous-runs.test.ts`.
+- Client (`client/src/components/Overview.test.ts`): two new test cases:
+  - Section is absent when `active_sessions_by_repo` is empty.
+  - Section renders one row per entry with repo name and the correct counts.
+
+**Acceptance.**
+- `GET /overview` returns `{ ..., active_sessions_by_repo: [{repo, active, completed_24h}, ...] }`.
+- The array is sorted by `active` descending, then `completed_24h` descending, capped at 10.
+- Sessions with `repo === null` are excluded.
+- The SPA Overview shows an "Activity by Repo" table when the array is non-empty.
+- `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.

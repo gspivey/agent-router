@@ -1,0 +1,302 @@
+/**
+ * Tier 1 tests: `computeSessionsByRepo` pure function and the
+ * `active_sessions_by_repo` field in `GET /overview`.
+ *
+ * Tests for the pure helper directly (no daemon, no disk I/O) and for the
+ * field's presence/absence in the overview response.
+ *
+ * See BACKLOG.md § P2.45.
+ */
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, it, expect } from 'vitest';
+import {
+  computeSessionsByRepo,
+  createWebRoutes,
+  type OverviewResponse,
+  type OverviewSessionsByRepo,
+} from '../../../src/web-routes.js';
+import { createSessionFiles, type SessionFiles } from '../../../src/session-files.js';
+import { createSSEBroker, type SSEBroker } from '../../../src/sse-broker.js';
+import { createLogger, type Logger } from '../../../src/log.js';
+import type { SessionManager } from '../../../src/session-mgr.js';
+
+// ---------------------------------------------------------------------------
+// Minimal stubs
+// ---------------------------------------------------------------------------
+
+function makeLogger(): Logger {
+  const noop = () => {};
+  return { debug: noop, info: noop, warn: noop, error: noop, child: () => makeLogger() };
+}
+
+function stubSessionMgr(): SessionManager {
+  return {
+    getActiveSession: () => undefined,
+    hasActiveSessionForRepo: () => false,
+    listActiveSessions: () => [],
+    injectPrompt: async () => {},
+    terminateSession: async () => {},
+    createSession: async () => ({ sessionId: '', sessionDir: '' }),
+    registerPR: () => {},
+    shutdown: async () => {},
+    completeSession: async () => {},
+  } as unknown as SessionManager;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+interface TestCtx {
+  rootDir: string;
+  sessionFiles: SessionFiles;
+  sseBroker: SSEBroker;
+  log: Logger;
+}
+
+function makeCtx(): TestCtx {
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'overview-sbr-t1-'));
+  const log = makeLogger();
+  const sessionFiles = createSessionFiles(rootDir);
+  const sseBroker = createSSEBroker({ sessionFiles, rootDir, log });
+  return { rootDir, sessionFiles, sseBroker, log };
+}
+
+function cleanup(ctx: TestCtx): void {
+  ctx.sseBroker.shutdown();
+  fs.rmSync(ctx.rootDir, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests for the pure computeSessionsByRepo function
+// ---------------------------------------------------------------------------
+
+describe('computeSessionsByRepo — pure unit tests', () => {
+  it('returns [] when the sessions array is empty', () => {
+    expect(computeSessionsByRepo([], 1000000)).toEqual([]);
+  });
+
+  it('returns [] when all sessions have null/undefined repo', () => {
+    const sessions = [
+      { status: 'active', completed_at: null },
+      { status: 'completed', completed_at: 999999 },
+    ];
+    expect(computeSessionsByRepo(sessions, 1000000)).toEqual([]);
+  });
+
+  it('returns [] when all sessions have an empty-string repo', () => {
+    const sessions = [
+      { repo: '', status: 'active', completed_at: null },
+    ];
+    expect(computeSessionsByRepo(sessions, 1000000)).toEqual([]);
+  });
+
+  it('counts active sessions per repo', () => {
+    const sessions = [
+      { repo: 'org/a', status: 'active', completed_at: null },
+      { repo: 'org/a', status: 'active', completed_at: null },
+      { repo: 'org/b', status: 'active', completed_at: null },
+    ];
+    const result = computeSessionsByRepo(sessions, 1000000);
+    const a = result.find((r) => r.repo === 'org/a');
+    const b = result.find((r) => r.repo === 'org/b');
+    expect(a?.active).toBe(2);
+    expect(b?.active).toBe(1);
+  });
+
+  it('counts completed_24h only for sessions with completed_at >= nowS - 86400', () => {
+    const nowS = 1000000;
+    const cutoffS = nowS - 86400; // 913600
+    const sessions = [
+      // within 24h
+      { repo: 'org/a', status: 'completed', completed_at: cutoffS + 1 },
+      { repo: 'org/a', status: 'failed', completed_at: nowS },
+      // exactly at boundary: should be included (>=)
+      { repo: 'org/a', status: 'abandoned', completed_at: cutoffS },
+      // older than 24h: should NOT count
+      { repo: 'org/a', status: 'completed', completed_at: cutoffS - 1 },
+      // null completed_at: should NOT count
+      { repo: 'org/a', status: 'completed', completed_at: null },
+    ];
+    const result = computeSessionsByRepo(sessions, nowS);
+    const a = result.find((r) => r.repo === 'org/a');
+    // 3 within 24h (cutoffS+1, nowS, cutoffS)
+    expect(a?.completed_24h).toBe(3);
+  });
+
+  it('does not count active sessions in completed_24h even if completed_at is set', () => {
+    const nowS = 1000000;
+    const sessions = [
+      // active session with a completed_at that would be within 24h — should only count active
+      { repo: 'org/a', status: 'active', completed_at: nowS - 100 },
+    ];
+    const result = computeSessionsByRepo(sessions, nowS);
+    const a = result.find((r) => r.repo === 'org/a');
+    expect(a?.active).toBe(1);
+    expect(a?.completed_24h).toBe(0);
+  });
+
+  it('sorts by active descending, then completed_24h descending', () => {
+    const nowS = 1000000;
+    const sessions = [
+      // repo/c: 0 active, 1 completed_24h
+      { repo: 'org/c', status: 'completed', completed_at: nowS - 100 },
+      // repo/a: 2 active, 0 completed_24h
+      { repo: 'org/a', status: 'active', completed_at: null },
+      { repo: 'org/a', status: 'active', completed_at: null },
+      // repo/b: 1 active, 2 completed_24h
+      { repo: 'org/b', status: 'active', completed_at: null },
+      { repo: 'org/b', status: 'completed', completed_at: nowS - 200 },
+      { repo: 'org/b', status: 'completed', completed_at: nowS - 300 },
+    ];
+    const result = computeSessionsByRepo(sessions, nowS);
+    expect(result[0]?.repo).toBe('org/a');  // 2 active
+    expect(result[1]?.repo).toBe('org/b');  // 1 active
+    expect(result[2]?.repo).toBe('org/c');  // 0 active, but 1 completed_24h
+  });
+
+  it('sorts equal-active repos by completed_24h descending', () => {
+    const nowS = 1000000;
+    const sessions = [
+      // repo/a: 0 active, 1 completed_24h
+      { repo: 'org/a', status: 'completed', completed_at: nowS - 100 },
+      // repo/b: 0 active, 3 completed_24h
+      { repo: 'org/b', status: 'completed', completed_at: nowS - 100 },
+      { repo: 'org/b', status: 'completed', completed_at: nowS - 200 },
+      { repo: 'org/b', status: 'completed', completed_at: nowS - 300 },
+    ];
+    const result = computeSessionsByRepo(sessions, nowS);
+    expect(result[0]?.repo).toBe('org/b');  // 3 completed_24h
+    expect(result[1]?.repo).toBe('org/a');  // 1 completed_24h
+  });
+
+  it('caps at maxRows (default 10)', () => {
+    const sessions: Array<{ repo: string; status: string; completed_at: number | null }> = [];
+    for (let i = 0; i < 15; i++) {
+      sessions.push({ repo: `org/repo-${i}`, status: 'active', completed_at: null });
+    }
+    const result = computeSessionsByRepo(sessions, 1000000);
+    expect(result).toHaveLength(10);
+  });
+
+  it('respects custom maxRows', () => {
+    const sessions: Array<{ repo: string; status: string; completed_at: number | null }> = [];
+    for (let i = 0; i < 5; i++) {
+      sessions.push({ repo: `org/repo-${i}`, status: 'active', completed_at: null });
+    }
+    const result = computeSessionsByRepo(sessions, 1000000, 3);
+    expect(result).toHaveLength(3);
+  });
+
+  it('includes each repo in the output exactly once', () => {
+    const sessions = [
+      { repo: 'org/x', status: 'active', completed_at: null },
+      { repo: 'org/x', status: 'completed', completed_at: 999999 },
+      { repo: 'org/x', status: 'failed', completed_at: 999998 },
+    ];
+    const result = computeSessionsByRepo(sessions, 1000000);
+    expect(result.filter((r) => r.repo === 'org/x')).toHaveLength(1);
+  });
+
+  it('returns rows with the correct OverviewSessionsByRepo shape', () => {
+    const nowS = 1000000;
+    const sessions = [
+      { repo: 'org/typed', status: 'active', completed_at: null },
+      { repo: 'org/typed', status: 'completed', completed_at: nowS - 100 },
+    ];
+    const result = computeSessionsByRepo(sessions, nowS);
+    expect(result).toHaveLength(1);
+    const row = result[0] as OverviewSessionsByRepo;
+    expect(typeof row.repo).toBe('string');
+    expect(typeof row.active).toBe('number');
+    expect(typeof row.completed_24h).toBe('number');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration tests: the field appears in GET /overview
+// ---------------------------------------------------------------------------
+
+describe('GET /overview active_sessions_by_repo field (BACKLOG.md § P2.45)', () => {
+  it('returns active_sessions_by_repo as [] when no sessions exist', async () => {
+    const ctx = makeCtx();
+    try {
+      const app = createWebRoutes({
+        sessionMgr: stubSessionMgr(),
+        sessionFiles: ctx.sessionFiles,
+        sseBroker: ctx.sseBroker,
+        rootDir: ctx.rootDir,
+        log: ctx.log,
+        shuttingDown: () => false,
+      });
+
+      const res = await app.request('/overview', { method: 'GET' });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as OverviewResponse;
+      expect(Array.isArray(body.active_sessions_by_repo)).toBe(true);
+      expect(body.active_sessions_by_repo).toHaveLength(0);
+    } finally {
+      cleanup(ctx);
+    }
+  });
+
+  it('returns active_sessions_by_repo with per-repo rows when sessions exist', async () => {
+    const ctx = makeCtx();
+    try {
+      // Create two sessions for different repos using the proper API
+      ctx.sessionFiles.createSession('sess-a1', 'test a');
+      ctx.sessionFiles.updateMeta('sess-a1', { repo: 'org/repo-a' });
+
+      ctx.sessionFiles.createSession('sess-b1', 'test b');
+      ctx.sessionFiles.updateMeta('sess-b1', { repo: 'org/repo-b' });
+
+      const app = createWebRoutes({
+        sessionMgr: stubSessionMgr(),
+        sessionFiles: ctx.sessionFiles,
+        sseBroker: ctx.sseBroker,
+        rootDir: ctx.rootDir,
+        log: ctx.log,
+        shuttingDown: () => false,
+      });
+
+      const res = await app.request('/overview', { method: 'GET' });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as OverviewResponse;
+      expect(Array.isArray(body.active_sessions_by_repo)).toBe(true);
+      expect(body.active_sessions_by_repo.length).toBeGreaterThanOrEqual(2);
+      const repos = body.active_sessions_by_repo.map((r) => r.repo);
+      expect(repos).toContain('org/repo-a');
+      expect(repos).toContain('org/repo-b');
+      for (const row of body.active_sessions_by_repo) {
+        expect(row.active).toBe(1);
+        expect(row.completed_24h).toBe(0);
+      }
+    } finally {
+      cleanup(ctx);
+    }
+  });
+
+  it('active_sessions_by_repo is always present in the response (never undefined)', async () => {
+    const ctx = makeCtx();
+    try {
+      const app = createWebRoutes({
+        sessionMgr: stubSessionMgr(),
+        sessionFiles: ctx.sessionFiles,
+        sseBroker: ctx.sseBroker,
+        rootDir: ctx.rootDir,
+        log: ctx.log,
+        shuttingDown: () => false,
+      });
+      const res = await app.request('/overview', { method: 'GET' });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as OverviewResponse;
+      // Must be an array, not undefined or null
+      expect(body.active_sessions_by_repo).toBeDefined();
+      expect(Array.isArray(body.active_sessions_by_repo)).toBe(true);
+    } finally {
+      cleanup(ctx);
+    }
+  });
+});

@@ -356,5 +356,43 @@
         </Card>
       </section>
     {/if}
+
+    <!-- Activity by Repo (BACKLOG.md § P2.45) — only shown when at least one repo has sessions -->
+    {#if overview !== null && overview.active_sessions_by_repo.length > 0}
+      <section data-testid="sessions-by-repo">
+        <h2 class="mb-2 text-sm font-semibold text-[var(--text-primary)]">Activity by Repo</h2>
+        <Card>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr class="border-b border-[var(--border)] text-[var(--text-muted)]">
+                  <th class="px-2 py-2 font-medium">Repo</th>
+                  <th class="px-2 py-2 font-medium text-right">Active</th>
+                  <th class="px-2 py-2 font-medium text-right">Done (24h)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each overview.active_sessions_by_repo as row (row.repo)}
+                  <tr
+                    data-testid="sessions-by-repo-row"
+                    class="border-b border-[var(--border)] last:border-b-0"
+                  >
+                    <td class="px-2 py-2 font-mono text-xs text-[var(--text-primary)]">{row.repo}</td>
+                    <td class="px-2 py-2 text-right">
+                      {#if row.active > 0}
+                        <span class="font-semibold text-[var(--success,#16a34a)]">{row.active}</span>
+                      {:else}
+                        <span class="text-[var(--text-muted)]">0</span>
+                      {/if}
+                    </td>
+                    <td class="px-2 py-2 text-right text-[var(--text-muted)]">{row.completed_24h}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
+    {/if}
   {/if}
 </section>

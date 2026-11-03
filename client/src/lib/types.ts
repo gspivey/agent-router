@@ -309,6 +309,13 @@ export interface OverviewResponse {
    * continuous runner is not wired into the web layer.
    */
   readonly continuous_runs?: ContinuousRunDTO[];
+  /**
+   * Per-repo session activity breakdown. Always an array (never undefined);
+   * empty when no sessions have a non-null `repo` field. Sorted by active
+   * count descending, then by 24h-terminal count descending; capped at 10
+   * rows. See BACKLOG.md § P2.45.
+   */
+  readonly active_sessions_by_repo: SessionsByRepo[];
 }
 
 /**
@@ -323,4 +330,19 @@ export interface ContinuousRunDTO {
   readonly current_session_id: string | null;
   readonly started_at: number;
   readonly stopped_at?: number;
+}
+
+/**
+ * Per-repo session activity row, mirroring `OverviewSessionsByRepo` from
+ * `src/web-routes.ts` (BACKLOG.md § P2.45).
+ */
+export interface SessionsByRepo {
+  readonly repo: string;
+  /** Number of sessions currently in `status='active'`. */
+  readonly active: number;
+  /**
+   * Number of sessions that reached a terminal state in the last 24 hours,
+   * identified by `completed_at >= nowS - 86400`.
+   */
+  readonly completed_24h: number;
 }
