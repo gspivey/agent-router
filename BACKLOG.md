@@ -1689,6 +1689,92 @@ did not start within Nms"` is the failure instead of a vitest timeout, and the f
 
 ---
 
+### P2.53 — Track `last_fired_at` in `cron_state` and surface it in the Overview dashboard
+
+**Why this exists.** The `cron_state` table only stores `name`, `paused`, and `updated_at` — it
+has no record of when a cron last actually fired. The `buildCronSummary` comment in
+`src/web-routes.ts` explicitly notes: "the `cron_state` table carries only `name`/`paused` today,
+so `last_status` is OPTIONAL … a schema change is out of scope for this feature". That deferral
+is now unblocked.
+
+An operator running cron mode has no dashboard signal for "did the 06:00 job actually fire this
+morning?" They see `next_fire: 2026-11-04T11:00:00Z` in the Overview cron table, but nothing
+tells them *when the last fire occurred*. A stale `last_fired_at` — e.g., "3 days ago" on a daily
+cron — is the first signal something is broken. Without it, operators must grep daemon logs
+manually.
+
+**What changes.**
+
+Database (`src/db.ts`):
+- Add `last_fired_at INTEGER` (nullable unix seconds) to `cron_state` via `ALTER TABLE` migration
+  (add the column with `ADD COLUMN IF NOT EXISTS` in `initDatabase`; existing rows default to
+  `NULL`).
+- Add `setLastFiredAt(name: string, nowS: number): void` to the `Database` interface. Runs:
+  ```sql
+  INSERT INTO cron_state (name, paused, updated_at, last_fired_at)
+  VALUES (@name, 0, @nowS, @nowS)
+  ON CONFLICT(name) DO UPDATE SET last_fired_at = excluded.last_fired_at, updated_at = excluded.updated_at
+  ```
+  This upserts the row so a cron that has never been paused/resumed still gets its row created on
+  first fire.
+- Update `SELECT name, paused, updated_at FROM cron_state` queries to also return `last_fired_at`.
+- Update the `CronState` interface in `src/db.ts` to include `last_fired_at: number | null`.
+
+`handleCronFire` (`src/index.ts`):
+- Add `db: Database` to the `handleCronFire` parameter list (already injected into `index.ts` at
+  startup; thread it through the call sites).
+- After a session is created successfully (either one-shot or continuous), call
+  `db.setLastFiredAt(cronEntry.name, Math.floor(Date.now() / 1000))`.
+
+Backend (`src/web-routes.ts`):
+- Add `readonly last_fired_at: string | null` to `OverviewCronSummary` (ISO 8601 string, or null
+  when the cron has never fired).
+- Update `buildCronSummary` to accept `last_fired_at` from `CronSummarySource` and propagate it
+  to the output. The `CronSummarySource` interface already has `last_status?: string`; add
+  `last_fired_at?: number | null` to the same interface.
+- Update the `buildCronSummary` call in `GET /overview` to pull `last_fired_at` from the DB rows
+  (via `getAllCronStates` which now returns it).
+
+Client (`client/src/lib/types.ts`, `client/src/components/Overview.svelte`):
+- Add `last_fired_at: string | null` to `OverviewCronSummary` in `client/src/lib/types.ts`.
+- In `Overview.svelte`, add a "Last fired" column to the cron summary table after the
+  "Next fire" column. Render `last_fired_at` as a relative or locale timestamp (same pattern as
+  `next_fire`). Show `"Never"` when `null`.
+
+**Tests.**
+
+- Tier 1 (`test/tier1/web-server/overview-cron-last-fired.test.ts`, new file): unit tests for
+  `buildCronSummary` with `last_fired_at`:
+  - Returns `last_fired_at: null` when the source row has no `last_fired_at`.
+  - Returns the ISO 8601 string when `last_fired_at` is a valid unix-second timestamp.
+  - The value flows through unchanged (no manipulation).
+- Tier 1 (`test/tier1/db-cron-last-fired.test.ts`, new file): unit tests for
+  `setLastFiredAt`:
+  - Creates a new `cron_state` row when none exists (upsert behavior).
+  - Updates `last_fired_at` on an existing row.
+  - A subsequent `getAllCronStates` returns the updated `last_fired_at`.
+- Tier 2 (`test/tier2/overview-cron-last-fired.test.ts`, new file): full daemon stack test
+  that fires a cron session, then checks `GET /overview` returns `cron_summary` with a
+  non-null `last_fired_at`. Uses the fake-backend harness; no real Kiro required.
+- Client (`client/src/components/Overview.test.ts`): add test cases:
+  - "Last fired" column shows `"Never"` when `last_fired_at` is null.
+  - "Last fired" column renders a non-empty string when `last_fired_at` is a valid ISO string.
+
+**Migration note.** The `ALTER TABLE cron_state ADD COLUMN last_fired_at INTEGER` uses
+`IF NOT EXISTS` (SQLite 3.37+, which ships with Node 20+) so it is idempotent and safe to
+re-run. Existing rows get `NULL`; first cron fire after upgrade populates the column.
+
+**Acceptance.**
+- `db.setLastFiredAt('myrepo-cron', nowS)` persists the timestamp; `getAllCronStates` returns
+  the row with `last_fired_at` equal to `nowS`.
+- On a successful cron fire, `handleCronFire` calls `db.setLastFiredAt`.
+- `GET /overview` returns `cron_summary: [{..., last_fired_at: "2026-11-03T09:00:00Z"}, ...]`
+  (non-null after first fire).
+- The SPA Overview cron table renders a "Last fired" column showing the timestamp or `"Never"`.
+- `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
+
+---
+
 ### P3.3 — ACP server (PRODUCT.md Phase 2)
 
 Out of scope for tactical backlog. Tracked in `PRODUCT.md`.

@@ -432,6 +432,7 @@ describe('evaluateWakePolicy', () => {
       getAllCronStates: () => [],
       walCheckpoint: () => undefined,
       shutdown: () => Promise.resolve(),
+      setLastFiredAt: () => undefined,
       raw: (() => ({})) as unknown as Database['raw'],
       ...overrides,
     };
@@ -702,6 +703,7 @@ describe('evaluateWakePolicy — self-wake prevention', () => {
       getAllCronStates: () => [],
       walCheckpoint: () => undefined,
       shutdown: () => Promise.resolve(),
+      setLastFiredAt: () => undefined,
       raw: (() => ({})) as unknown as Database['raw'],
       ...overrides,
     };

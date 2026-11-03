@@ -33,6 +33,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 137. Track `last_fired_at` in `cron_state` and surface it in the Overview dashboard
+
+The `cron_state` table (ROADMAP item 22, PR #62) stores `name`, `paused`, and `updated_at` but
+has no record of when a cron last actually fired. The `buildCronSummary` comment in
+`src/web-routes.ts` explicitly deferred a schema change for `last_status`. This item adds the
+`last_fired_at` column to `cron_state`, calls `db.setLastFiredAt` in `handleCronFire` after a
+successful session creation, surfaces the value in `OverviewCronSummary` / `GET /overview`, and
+adds a "Last fired" column to the cron summary table in `Overview.svelte`. Pure Tier 1
+(db logic, buildCronSummary) + Tier 2 (cron fire → dashboard) + client unit tests.
+
+- Spec: `BACKLOG.md § P2.53`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed

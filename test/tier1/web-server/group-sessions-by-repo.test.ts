@@ -99,7 +99,7 @@ describe('groupSessionsByRepo', () => {
     const cronEntries: CronConfig[] = [
       { name: 'nightly', schedule: '0 3 * * *', repo: 'org/repo-a', promptFile: '/tmp/p.md' },
     ];
-    const cronStates: CronState[] = [{ name: 'nightly', paused: true, updatedAt: 1000 }];
+    const cronStates: CronState[] = [{ name: 'nightly', paused: true, updatedAt: 1000, lastFiredAt: null }];
     const result = groupSessionsByRepo([], repos, cronEntries, cronStates, 5, noWaiting, fixedNow);
     const group = result[0]!;
     expect(group.cron!.paused).toBe(true);

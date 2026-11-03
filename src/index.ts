@@ -240,7 +240,7 @@ function setupCronJobs(deps: {
     const paused = state !== null && state.paused;
 
     const task = cron.schedule(cronEntry.schedule, () => {
-      void handleCronFire(cronEntry, config, sessionMgr, sessionFiles, continuousRunner, log);
+      void handleCronFire(cronEntry, config, sessionMgr, sessionFiles, continuousRunner, log, db);
     }, { scheduled: !paused });
     tasks.push(task);
     log.info('Cron job registered', { name: cronEntry.name, schedule: cronEntry.schedule, repo: cronEntry.repo, paused });
@@ -260,6 +260,7 @@ async function handleCronFire(
   sessionFiles: ReturnType<typeof import('./session-files.js').createSessionFiles>,
   continuousRunner: ContinuousRunner,
   log: Logger,
+  db: Database,
 ): Promise<void> {
   const cronLog = log.child({ cron_name: cronEntry.name, repo: cronEntry.repo });
 
@@ -304,6 +305,7 @@ async function handleCronFire(
     // Delegate session creation to the continuous runner
     try {
       await continuousRunner.startRun(cronEntry, repoConfig);
+      db.setLastFiredAt(cronEntry.name, Math.floor(Date.now() / 1000));
       cronLog.info('Continuous run initiated', { cronName: cronEntry.name, repo: cronEntry.repo });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -315,6 +317,7 @@ async function handleCronFire(
     const prompt = composeCronPrompt(promptContent, cronEntry.repo);
     try {
       const handle = await sessionMgr.createSession(prompt, cronEntry.repo);
+      db.setLastFiredAt(cronEntry.name, Math.floor(Date.now() / 1000));
       cronLog.info('Cron session created', { session_id: handle.sessionId, promptFile: cronEntry.promptFile });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1098,7 +1101,7 @@ async function main(): Promise<void> {
       sessionMgr,
       sessionFiles,
       log,
-      handleCronFire: (entry) => { void handleCronFire(entry, configHolder.current, sessionMgr, sessionFiles, continuousRunner, log); },
+      handleCronFire: (entry) => { void handleCronFire(entry, configHolder.current, sessionMgr, sessionFiles, continuousRunner, log, db); },
     });
 
     // Rebuild adapter map (new sessions pick up adapter changes; active sessions unaffected)

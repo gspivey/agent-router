@@ -105,6 +105,7 @@ function stubDb(cronStates: CronState[]): Database {
     setCronPaused: () => {},
     walCheckpoint: () => {},
     shutdown: async () => {},
+    setLastFiredAt: () => {},
   } as unknown as Database;
 }
 
@@ -160,7 +161,7 @@ describe('GET /config endpoint (item #49, task 3)', () => {
     ]);
 
     const db = stubDb([
-      { name: 'weekday', paused: true, updatedAt: 1000 },
+      { name: 'weekday', paused: true, updatedAt: 1000, lastFiredAt: null },
     ]);
 
     const app = createWebApp({

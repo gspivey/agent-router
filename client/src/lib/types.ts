@@ -245,6 +245,11 @@ export interface OverviewCronSummary {
   readonly state: 'active' | 'paused' | 'error';
   /** ISO 8601 string, or null when paused or unknown. */
   readonly next_fire: string | null;
+  /**
+   * ISO 8601 string of the most recent successful cron fire, or null when
+   * the cron has never fired. See BACKLOG.md § P2.53.
+   */
+  readonly last_fired_at: string | null;
 }
 
 /**
