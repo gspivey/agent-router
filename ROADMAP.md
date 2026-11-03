@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 139. Annotate BACKLOG.md § P2.54 as done
 
 `BACKLOG.md § P2.54` (Surface `recent_prs` as a compact table in the SPA Overview dashboard)
@@ -41,11 +45,7 @@ never annotated with a DONE marker. This item adds the `✅ DONE (PR #214)` anno
 to reflect the actual shipped state. Documentation-only: no code, no tests.
 
 - Spec: `BACKLOG.md § P2.55`
-- [ ] Complete · PR: —
-
----
-
-## Completed
+- [x] Complete · PR: #215
 
 ### 138. Surface `recent_prs` as a compact table in the SPA Overview dashboard
 
