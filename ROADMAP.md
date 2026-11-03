@@ -35,6 +35,8 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ---
 
+## Completed
+
 ### 124. Deferred unit tests: config error paths, session file edge cases, ACP errors, CLI IPC ops, MCP dispatch, and pretty-print flag handling
 
 The agent-router spec (`tasks.md` items `3.6`, `9.5`, `11.11`, `13.6`, `14.6`, `16.2`,
@@ -48,11 +50,9 @@ failure, non-zero exit), `16.2` (CLI IPC op dispatch using a stub session manage
 backends, no network.
 
 - Spec: `BACKLOG.md § P2.40`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #200
 
 ---
-
-## Completed
 
 ### 123. Deferred property tests: server.ts HMAC verification and roadmap.ts parse/round-trip
 
