@@ -1978,3 +1978,80 @@ Tests:
 - Sessions with `repo === null` are excluded.
 - The SPA Overview shows an "Activity by Repo" table when the array is non-empty.
 - `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
+
+---
+
+### P2.47 — Surface recent webhook events in the SPA Overview dashboard ✅ DONE (PR #207)
+
+**Why this exists.** The SPA Overview dashboard surfaces `events_processed_24h` (a raw count)
+but gives no detail about *which* events were received. An operator wondering "did the webhook
+for PR #42 arrive?" or "what event type fired just now?" must query the SQLite `events` table
+manually. Surfacing the last N processed events in the Overview gives operators a fast
+at-a-glance view of recent webhook pipeline activity — event type, repo, PR number, wake
+outcome, and timestamp — without leaving the dashboard.
+
+**What changes.**
+
+Backend (`src/web-routes.ts`, `src/db.ts`):
+- Add a `collectRecentEvents(db: Database, limit: number): OverviewRecentEvent[]` **pure
+  exported** helper to `src/web-routes.ts` that runs:
+  ```sql
+  SELECT event_type, repo, pr_number, wake_triggered, received_at
+  FROM events
+  WHERE processed_at IS NOT NULL
+  ORDER BY received_at DESC
+  LIMIT ?
+  ```
+  Returns an empty array when `db` is absent or the query fails. `limit` defaults to `10`.
+- Add `readonly recent_events: OverviewRecentEvent[]` to the `OverviewResponse` interface.
+  Always present (never optional); empty array when no events have been processed.
+- Add the corresponding `OverviewRecentEvent` interface to `src/web-routes.ts`:
+  ```ts
+  export interface OverviewRecentEvent {
+    readonly event_type: string;
+    readonly repo: string;
+    readonly pr_number: number | null;
+    readonly wake_triggered: boolean;
+    readonly received_at: number;   // unix seconds
+  }
+  ```
+- Wire `collectRecentEvents(db, 10)` into the `GET /overview` handler body.
+- No new DB schema — the `events` table already has all required columns.
+
+Client (`client/src/lib/types.ts`, `client/src/components/Overview.svelte`):
+- Add `OverviewRecentEvent` interface and `recent_events: OverviewRecentEvent[]` field to
+  `OverviewResponse` in `client/src/lib/types.ts`.
+- In `Overview.svelte`, add a "Recent Events" section after the "Activity by Repo" section.
+  The section is only rendered when `overview.recent_events.length > 0`. Each row shows:
+  event type (monospace), repo (monospace), PR number (or "—" if null), a wake badge
+  (green "Woke" if `wake_triggered`, muted "No wake" if not), and received time
+  (relative or locale). Use existing CSS tokens; no new dependencies.
+
+Tests:
+- Tier 1 (`test/tier1/web-server/overview-recent-events.test.ts`, new file): unit tests
+  for `GET /overview`:
+  - Returns `recent_events: []` when the `events` table is empty.
+  - Returns `recent_events: []` when the `db` dep is absent.
+  - Returns `recent_events: []` when the table has only unprocessed events.
+  - Returns the last N processed events ordered by `received_at DESC`.
+  - Events are capped at 10 rows by default.
+  - Each row has the correct `event_type`, `repo`, `pr_number`, `wake_triggered`,
+    `received_at` fields.
+  - `pr_number` is `null` when the DB row has `pr_number IS NULL`.
+  - `wake_triggered` is `true` when the DB value is `1`, `false` when `0`.
+  Follow the `overview-events-processed.test.ts` pattern (real in-memory SQLite, no
+  network, no session files needed beyond the stub).
+- Tier 2 (`test/tier2/overview-recent-events.test.ts`, new file): full web-server stack
+  test that inserts one processed event via `db.insertEvent` + `db.updateEventProcessed`
+  and asserts `GET /overview` returns `recent_events: [{ event_type, repo, pr_number,
+  wake_triggered, received_at }]`. Follows the `test/tier2/overview-events-processed.test.ts`
+  pattern.
+- Client (`client/src/components/Overview.test.ts`): two new test cases:
+  - Section is absent when `recent_events` is `[]`.
+  - Section renders one row per event with the correct event type and repo.
+
+**Acceptance.**
+- `GET /overview` returns `{ ..., recent_events: [{event_type, repo, pr_number, wake_triggered, received_at}, ...] }`.
+- The array is ordered by `received_at DESC`, capped at 10, and always present (may be empty).
+- The SPA Overview shows a "Recent Events" table when the array is non-empty.
+- `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.

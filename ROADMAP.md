@@ -37,6 +37,22 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 131. Surface recent webhook events in the SPA Overview dashboard
+
+`GET /overview` surfaces `events_processed_24h` (a scalar count) but gives no detail about
+which events were received. An operator wondering "did the webhook for PR #42 arrive?" or
+"what type just fired?" must query SQLite manually. This item adds `recent_events` to
+`OverviewResponse` in `src/web-routes.ts` (a pure `collectRecentEvents` function over the
+existing `events` table, ordered by `received_at DESC`, capped at 10 rows), updates the
+client type in `client/src/lib/types.ts`, and renders a "Recent Events" compact table in
+`Overview.svelte`. Includes Tier 1 (pure function), Tier 2 (full stack), and client unit
+tests.
+
+- Spec: `BACKLOG.md § P2.47`
+- [x] Complete · PR: #207
+
+---
+
 ### 130. Fix `RepoGroup.svelte` Svelte-state-referenced-locally warnings
 
 `RepoGroup.svelte` initializes `collapsed`, `terminalSessions`, and `terminalTotal` via
