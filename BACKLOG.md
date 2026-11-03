@@ -914,6 +914,53 @@ Node/better-sqlite3 combination is updated.
 
 ---
 
+### P2.37 — Add `events_processed_24h` stat to the SPA Overview dashboard
+
+**Why this exists.** The SPA Overview dashboard surfaces `pending_wakes_count` (deferred
+wake events) and `active_sessions` but has no visibility into recent webhook intake activity.
+An operator who wonders "is the webhook pipeline actually receiving events?" currently has to
+query the SQLite `events` table manually. Adding a 24-hour processed-event count gives
+operators a fast health signal: if the count is 0 for an hour on a busy repo, something is
+wrong with the tunnel or the GitHub webhook delivery.
+
+**What changes.**
+
+Backend (`src/web-routes.ts`, `src/db.ts`):
+- Add a `countEventsProcessed24h(nowS: number): number` pure helper to `src/web-routes.ts`
+  that runs `SELECT count(*) AS n FROM events WHERE processed_at IS NOT NULL AND received_at
+  >= @cutoff` with `cutoff = nowS - 86400`. Returns `0` on any DB error. Wire it into the
+  `GET /overview` handler alongside `countPendingWakes()`.
+- No new DB schema — the `events` table and `received_at`/`processed_at` columns already
+  exist.
+- Add `readonly events_processed_24h: number` to the `OverviewResponse` interface in
+  `src/web-routes.ts`. Always present (`>= 0`), never optional.
+
+Client (`client/src/lib/types.ts`, `client/src/components/Overview.svelte`):
+- Add `events_processed_24h: number` to the `OverviewResponse` type in
+  `client/src/lib/types.ts`.
+- Show the count as a sixth stat card labeled "Events (24h)" after "Pending Wakes".
+  Update the grid from `grid-cols-2 lg:grid-cols-5` to `grid-cols-2 lg:grid-cols-6`
+  (or use `lg:grid-cols-3` with 2-column mobile for 6 items).
+
+Tests:
+- Tier 1 (`test/tier1/web-routes-overview.test.ts`): add test cases asserting `GET /overview`
+  returns `events_processed_24h: <n>` when the `events` table has `n` processed rows with
+  `received_at >= nowS - 86400`, and `events_processed_24h: 0` when the table is empty or
+  all rows are older than 24h. Follow the `countPendingWakes` test pattern.
+- Tier 2 (`test/tier2/`): add a test case that inserts a processed event via
+  `db.insertEvent` + `db.updateEventProcessed` and asserts `GET /overview` returns
+  `events_processed_24h: 1`. Validates the DB query in an end-to-end context.
+- Client (`client/src/components/Overview.test.ts`): add a test case asserting the "Events
+  (24h)" stat card is rendered with the correct value from the overview response.
+
+**Acceptance.**
+- `GET /overview` returns `{ ..., events_processed_24h: N }` where N is the count of `events`
+  rows with `processed_at IS NOT NULL AND received_at >= now - 86400`.
+- The SPA Overview shows an "Events (24h)" stat card.
+- `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)
