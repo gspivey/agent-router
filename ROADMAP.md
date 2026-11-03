@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 134. Upgrade better-sqlite3 to v13 and implement deferred db.ts property tests
 
 `better-sqlite3` v13.0.0 (released 2026-07-21) is the first version to run on the N-API,
@@ -45,11 +49,9 @@ Storage Round-Trip) and Property 8 (Atomic Rate Limit Acquisition), both in
 `test/tier1/db.test.ts`.
 
 - Spec: `BACKLOG.md § P2.50`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #210
 
 ---
-
-## Completed
 
 ### 133. Add auto-refresh to the Sessions list page
 

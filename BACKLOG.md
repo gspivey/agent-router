@@ -2173,7 +2173,7 @@ No Tier 2 tests — this is a pure client-side polling change with no daemon beh
 
 ---
 
-### P2.50 — Upgrade better-sqlite3 to v13 and implement deferred db.ts property tests
+### P2.50 — Upgrade better-sqlite3 to v13 and implement deferred db.ts property tests ✅ DONE (PR #210)
 
 `better-sqlite3` v13.0.0 (released 2026-07-21) is the first version to run on the N-API
 instead of the old NAN layer. The N-API provides ABI stability across Node.js versions and
