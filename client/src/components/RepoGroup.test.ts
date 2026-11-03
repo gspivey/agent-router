@@ -251,3 +251,112 @@ describe('RepoGroup — show more (FR-2.4)', () => {
     expect(await findByTestId('load-more-error')).toBeTruthy();
   });
 });
+
+describe('RepoGroup — prop-update reactivity (P2.46)', () => {
+  /**
+   * These tests verify that the component stays in sync when the parent re-renders
+   * with an updated `group` prop — the scenario that occurs on the 30-second
+   * auto-refresh in SessionList. Previously, terminalSessions, terminalTotal, and
+   * collapsed were initialized with $state(group.*) which captures the initial value
+   * only and does not react to subsequent prop changes.
+   */
+  beforeEach(() => {
+    localStorage.clear();
+    listRepoPagedSessions.mockReset();
+  });
+  afterEach(cleanup);
+
+  it('updates the terminal session list when the group prop changes', async () => {
+    const sessA = makeSession({ session_id: 'a', completed_at: Math.floor(Date.now() / 1000) - 60 });
+    const sessB = makeSession({ session_id: 'b', completed_at: Math.floor(Date.now() / 1000) - 30 });
+
+    const { getAllByTestId, rerender } = render(RepoGroup, {
+      group: makeGroup({ terminal_sessions: [sessA], terminal_total: 1 }),
+    });
+
+    // Initially only sessA is visible.
+    expect(getAllByTestId('session-card')).toHaveLength(1);
+
+    // Auto-refresh delivers an updated prop with sessB added.
+    await rerender({ group: makeGroup({ terminal_sessions: [sessA, sessB], terminal_total: 2 }) });
+
+    await waitFor(() => expect(getAllByTestId('session-card')).toHaveLength(2));
+  });
+
+  it('updates the terminal total and show-more count when the group prop changes', async () => {
+    const sessions = Array.from({ length: 5 }, (_, i) =>
+      makeSession({ session_id: `s${i}`, completed_at: Math.floor(Date.now() / 1000) - 60 }),
+    );
+
+    const { getByTestId, rerender } = render(RepoGroup, {
+      group: makeGroup({ terminal_sessions: sessions, terminal_total: 8 }),
+    });
+
+    expect(getByTestId('show-more').textContent).toContain('Show 3 more');
+
+    // Auto-refresh delivers a new total (e.g. a session completed between polls).
+    await rerender({ group: makeGroup({ terminal_sessions: sessions, terminal_total: 10 }) });
+
+    await waitFor(() => expect(getByTestId('show-more').textContent).toContain('Show 5 more'));
+  });
+
+  it('preserves loadMore extra pages when the group prop refreshes', async () => {
+    const initial = Array.from({ length: 5 }, (_, i) =>
+      makeSession({ session_id: `s${i}`, completed_at: Math.floor(Date.now() / 1000) - 60 }),
+    );
+    const extra = [
+      makeSession({ session_id: 'extra1', completed_at: Math.floor(Date.now() / 1000) - 120 }),
+    ];
+
+    listRepoPagedSessions.mockResolvedValue({
+      sessions: extra,
+      total: 6,
+      offset: 5,
+      limit: 5,
+    });
+
+    const { getAllByTestId, getByTestId, rerender } = render(RepoGroup, {
+      group: makeGroup({ terminal_sessions: initial, terminal_total: 8 }),
+    });
+
+    // Load an extra page.
+    await fireEvent.click(getByTestId('show-more'));
+    await waitFor(() => expect(getAllByTestId('session-card')).toHaveLength(6));
+
+    // Simulate auto-refresh: server sends the same 5-session first page.
+    await rerender({ group: makeGroup({ terminal_sessions: initial, terminal_total: 6 }) });
+
+    // Extra page should still be visible (merged with refreshed first page).
+    await waitFor(() => expect(getAllByTestId('session-card')).toHaveLength(6));
+  });
+
+  it('reflects updated auto-collapse state when a formerly-active repo goes idle on refresh', async () => {
+    const old = Math.floor(Date.now() / 1000) - 48 * 3600;
+    const staleSession = makeSession({ session_id: 's1', completed_at: old });
+    const activeSession = makeSession({ session_id: 'active', status: 'active', completed_at: null });
+
+    // Initially has an active session → should NOT auto-collapse.
+    const { getByTestId, queryByTestId, rerender } = render(RepoGroup, {
+      group: makeGroup({
+        repo: 'o/stale',
+        active_sessions: [activeSession],
+        terminal_sessions: [staleSession],
+        terminal_total: 1,
+      }),
+    });
+    expect(getByTestId('repo-body')).toBeTruthy();
+
+    // Refresh: active session ended → group now idle with only an old terminal session.
+    await rerender({
+      group: makeGroup({
+        repo: 'o/stale',
+        active_sessions: [],
+        terminal_sessions: [staleSession],
+        terminal_total: 1,
+      }),
+    });
+
+    // No user override was set, so auto-collapse should now apply and the body should hide.
+    await waitFor(() => expect(queryByTestId('repo-body')).toBeNull());
+  });
+});
