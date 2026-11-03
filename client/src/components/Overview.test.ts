@@ -38,6 +38,8 @@ function makeOverview(overrides: Partial<OverviewResponse> = {}): OverviewRespon
     queue_depth: 5,
     pending_wakes_count: 0,
     events_processed_24h: 0,
+    tasks_succeeded_24h: 0,
+    tasks_failed_24h: 0,
     recent_prs: [],
     cron_summary: [],
     health: 'healthy',
@@ -97,9 +99,9 @@ describe('Overview', () => {
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
     const cards = getAllByTestId('stat-card');
-    expect(cards).toHaveLength(7);
+    expect(cards).toHaveLength(9);
     const labels = cards.map((c) => c.getAttribute('data-label'));
-    expect(labels).toEqual(['Active Sessions', 'Queued Work', 'Pending Wakes', 'Events (24h)', 'Recent PRs (24h)', 'Health', 'Uptime']);
+    expect(labels).toEqual(['Active Sessions', 'Queued Work', 'Pending Wakes', 'Events (24h)', 'Tasks Done (24h)', 'Tasks Failed (24h)', 'Recent PRs (24h)', 'Health', 'Uptime']);
   });
 
   it('counts only recent PRs opened within the last 24h (Req 12.2)', async () => {
@@ -117,8 +119,8 @@ describe('Overview', () => {
     listSessions.mockResolvedValue(makeSessionList([]));
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
-    // The "Recent PRs (24h)" card is the fifth stat card (index 4).
-    const value = getAllByTestId('stat-card-value')[4];
+    // The "Recent PRs (24h)" card is the seventh stat card (index 6).
+    const value = getAllByTestId('stat-card-value')[6];
     expect(value?.textContent?.trim()).toBe('2');
   });
 
@@ -371,6 +373,58 @@ describe('Overview', () => {
     expect(value?.textContent?.trim()).toBe('0');
   });
 
+  // ---- tasks_succeeded_24h stat card (BACKLOG.md § P2.42) ----
+
+  it('shows tasks_succeeded_24h in the Tasks Done (24h) stat card', async () => {
+    getOverview.mockResolvedValue(makeOverview({ tasks_succeeded_24h: 7 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    // "Tasks Done (24h)" is the fifth card (index 4)
+    const card = cards[4];
+    expect(card?.getAttribute('data-label')).toBe('Tasks Done (24h)');
+    const value = card?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('7');
+  });
+
+  it('shows tasks_succeeded_24h of 0 when no tasks succeeded in 24h', async () => {
+    getOverview.mockResolvedValue(makeOverview({ tasks_succeeded_24h: 0 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const card = cards[4];
+    const value = card?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('0');
+  });
+
+  // ---- tasks_failed_24h stat card (BACKLOG.md § P2.42) ----
+
+  it('shows tasks_failed_24h in the Tasks Failed (24h) stat card', async () => {
+    getOverview.mockResolvedValue(makeOverview({ tasks_failed_24h: 3 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    // "Tasks Failed (24h)" is the sixth card (index 5)
+    const card = cards[5];
+    expect(card?.getAttribute('data-label')).toBe('Tasks Failed (24h)');
+    const value = card?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('3');
+  });
+
+  it('shows tasks_failed_24h of 0 when no tasks failed in 24h', async () => {
+    getOverview.mockResolvedValue(makeOverview({ tasks_failed_24h: 0 }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    const cards = getAllByTestId('stat-card');
+    const card = cards[5];
+    const value = card?.querySelector('[data-testid="stat-card-value"]');
+    expect(value?.textContent?.trim()).toBe('0');
+  });
+
   // ---- auto-refresh and last-refreshed indicator (BACKLOG.md § P2.34) ----
 
   it('shows the last-refreshed timestamp after a successful load', async () => {
@@ -490,8 +544,8 @@ describe('Overview', () => {
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
     const cards = getAllByTestId('stat-card');
-    // "Uptime" is the seventh card (index 6)
-    const uptimeCard = cards[6];
+    // "Uptime" is the ninth card (index 8)
+    const uptimeCard = cards[8];
     expect(uptimeCard?.getAttribute('data-label')).toBe('Uptime');
     const value = uptimeCard?.querySelector('[data-testid="stat-card-value"]');
     expect(value?.textContent?.trim()).toBe('1h 30m');
@@ -503,7 +557,7 @@ describe('Overview', () => {
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
     const cards = getAllByTestId('stat-card');
-    const uptimeCard = cards[6];
+    const uptimeCard = cards[8];
     const value = uptimeCard?.querySelector('[data-testid="stat-card-value"]');
     expect(value?.textContent?.trim()).toBe('<1m');
   });
@@ -514,7 +568,7 @@ describe('Overview', () => {
     const { findByTestId, getAllByTestId } = render(Overview);
     await findByTestId('stat-row');
     const cards = getAllByTestId('stat-card');
-    const uptimeCard = cards[6];
+    const uptimeCard = cards[8];
     const value = uptimeCard?.querySelector('[data-testid="stat-card-value"]');
     expect(value?.textContent?.trim()).toBe('2d 3h');
   });
