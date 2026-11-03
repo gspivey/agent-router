@@ -33,6 +33,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 143. Add unit tests for PageLayout component
+
+`PageLayout.svelte` is the only component in `client/src/components/` that has no test
+coverage — not in a dedicated `*.test.ts` nor indirectly via any existing test file. After
+the P2.56 (Composer/HelpOverlay) and P2.58 (six pill/bubble components) rounds, this is
+the last gap. `PageLayout` has two modes (`wide` and `narrow`) with distinct CSS contracts:
+wide adds `py-6` vertical padding; narrow omits it to keep the chat composer in view. This
+item adds `PageLayout.test.ts` covering both modes, the `data-testid`/`data-width`
+attributes, and the critical no-`py-6` invariant for narrow mode.
+
+- Spec: `BACKLOG.md § P2.59`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
