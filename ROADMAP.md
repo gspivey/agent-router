@@ -37,6 +37,20 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 135. Annotate BACKLOG.md § P2.36 as done
+
+`BACKLOG.md § P2.36` (Deferred property tests: db.ts, queue.ts, and session-files.ts) was
+fully implemented across ROADMAP items 119 (PR #195, queue.ts and session-files.ts property
+tests) and 134 (PR #210, db.ts property tests unblocked by the better-sqlite3 v13 upgrade),
+but the BACKLOG.md entry was never annotated with a DONE marker. This item adds the
+`✅ DONE (PRs #195, #210)` annotation to P2.36 to reflect the actual shipped state.
+Documentation-only: no code, no tests.
+
+- Spec: `BACKLOG.md § P2.51`
+- [x] Complete · PR: #211
+
+---
+
 ### 134. Upgrade better-sqlite3 to v13 and implement deferred db.ts property tests
 
 `better-sqlite3` v13.0.0 (released 2026-07-21) is the first version to run on the N-API,

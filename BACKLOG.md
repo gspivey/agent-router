@@ -920,7 +920,7 @@ is required, `GET /overview` omits the `restart_required` key and the SPA shows 
 
 ---
 
-### P2.36 — Deferred property tests: db.ts, queue.ts, and session-files.ts
+### P2.36 — Deferred property tests: db.ts, queue.ts, and session-files.ts ✅ DONE (PRs #195, #210)
 
 > **Status (2026-11-02):** Tasks `10.2`, `11.7`–`11.10` (queue.ts and session-files.ts) were
 > implemented and merged as ROADMAP item 119 (PR #195). Tasks `9.3` and `9.4` (db.ts property
@@ -933,7 +933,8 @@ is required, `GET /overview` omits the `restart_required` key and the SPA shows 
 > **Update (2026-11-03):** `better-sqlite3` v13.0.0 (released 2026-07-21) moved to the N-API
 > (`node-addon-api`), which provides synchronous cleanup on `db.close()` without relying on
 > GC finalizers. This resolves the destructor race. ROADMAP item 134 / BACKLOG.md § P2.50
-> upgrades to v13 and ships the deferred property tests.
+> upgrades to v13 and ships the deferred property tests. All seven property tests (tasks
+> `9.3`, `9.4`, `10.2`, `11.7`–`11.10`) are now merged. This entry is fully complete.
 
 The agent-router spec (`tasks.md` items `9.3`, `9.4`, `10.2`, `11.7`, `11.8`, `11.9`, `11.10`)
 specified seven property-based tests that were deferred when their parent tasks shipped. This
@@ -2243,3 +2244,20 @@ could remove the hooks, triggering the assert. `better-sqlite3` v13 moves to
 - `BACKLOG.md § P2.36` carries a note that the crash is resolved in v13.
 
 ---
+
+### P2.51 — Annotate BACKLOG.md § P2.36 as done ✅ DONE (PR #211)
+
+`BACKLOG.md § P2.36` (Deferred property tests: db.ts, queue.ts, and session-files.ts) was
+fully implemented across two ROADMAP items:
+
+- ROADMAP item 119 (PR #195): tasks `10.2`, `11.7`–`11.10` (queue.ts and session-files.ts
+  property tests) implemented and merged.
+- ROADMAP item 134 (PR #210, backed by BACKLOG.md § P2.50): tasks `9.3` and `9.4` (db.ts
+  property tests) unblocked by the better-sqlite3 v13 upgrade and merged.
+
+All seven property tests specified in P2.36 are now shipped. The BACKLOG.md entry was never
+annotated with a DONE marker. This item adds the `✅ DONE (PRs #195, #210)` annotation to
+P2.36 to reflect the actual shipped state. Documentation-only: no code, no tests.
+
+**Acceptance.** `BACKLOG.md § P2.36` carries a `✅ DONE (PRs #195, #210)` annotation. The
+ROADMAP item for this fix is ticked.
