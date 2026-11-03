@@ -324,7 +324,7 @@ These must ship before agent-router can run autonomously on a timer. Each repres
 
 ---
 
-### P2.46 — Fix `RepoGroup.svelte` Svelte-state-referenced-locally warnings
+### P2.46 — Fix `RepoGroup.svelte` Svelte-state-referenced-locally warnings ✅ DONE (PR #206)
 
 `client/src/components/RepoGroup.svelte` initializes three `$state()` variables directly
 from the `group` prop object:

@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 130. Fix `RepoGroup.svelte` Svelte-state-referenced-locally warnings
 
 `RepoGroup.svelte` initializes `collapsed`, `terminalSessions`, and `terminalTotal` via
@@ -45,11 +49,7 @@ that stay in sync with prop updates while still supporting local mutation (`togg
 `loadMore`). Includes new `RepoGroup` component tests for prop-update reactivity.
 
 - Spec: `BACKLOG.md § P2.46`
-- [ ] Complete · PR: —
-
----
-
-## Completed
+- [x] Complete · PR: #206
 
 ### 129. Surface `active_sessions_by_repo` in the SPA Overview dashboard
 
