@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 136. Fix flaky `token-store-startup.test.ts` startup timeout under load
 
 `test/tier2/token-store-startup.test.ts` spawns a real daemon process and polls `/health`
@@ -43,11 +47,9 @@ intermittently. Fix: increase `waitForReady` default timeout from `15000` to `30
 the vitest test timeout.
 
 - Spec: `BACKLOG.md § P2.52`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #212
 
 ---
-
-## Completed
 
 ### 135. Annotate BACKLOG.md § P2.36 as done
 

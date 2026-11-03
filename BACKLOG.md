@@ -1650,7 +1650,7 @@ Tests:
 
 ---
 
-### P2.52 — Fix flaky `token-store-startup.test.ts` under concurrent load
+### P2.52 — Fix flaky `token-store-startup.test.ts` under concurrent load ✅ DONE (PR #212)
 
 `test/tier2/token-store-startup.test.ts` spawns a real daemon subprocess and waits for
 `/health` to respond before proceeding. The helper function `waitForReady` uses a `15000ms`
