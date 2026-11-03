@@ -33,6 +33,21 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 147. Add client test outcomes to CI PR report
+
+P2.62 (PR #222) added `Client svelte-check` and `Client unit tests` steps to CI, but the
+`Generate Report` step still only inspects `typecheck` and `test` outcomes. When either client
+step fails, the PR comment reports success (or omits the failure detail) because
+`OVERALL_STATUS` in `ci-report.sh` only considers `--typecheck-outcome` and `--test-outcome`.
+This item extends `ci-report.sh` to accept `--svelte-check-outcome` and
+`--client-test-outcome` flags, includes those outcomes in the overall-status calculation, and
+renders a `## Client svelte-check` or `## Client Tests` failure section in the PR comment when
+either step fails. Also updates `ci.yml` to pass the new flags. Tier 1 tests in
+`ci-report.test.ts` for all new scenarios.
+
+- Spec: `BACKLOG.md § P2.63`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed

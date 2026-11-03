@@ -15,6 +15,8 @@ TYPECHECK_FILE=""
 RUN_LINK=""
 TYPECHECK_OUTCOME=""
 TEST_OUTCOME=""
+SVELTE_CHECK_OUTCOME=""
+CLIENT_TEST_OUTCOME=""
 OUTPUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -37,6 +39,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --test-outcome)
       TEST_OUTCOME="$2"
+      shift 2
+      ;;
+    --svelte-check-outcome)
+      SVELTE_CHECK_OUTCOME="$2"
+      shift 2
+      ;;
+    --client-test-outcome)
+      CLIENT_TEST_OUTCOME="$2"
       shift 2
       ;;
     --output)
@@ -63,7 +73,9 @@ elif ! command -v xmllint >/dev/null 2>&1; then
 fi
 
 # --- Determine overall status ---
-if [[ "$TYPECHECK_OUTCOME" == "success" && "$TEST_OUTCOME" == "success" ]]; then
+if [[ "$TYPECHECK_OUTCOME" == "success" && "$TEST_OUTCOME" == "success" \
+      && ( -z "$SVELTE_CHECK_OUTCOME" || "$SVELTE_CHECK_OUTCOME" == "success" ) \
+      && ( -z "$CLIENT_TEST_OUTCOME" || "$CLIENT_TEST_OUTCOME" == "success" ) ]]; then
   OVERALL_STATUS="pass"
 else
   OVERALL_STATUS="fail"
@@ -147,6 +159,26 @@ generate_typecheck_section() {
   else
     printf '```\n%s\n```\n' "$content"
   fi
+}
+
+# --- Client svelte-check section (P2.63) ---
+generate_svelte_check_section() {
+  # Only include section if svelte-check failed
+  if [[ "$SVELTE_CHECK_OUTCOME" != "failure" ]]; then
+    return
+  fi
+
+  printf '## Client svelte-check\n\n**Status:** ❌ Failed\n\nSvelte component type checking failed. Check the workflow step log for the full error output (svelte-check does not write a parseable output file).\n'
+}
+
+# --- Client unit tests section (P2.63) ---
+generate_client_test_section() {
+  # Only include section if client tests failed
+  if [[ "$CLIENT_TEST_OUTCOME" != "failure" ]]; then
+    return
+  fi
+
+  printf '## Client Tests\n\n**Status:** ❌ Failed\n\nClient unit tests (vitest jsdom) failed. Check the workflow step log for the full error output.\n'
 }
 
 # --- JUnit XML parsing and test failure section (Task 2.4) ---
@@ -603,7 +635,12 @@ generate_failure_report() {
   local junit_missing=false
   [[ -z "$TYPECHECK_FILE" || ! -f "$TYPECHECK_FILE" ]] && tc_missing=true
   [[ -z "$JUNIT_FILE" || ! -f "$JUNIT_FILE" ]] && junit_missing=true
-  if [[ "$tc_missing" == true && "$junit_missing" == true ]]; then
+  # Early return: if both daemon outputs are missing AND no client step failed,
+  # there is nothing to report in detail — produce a minimal fallback.
+  # If a client step failed, fall through so the client sections are rendered.
+  if [[ "$tc_missing" == true && "$junit_missing" == true \
+        && "$SVELTE_CHECK_OUTCOME" != "failure" \
+        && "$CLIENT_TEST_OUTCOME" != "failure" ]]; then
     printf '%s\n\nCI ran but produced no parseable output. See [full run details](%s).\n' "$header" "$RUN_LINK"
     return
   fi
@@ -616,13 +653,26 @@ generate_failure_report() {
   local test_section
   test_section=$(generate_test_section)
 
+  # Build client check sections (P2.63)
+  local svelte_check_section
+  svelte_check_section=$(generate_svelte_check_section)
+
+  local client_test_section
+  client_test_section=$(generate_client_test_section)
+
   # Assemble full report
   local report="$header"
   if [[ -n "$typecheck_section" ]]; then
     report="${report}"$'\n\n'"${typecheck_section}"
   fi
+  if [[ -n "$svelte_check_section" ]]; then
+    report="${report}"$'\n\n'"${svelte_check_section}"
+  fi
   if [[ -n "$test_section" ]]; then
     report="${report}"$'\n\n'"${test_section}"
+  fi
+  if [[ -n "$client_test_section" ]]; then
+    report="${report}"$'\n\n'"${client_test_section}"
   fi
 
   # Apply truncation

@@ -55,6 +55,8 @@ jobs:
             --run-link "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --typecheck-outcome "${{ steps.typecheck.outcome }}" \
             --test-outcome "${{ steps.test.outcome }}" \
+            --svelte-check-outcome "${{ steps.svelte-check.outcome }}" \
+            --client-test-outcome "${{ steps.client-test.outcome }}" \
             --output report.md
 
       # Note: when feature flag is off, this step is *skipped* (not failed).

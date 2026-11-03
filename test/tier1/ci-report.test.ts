@@ -26,6 +26,8 @@ interface RunReportOpts {
   runLink?: string;
   typecheckOutcome: 'success' | 'failure';
   testOutcome: 'success' | 'failure';
+  svelteCheckOutcome?: 'success' | 'failure'; // P2.63: optional client step outcomes
+  clientTestOutcome?: 'success' | 'failure';  // P2.63
   useOutputFile?: boolean;
   workDir?: string;
   /** Force the grep-based JUnit parser even when xmllint is installed. */
@@ -78,6 +80,14 @@ function runReport(opts: RunReportOpts): RunReportResult {
   args.push('--run-link', opts.runLink ?? 'https://github.com/test/test/actions/runs/12345');
   args.push('--typecheck-outcome', opts.typecheckOutcome);
   args.push('--test-outcome', opts.testOutcome);
+
+  // P2.63: pass optional client outcomes when provided
+  if (opts.svelteCheckOutcome !== undefined) {
+    args.push('--svelte-check-outcome', opts.svelteCheckOutcome);
+  }
+  if (opts.clientTestOutcome !== undefined) {
+    args.push('--client-test-outcome', opts.clientTestOutcome);
+  }
 
   let outputFilePath: string | undefined;
   if (opts.useOutputFile) {
@@ -601,6 +611,179 @@ describe('ci-report.sh', () => {
       expect(stdout).toContain("Expected '' to equal 'foo'");
       // The passing testcase must not appear in the Failed Tests table
       expect(stdout).not.toMatch(/\| should pass \|/);
+    });
+  });
+});
+
+// --- P2.63: Client step outcome tests ---
+
+describe('P2.63 — client step outcomes', () => {
+  describe('OVERALL_STATUS calculation', () => {
+    it('reports pass when all four outcomes are success', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        svelteCheckOutcome: 'success',
+        clientTestOutcome: 'success',
+      });
+      expect(stdout).toContain('✅ All checks passed');
+    });
+
+    it('reports pass when client outcomes are absent (backward compat)', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+      });
+      expect(stdout).toContain('✅ All checks passed');
+    });
+
+    it('reports fail when only svelte-check-outcome is failure', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        svelteCheckOutcome: 'failure',
+        clientTestOutcome: 'success',
+      });
+      expect(stdout).toContain('❌ Checks failed');
+      expect(stdout).not.toContain('✅ All checks passed');
+    });
+
+    it('reports fail when only client-test-outcome is failure', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        svelteCheckOutcome: 'success',
+        clientTestOutcome: 'failure',
+      });
+      expect(stdout).toContain('❌ Checks failed');
+      expect(stdout).not.toContain('✅ All checks passed');
+    });
+  });
+
+  describe('svelte-check section', () => {
+    it('includes ## Client svelte-check section when svelte-check failed', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        svelteCheckOutcome: 'failure',
+      });
+      expect(stdout).toContain('## Client svelte-check');
+      expect(stdout).toContain('❌ Failed');
+    });
+
+    it('does not include svelte-check section when svelte-check passed', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        svelteCheckOutcome: 'success',
+      });
+      expect(stdout).not.toContain('## Client svelte-check');
+    });
+
+    it('does not include svelte-check section when svelte-check outcome absent', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+      });
+      expect(stdout).not.toContain('## Client svelte-check');
+    });
+
+    it('svelte-check section appears after typecheck section', () => {
+      const typecheckContent = 'error TS2345: something is wrong';
+      const { stdout } = runReport({
+        typecheckContent,
+        typecheckOutcome: 'failure',
+        testOutcome: 'success',
+        svelteCheckOutcome: 'failure',
+      });
+      const typecheckIdx = stdout.indexOf('## Typecheck');
+      const svelteIdx = stdout.indexOf('## Client svelte-check');
+      expect(typecheckIdx).toBeGreaterThan(-1);
+      expect(svelteIdx).toBeGreaterThan(-1);
+      expect(svelteIdx).toBeGreaterThan(typecheckIdx);
+    });
+  });
+
+  describe('client tests section', () => {
+    it('includes ## Client Tests section when client-test failed', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        clientTestOutcome: 'failure',
+      });
+      expect(stdout).toContain('## Client Tests');
+      expect(stdout).toContain('❌ Failed');
+    });
+
+    it('does not include client tests section when client-test passed', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        clientTestOutcome: 'success',
+      });
+      expect(stdout).not.toContain('## Client Tests');
+    });
+
+    it('does not include client tests section when client-test outcome absent', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+      });
+      expect(stdout).not.toContain('## Client Tests');
+    });
+
+    it('client tests section appears after daemon test section', () => {
+      const junit = `<?xml version="1.0"?><testsuites tests="1" failures="1"><testsuite tests="1" failures="1"><testcase classname="foo" name="bar"><failure message="oops">trace</failure></testcase></testsuite></testsuites>`;
+      const { stdout } = runReport({
+        junitContent: junit,
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'failure',
+        clientTestOutcome: 'failure',
+      });
+      const testIdx = stdout.indexOf('## Tests');
+      const clientIdx = stdout.indexOf('## Client Tests');
+      expect(testIdx).toBeGreaterThan(-1);
+      expect(clientIdx).toBeGreaterThan(-1);
+      expect(clientIdx).toBeGreaterThan(testIdx);
+    });
+  });
+
+  describe('both client steps failing', () => {
+    it('includes both sections when both client steps fail', () => {
+      const { stdout } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        svelteCheckOutcome: 'failure',
+        clientTestOutcome: 'failure',
+      });
+      expect(stdout).toContain('## Client svelte-check');
+      expect(stdout).toContain('## Client Tests');
+      expect(stdout).toContain('❌ Checks failed');
+    });
+  });
+
+  describe('exit code', () => {
+    it('always exits 0 even when client steps fail', () => {
+      const { exitCode } = runReport({
+        typecheckPath: null,
+        typecheckOutcome: 'success',
+        testOutcome: 'success',
+        svelteCheckOutcome: 'failure',
+        clientTestOutcome: 'failure',
+      });
+      expect(exitCode).toBe(0);
     });
   });
 });
