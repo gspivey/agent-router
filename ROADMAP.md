@@ -33,6 +33,21 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 140. Add unit tests for Composer and HelpOverlay client components
+
+`Composer.svelte` (prompt-injection input bar) and `HelpOverlay.svelte` (keyboard-shortcut
+modal) are the only interactive SPA components that lack direct unit tests. The Composer
+handles the operator's primary action — injecting a prompt into an active session — with
+significant async state logic (sending guard, error-path input retention, disabled state).
+The HelpOverlay has three close mechanisms (button, backdrop, Escape key) and is responsible
+for keyboard navigation. Both have `data-testid` attributes and documented props but no
+`*.test.ts` coverage. This item adds dedicated test files for both, following the existing
+`@testing-library/svelte` pattern established by `KillConfirmDialog.test.ts` and
+`ChatView.internals.test.ts`.
+
+- Spec: `BACKLOG.md § P2.56`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed
