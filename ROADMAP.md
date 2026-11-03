@@ -37,6 +37,23 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Completed
 
+### 129. Surface `active_sessions_by_repo` in the SPA Overview dashboard
+
+`GET /overview` reports `active_sessions` as a scalar count but gives no per-repo
+breakdown. An operator running cron mode across multiple repos cannot tell from the
+dashboard which repos have active sessions or recent activity. This item adds
+`active_sessions_by_repo` to `OverviewResponse` in `src/web-routes.ts` (a pure
+`computeSessionsByRepo` function over the existing `sessionFiles.listSessions()` result,
+sorted by active count descending, capped at 10 rows), updates the client type in
+`client/src/lib/types.ts`, and renders an "Activity by Repo" compact table in
+`Overview.svelte`. Includes Tier 1 (pure function), Tier 2 (full stack), and client
+unit tests.
+
+- Spec: `BACKLOG.md § P2.45`
+- [x] Complete · PR: #205
+
+---
+
 ### 128. Color-highlight task-outcome stat cards in the SPA Overview dashboard
 
 The "Tasks Failed (24h)" and "Tasks Done (24h)" stat cards in the SPA Overview render

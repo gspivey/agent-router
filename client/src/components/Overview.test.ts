@@ -45,6 +45,7 @@ function makeOverview(overrides: Partial<OverviewResponse> = {}): OverviewRespon
     health: 'healthy',
     version: '0.1.0',
     uptime_s: 3600,
+    active_sessions_by_repo: [],
     ...overrides,
   };
 }
@@ -643,5 +644,50 @@ describe('Overview', () => {
     const header = await findByTestId('page-header');
     const subtitle = header.querySelector('[data-testid="page-header-subtitle"]');
     expect(subtitle?.textContent).toContain('v2.0.0-beta.1');
+  });
+
+  // ---- Activity by Repo section (BACKLOG.md § P2.45) ----
+
+  it('does not show the Activity by Repo section when active_sessions_by_repo is empty', async () => {
+    getOverview.mockResolvedValue(makeOverview({ active_sessions_by_repo: [] }));
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, queryByTestId } = render(Overview);
+    await findByTestId('stat-row');
+    expect(queryByTestId('sessions-by-repo')).toBeNull();
+  });
+
+  it('shows the Activity by Repo section when active_sessions_by_repo has entries', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        active_sessions_by_repo: [
+          { repo: 'org/repo-a', active: 2, completed_24h: 0 },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    const section = await findByTestId('sessions-by-repo');
+    expect(section).toBeTruthy();
+    const rows = getAllByTestId('sessions-by-repo-row');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('renders one row per entry in active_sessions_by_repo', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        active_sessions_by_repo: [
+          { repo: 'org/repo-a', active: 2, completed_24h: 1 },
+          { repo: 'org/repo-b', active: 0, completed_24h: 3 },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findByTestId, getAllByTestId } = render(Overview);
+    await findByTestId('sessions-by-repo');
+    const rows = getAllByTestId('sessions-by-repo-row');
+    expect(rows).toHaveLength(2);
+    // Each row should contain the repo name
+    expect(rows[0]?.textContent).toContain('org/repo-a');
+    expect(rows[1]?.textContent).toContain('org/repo-b');
   });
 });
