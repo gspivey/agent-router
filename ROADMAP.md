@@ -33,6 +33,19 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+### 133. Add auto-refresh to the Sessions list page
+
+The SPA Overview page auto-refreshes every 30 seconds (ROADMAP item 117, PR #193) but the
+Sessions list page (`#/sessions`) has no equivalent — it loads once on mount and stays frozen.
+An operator watching a repo with an active session must reload the page to see the session's
+updated status or to see newly-created sessions. This item adds a 30-second polling interval
+to `SessionList.svelte` (matching the Overview's `REFRESH_INTERVAL_MS`), a "Last updated
+HH:MM:SS" timestamp footer, and a manual "Refresh" button. Pure client-side change — no
+backend modifications required.
+
+- Spec: `BACKLOG.md § P2.49`
+- [ ] Complete · PR: —
+
 ---
 
 ## Completed

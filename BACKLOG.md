@@ -2104,3 +2104,66 @@ Tests:
 - `npm run typecheck`, `npm test`, and `npm --prefix client run test` all pass.
 
 ---
+
+### P2.49 — Add auto-refresh to the Sessions list page
+
+**Why this exists.** The SPA Overview page auto-refreshes every 30 seconds (ROADMAP item 117,
+PR #193) — an operator checking on overnight cron runs always sees current data. The Sessions
+list page (`#/sessions`) has no equivalent: it loads once on mount and stays frozen until the
+operator manually navigates away and back. An operator watching a repo with an active session
+must reload the page to see the session's updated status or to see newly-created sessions.
+This is a clear usability gap: the two primary operator surfaces have inconsistent refresh
+behavior.
+
+**What changes.**
+
+Client only (`client/src/components/SessionList.svelte`,
+`client/src/components/SessionList.test.ts`):
+
+- Add a 30-second polling interval in `onMount`: `setInterval(() => void load(), 30_000)`.
+  Clear it in `onDestroy` (import `onDestroy` from `'svelte'`).
+- Track `lastRefreshed: Date | null` in component state; update it at the end of `load()` on
+  a successful fetch. Render as a footer below the repo groups: "Last updated HH:MM:SS" in
+  `text-[var(--text-muted)]` style with `data-testid="sessions-last-refreshed"`. Use the
+  same `formatTime` helper pattern as in `Overview.svelte` (inline or a small local function).
+- Add a manual "Refresh" button (`data-testid="sessions-refresh"`) next to the last-updated
+  timestamp that calls `load()` on click — allows an operator to force an immediate update
+  without waiting for the 30-second interval.
+- No backend changes — the Sessions list already reads from `GET /repos/sessions` which is
+  live on every request. No new endpoints, no schema changes.
+- No new client dependencies.
+
+The existing error, loading, and empty states are unchanged. The auto-refresh does NOT clear
+existing data before the new fetch completes (i.e., the repo-group list remains visible while
+the background reload is in flight); `loading = true` is only set on the first load or on
+manual retry from the error state. Use a separate `refreshing = $state(false)` guard if
+needed to distinguish initial load from background refresh.
+
+**Tests.**
+
+Add to `client/src/components/SessionList.test.ts` (or a new
+`client/src/components/SessionList.autorefresh.test.ts`):
+
+- **setInterval called on mount**: render `SessionList`, assert `setInterval` was called
+  exactly once with the 30-second interval.
+- **clearInterval called on destroy**: render and destroy `SessionList`, assert
+  `clearInterval` was called with the timer returned by `setInterval`.
+- **Last-updated timestamp appears after successful load**: after the initial load resolves,
+  assert `data-testid="sessions-last-refreshed"` is visible.
+- **Refresh button triggers load**: click `data-testid="sessions-refresh"`, assert the API
+  was called a second time.
+- **Background refresh does not clear content**: start with one repo group rendered; trigger
+  a background refresh (fire the interval callback) while the API is in flight; assert the
+  existing repo groups remain visible during the fetch.
+
+No Tier 2 tests — this is a pure client-side polling change with no daemon behavior change.
+
+**Acceptance.**
+- `npm --prefix client run check` passes (svelte-check, typecheck).
+- `npm --prefix client run test` passes, including the new tests.
+- The Sessions list page re-fetches data automatically every 30 seconds.
+- A "Last updated HH:MM:SS" timestamp and a "Refresh" button appear below the repo groups.
+- No new runtime dependencies added to `client/package.json`.
+- `npm run typecheck` and `npm test` pass (no daemon changes, but run for completeness).
+
+---
