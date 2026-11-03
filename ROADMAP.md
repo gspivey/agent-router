@@ -33,6 +33,10 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 144. Surface queued tasks in the SPA Overview dashboard
 
 `GET /overview` returns `queue_depth: number` (the count of tasks in the `queued` state)
@@ -43,11 +47,7 @@ PR #207), `active_sessions_by_repo` (P2.45, PR #205), and `recent_prs` (P2.54, P
 the data is already in the DB; the SPA needs a new conditional section to render it.
 
 - Spec: `BACKLOG.md § P2.60`
-- [ ] Complete · PR: —
-
----
-
-## Completed
+- [x] Complete · PR: #220
 
 ### 143. Add unit tests for PageLayout component
 

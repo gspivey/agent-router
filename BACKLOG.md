@@ -2700,7 +2700,7 @@ Both modes apply the same horizontal gutters (`px-4 sm:px-6 lg:px-8`).
 
 ---
 
-### P2.60 — Surface queued tasks in the SPA Overview dashboard
+### P2.60 — Surface queued tasks in the SPA Overview dashboard ✅ DONE (PR #220)
 
 `GET /overview` returns `queue_depth: number` (the count of tasks in the `queued` state)
 but the SPA renders this only as a scalar stat card ("Queued Work"). An operator who wonders
