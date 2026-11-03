@@ -961,6 +961,47 @@ Tests:
 
 ---
 
+### P2.38 — Fix stale parent task checkboxes in auth-credential-proxy and browser-test-harness specs ✅ DONE (PR #198)
+
+Two DEPRECATED specs have stale top-level task checkboxes: their sub-tasks are all `[x]` (the
+work shipped through ROADMAP items 32–41 for auth-credential-proxy, and 14–18 for
+browser-test-harness), but the parent task lines remain `[ ]`. This is the same stale-checkbox
+pattern fixed in ROADMAP items 97 (P2.22), 98 (P2.23), 100 (P2.24), and 110 (P2.27).
+
+**`.kiro/specs/auth-credential-proxy/tasks.md`** — spec is DEPRECATED (see header note;
+replaced by auth-credential-proxy-v2). The following tasks have all non-optional sub-tasks
+checked but the parent is unchecked:
+- `1` (Secret wrapper — sub-tasks 1.1, 1.2, 1.3 are all `[x]`)
+- `2` (Test harness extensions — sub-tasks 2.1, 2.2 are both `[x]`)
+- `6` (Token_Store factory — sub-tasks 6.1, 6.3 are `[x]`; 6.2 is `[x]*`)
+- `9` (credentialMode config — sub-tasks 9.1, 9.2 are both `[x]`)
+- `10` (Bound_Project resolution — sub-tasks 10.1, 10.2, 10.3, 10.4 are all `[x]`)
+- `16` (github_http_forward — sub-tasks 16.1, 16.2, 16.3, 16.4 are all `[x]`)
+- `17` (git_credential — sub-tasks 17.1, 17.2 are both `[x]`)
+- `20` (webhook token lookup — sub-tasks 20.1, 20.2 are both `[x]`)
+- `22` (CLI daemon-offline fallback — sub-tasks 22.1, 22.2, 22.3 are all `[x]`)
+
+Tasks `25` and `26` reference Tier 3 tests that are all optional (`*`); since the spec is
+DEPRECATED they are not worth ticking.
+
+**`.kiro/specs/browser-test-harness/tasks.md`** — v1 spec, superseded by
+`browser-test-harness-v2`. Tasks `3`–`15` were implemented in ROADMAP items 14–18 (PRs
+#54–#58) and further extended in items 59–60 (PRs #112–#113), but the v1 task checkboxes
+were never ticked. Tasks `1` and `2` are already `[x]`.
+
+**What to tick** (browser-test-harness v1):
+- `3` (Playwright fixtures), `4` (Checkpoint), `5` (list view tests), `6` (detail view tests),
+  `7` (SSE rendering tests), `8` (SSE reconnection tests), `9` (inject tests), `10` (kill
+  tests), `11` (Checkpoint), `12` (visibility reconnect), `13` (auth token tests),
+  `14` (test:browser script), `15` (Final checkpoint)
+
+Documentation-only: no code, no tests.
+
+**Acceptance.** Zero non-optional `- [ ]` lines remain in either spec's `tasks.md` (optional
+`*` tasks may remain unchecked in deprecated specs). The ROADMAP item carries `[x] Complete`.
+
+---
+
 ## Priority 3: Architecture work (deferred to PRODUCT.md phases)
 
 ### P3.1 — Credential proxy security redesign (auth-credential-proxy-v2) ✅ DONE (PRs #115, #118)

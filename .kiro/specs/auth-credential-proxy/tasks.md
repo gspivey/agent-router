@@ -13,7 +13,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
 
 ## Tasks
 
-- [ ] 1. Create Secret wrapper type and Tier 1 tests
+- [x] 1. Create Secret wrapper type and Tier 1 tests
   - [x] 1.1 Create `src/secret.ts` with `Secret` class
     - Private constructor, `Secret.of(value)` factory that throws on empty string
     - `reveal()` returns raw value
@@ -29,7 +29,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Test that `console.log` / `util.inspect` output contains `[REDACTED]`
     - _Requirements: 4.2, 6.5, 11.2_
 
-- [ ] 2. Extend test harness for credential testing
+- [x] 2. Extend test harness for credential testing
   - [x] 2.1 Extend mock GitHub API server in `test/harness/fake-github.ts`
     - Add Authorization header validation on incoming requests
     - Return canned responses for credential tool forwarding tests
@@ -89,7 +89,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
   - Add to `test/tier1/token-store.test.ts`
   - _Requirements: 1.2, 1.3, 1.7, 9.2, 9.3, 9.4, 9.6_
 
-- [ ] 6. Implement Token_Store factory with reload and file watching
+- [x] 6. Implement Token_Store factory with reload and file watching
   - [x] 6.1 Implement `createTokenStore` factory function in `src/token-store.ts`
     - Accept `{ tokensFilePath, log, fallbackToken? }` deps
     - On creation: read and parse tokens file, or fall back to `GITHUB_TOKEN` env var with deprecation warning, or throw `FatalError` if neither available
@@ -128,7 +128,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
 - [x] 8. Checkpoint — Tier 1 token-store and secret tests green
   - Run full test suite (`npm test`). All tests in scope must pass. If any task scope changed during implementation, post a checkpoint comment summarizing changes and unresolved questions. Only proceed to the next batch when this checkpoint passes.
 
-- [ ] 9. Add `credentialMode` to config
+- [x] 9. Add `credentialMode` to config
   - [x] 9.1 Extend `AgentRouterConfig` in `src/config.ts`
     - Add `credentialMode: 'env' | 'mcp'` field
     - Default to `'env'` when omitted from JSON
@@ -141,7 +141,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Add tests to `test/tier1/validate-config.test.ts` or `test/tier1/load-config.test.ts`
     - _Requirements: 4.4_
 
-- [ ] 10. Session manager — Bound_Project resolution and credential injection
+- [x] 10. Session manager — Bound_Project resolution and credential injection
   - [x] 10.1 Extend `SessionMeta` in `src/session-files.ts`
     - Add optional fields: `bound_project`, `bound_project_repos`, `bound_project_read_repos`, `credential_mode`
     - Fields are optional for backward compatibility with legacy sessions
@@ -225,7 +225,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Test repo authorization with empty repo lists, single repo, multiple repos
     - _Requirements: 10.1, 10.2, 10.3, 3.4, 5.2, 6.2_
 
-- [ ] 16. MCP credential tools — `github_http_forward` implementation
+- [x] 16. MCP credential tools — `github_http_forward` implementation
   - [x] 16.1 Implement header injection, upstream forwarding, timeout
     - Per tool call: issue `get_token` IPC call (not cached — rotation propagates)
     - Inject `Authorization: Bearer <token>`, `User-Agent: agent-router/<version>`, `Accept: application/vnd.github+json` headers
@@ -248,7 +248,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
     - Test read/write split enforcement (write to non-Bound_Project repo → error)
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 10.1, 10.2, 10.3, 10.4_
 
-- [ ] 17. MCP credential tools — `git_credential` implementation
+- [x] 17. MCP credential tools — `git_credential` implementation
   - [x] 17.1 Implement git credential format response
     - Validate repo in Bound_Project repos
     - Per tool call: issue `get_token` IPC call (not cached)
@@ -272,7 +272,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
 - [x] 19. Checkpoint — MCP credential tools and session integration tests green
   - Run full test suite (`npm test`). All tests in scope must pass. If any task scope changed during implementation, post a checkpoint comment summarizing changes and unresolved questions. Only proceed to the next batch when this checkpoint passes.
 
-- [ ] 20. Implement webhook token reverse lookup
+- [x] 20. Implement webhook token reverse lookup
   - [x] 20.1 Extend `createApp` in `src/server.ts` to accept `TokenStore` dependency
     - Add `tokenStore: TokenStore` to deps (required — always present, including fallback mode)
     - When webhook handler needs to post status comment: call `tokenStore.findProjectByRepo(repo)` → `tokenStore.getToken(project)` → use `.reveal()` for Authorization header
@@ -291,7 +291,7 @@ Implements project-scoped PAT credential management for Agent Router. Two tracks
   - Cache file written with mode 600
   - _Requirements: 12.3, 12.4, 12.5_
 
-- [ ] 22. Implement CLI daemon-offline fallback and tests
+- [x] 22. Implement CLI daemon-offline fallback and tests
   - [x] 22.1 Implement CLI daemon-offline fallback
     - CLI first attempts daemon socket; if unreachable (missing, refused, timeout >2s), fall back to reading `tokens.json` directly
     - Report project metadata without live `--check` results when daemon offline
