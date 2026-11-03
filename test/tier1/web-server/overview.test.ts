@@ -39,14 +39,14 @@ describe('computeHealth', () => {
 
   it('is degraded when any cron is paused', () => {
     const cronSummary: OverviewCronSummary[] = [
-      { name: 'a', repo: 'org/a', schedule: '* * * * *', state: 'paused', next_fire: null },
+      { name: 'a', repo: 'org/a', schedule: '* * * * *', state: 'paused', next_fire: null, last_fired_at: null },
     ];
     expect(computeHealth({ cronSummary, activeSessions: [], nowS: 1000 })).toBe('degraded');
   });
 
   it('is degraded when any cron is error', () => {
     const cronSummary: OverviewCronSummary[] = [
-      { name: 'a', repo: 'org/a', schedule: '* * * * *', state: 'error', next_fire: null },
+      { name: 'a', repo: 'org/a', schedule: '* * * * *', state: 'error', next_fire: null, last_fired_at: null },
     ];
     expect(computeHealth({ cronSummary, activeSessions: [], nowS: 1000 })).toBe('degraded');
   });
@@ -76,6 +76,7 @@ describe('computeHealth', () => {
             schedule: '* * * * *',
             state,
             next_fire: null,
+            last_fired_at: null,
           }));
           const activeSessions = createdAts.map(created_at => ({ created_at }));
           const h = computeHealth({ cronSummary, activeSessions, nowS });

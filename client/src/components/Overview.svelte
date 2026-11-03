@@ -289,6 +289,7 @@
                   <th class="px-2 py-2 font-medium">Schedule</th>
                   <th class="px-2 py-2 font-medium">Status</th>
                   <th class="px-2 py-2 font-medium">Next Fire</th>
+                  <th class="px-2 py-2 font-medium">Last Fired</th>
                 </tr>
               </thead>
               <tbody>
@@ -306,6 +307,9 @@
                     </td>
                     <td class="px-2 py-2 text-[var(--text-muted)]">
                       {formatNextFire(cron.next_fire)}
+                    </td>
+                    <td class="px-2 py-2 text-[var(--text-muted)]" data-testid="cron-last-fired">
+                      {cron.last_fired_at !== null ? formatNextFire(cron.last_fired_at) : 'Never'}
                     </td>
                   </tr>
                 {/each}

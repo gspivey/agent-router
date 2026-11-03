@@ -166,8 +166,8 @@ describe('Overview', () => {
     getOverview.mockResolvedValue(
       makeOverview({
         cron_summary: [
-          { name: 'nightly', repo: 'o/r', schedule: '0 9 * * *', state: 'active', next_fire: null },
-          { name: 'broken', repo: 'o/r', schedule: '0 0 * * *', state: 'error', next_fire: null },
+          { name: 'nightly', repo: 'o/r', schedule: '0 9 * * *', state: 'active', next_fire: null, last_fired_at: null },
+          { name: 'broken', repo: 'o/r', schedule: '0 0 * * *', state: 'error', next_fire: null, last_fired_at: '2026-11-01T09:00:00.000Z' },
         ],
       }),
     );
@@ -180,6 +180,39 @@ describe('Overview', () => {
     expect(rows[1]?.querySelector('[data-testid="status-badge"]')?.getAttribute('data-state')).toBe(
       'error',
     );
+  });
+
+  it('shows "Never" in the Last Fired column when last_fired_at is null (BACKLOG.md § P2.53)', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        cron_summary: [
+          { name: 'fresh', repo: 'o/r', schedule: '0 9 * * *', state: 'active', next_fire: null, last_fired_at: null },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findAllByTestId } = render(Overview);
+    const cells = await findAllByTestId('cron-last-fired');
+    expect(cells).toHaveLength(1);
+    expect(cells[0]?.textContent?.trim()).toBe('Never');
+  });
+
+  it('renders a timestamp in the Last Fired column when last_fired_at is a valid ISO string (BACKLOG.md § P2.53)', async () => {
+    getOverview.mockResolvedValue(
+      makeOverview({
+        cron_summary: [
+          { name: 'ran-today', repo: 'o/r', schedule: '0 9 * * *', state: 'active', next_fire: null, last_fired_at: '2026-11-03T09:00:00.000Z' },
+        ],
+      }),
+    );
+    listSessions.mockResolvedValue(makeSessionList([]));
+    const { findAllByTestId } = render(Overview);
+    const cells = await findAllByTestId('cron-last-fired');
+    expect(cells).toHaveLength(1);
+    // Should NOT be "Never" and should be a non-empty string.
+    const text = cells[0]?.textContent?.trim() ?? '';
+    expect(text).not.toBe('Never');
+    expect(text.length).toBeGreaterThan(0);
   });
 
   it('shows the cron-summary empty state when there are no crons (Req 12.7)', async () => {

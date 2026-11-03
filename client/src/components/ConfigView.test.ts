@@ -324,6 +324,7 @@ describe('ConfigView', () => {
           schedule: '*/30 * * * *',
           state: 'error',
           next_fire: null,
+          last_fired_at: null,
         },
       ],
       health: 'degraded',

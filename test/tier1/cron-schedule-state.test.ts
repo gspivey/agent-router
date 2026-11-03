@@ -147,7 +147,7 @@ describe('getCronScheduleState', () => {
 
   it('marks paused entries correctly', () => {
     const cronStates: CronState[] = [
-      { name: 'nightly', paused: true, updatedAt: 1000 },
+      { name: 'nightly', paused: true, updatedAt: 1000, lastFiredAt: null },
     ];
     const result = getCronScheduleState(cronConfigs, cronStates, now);
 

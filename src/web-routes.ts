@@ -431,6 +431,13 @@ export interface OverviewCronSummary {
   readonly schedule: string;
   readonly state: 'active' | 'paused' | 'error';
   readonly next_fire: string | null;
+  /**
+   * ISO 8601 UTC string of the most recent successful cron fire, or `null`
+   * when the cron has never fired (e.g. freshly configured or DB was wiped).
+   * Set by `handleCronFire` → `db.setLastFiredAt` immediately after a session
+   * or continuous run is successfully created. See BACKLOG.md § P2.53.
+   */
+  readonly last_fired_at: string | null;
 }
 
 /** Token expiry condition shape for the `GET /overview` response (BACKLOG.md § P2.33). */
@@ -645,15 +652,15 @@ export interface OverviewResponse {
 
 /**
  * A cron state row as consumed by `buildCronSummary`. The persisted
- * `cron_state` table (and `CronState`) carries only `name`/`paused` today, so
- * `last_status` is OPTIONAL: when a future schema adds it, the error-first
- * derivation picks it up automatically; when absent, no cron is ever `error`
- * (a schema change is out of scope for this feature — Req 1.5).
+ * `cron_state` table now carries `last_fired_at` (BACKLOG.md § P2.53).
+ * `last_status` remains optional for forward-compatibility.
  */
 export interface CronSummarySource {
   readonly name: string;
   readonly paused: boolean;
   readonly last_status?: string;
+  /** Unix epoch seconds of the most recent fire, or undefined/null when never fired. */
+  readonly lastFiredAt?: number | null;
 }
 
 /**
@@ -661,6 +668,9 @@ export interface CronSummarySource {
  * (Req 1.5 / 13.3): `IF last_status === 'failed' THEN 'error' ELSE IF paused
  * THEN 'paused' ELSE 'active'`. `next_fire` is the next scheduled fire time as
  * an ISO 8601 string, or `null` when paused or unknown.
+ *
+ * `last_fired_at` is the ISO 8601 string of the most recent fire, or `null`
+ * when the cron has never fired. See BACKLOG.md § P2.53.
  *
  * Pure — all data is passed in for testability.
  */
@@ -684,12 +694,17 @@ export function buildCronSummary(
       const next = getNextCronFire(cron.schedule, now);
       nextFire = next !== null ? next.toISOString() : null;
     }
+    const lastFiredAtS = state?.lastFiredAt ?? null;
+    const lastFiredAt: string | null = lastFiredAtS !== null && lastFiredAtS !== undefined
+      ? new Date(lastFiredAtS * 1000).toISOString()
+      : null;
     return {
       name: cron.name,
       repo: cron.repo,
       schedule: cron.schedule,
       state: derived,
       next_fire: nextFire,
+      last_fired_at: lastFiredAt,
     };
   });
 }

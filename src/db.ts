@@ -27,6 +27,7 @@ export interface CronState {
   name: string;
   paused: boolean;
   updatedAt: number;
+  lastFiredAt: number | null;
 }
 
 export interface Database {
@@ -52,6 +53,12 @@ export interface Database {
   getCronState(name: string): CronState | null;
   setCronPaused(name: string, paused: boolean): void;
   getAllCronStates(): CronState[];
+  /**
+   * Record that a cron named `name` fired at unix-second timestamp `nowS`.
+   * Creates the row if it does not yet exist (the cron has never been paused/resumed).
+   * Safe to call repeatedly; only `last_fired_at` and `updated_at` change.
+   */
+  setLastFiredAt(name: string, nowS: number): void;
   walCheckpoint(): void;
   shutdown(): Promise<void>;
   /**
@@ -135,10 +142,17 @@ CREATE INDEX IF NOT EXISTS idx_pending_wakes_deferred
 
 const CRON_STATE_DDL = `
 CREATE TABLE IF NOT EXISTS cron_state (
-  name       TEXT PRIMARY KEY,
-  paused     INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  name         TEXT PRIMARY KEY,
+  paused       INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  last_fired_at INTEGER
 );
+`;
+
+// Migration: add last_fired_at to cron_state for databases created before this column existed.
+// SQLite 3.37+ supports IF NOT EXISTS on ALTER TABLE ADD COLUMN (Node 20+ bundles this version).
+const CRON_STATE_MIGRATION = `
+ALTER TABLE cron_state ADD COLUMN IF NOT EXISTS last_fired_at INTEGER;
 `;
 
 export function initDatabase(dbPath: string): Database {
@@ -158,6 +172,14 @@ export function initDatabase(dbPath: string): Database {
   db.exec(PENDING_WAKES_DDL);
   db.exec(PENDING_WAKES_INDEX);
   db.exec(CRON_STATE_DDL);
+  // Run migration for databases created before last_fired_at was added.
+  try {
+    db.exec(CRON_STATE_MIGRATION);
+  } catch {
+    // Already present — ALTER TABLE IF NOT EXISTS is a best-effort guard;
+    // some older SQLite builds may not support IF NOT EXISTS on ADD COLUMN.
+    // In that case the column already exists and we can continue safely.
+  }
 
   // Prepared statements
   const insertEventStmt = db.prepare<{
@@ -282,7 +304,7 @@ export function initDatabase(dbPath: string): Database {
 
   // Cron state prepared statements
   const getCronStateStmt = db.prepare<{ name: string }>(
-    `SELECT name, paused, updated_at FROM cron_state WHERE name = @name`
+    `SELECT name, paused, updated_at, last_fired_at FROM cron_state WHERE name = @name`
   );
 
   const upsertCronStateStmt = db.prepare<{ name: string; paused: number; updated_at: number }>(
@@ -293,8 +315,16 @@ export function initDatabase(dbPath: string): Database {
        updated_at = excluded.updated_at`
   );
 
+  const setLastFiredAtStmt = db.prepare<{ name: string; now_s: number }>(
+    `INSERT INTO cron_state (name, paused, updated_at, last_fired_at)
+     VALUES (@name, 0, @now_s, @now_s)
+     ON CONFLICT(name) DO UPDATE SET
+       last_fired_at = excluded.last_fired_at,
+       updated_at = excluded.updated_at`
+  );
+
   const getAllCronStatesStmt = db.prepare(
-    `SELECT name, paused, updated_at FROM cron_state`
+    `SELECT name, paused, updated_at, last_fired_at FROM cron_state`
   );
 
   // Atomic rate-limit transaction
@@ -448,10 +478,10 @@ export function initDatabase(dbPath: string): Database {
 
     getCronState(name: string): CronState | null {
       const row = getCronStateStmt.get({ name }) as
-        | { name: string; paused: number; updated_at: number }
+        | { name: string; paused: number; updated_at: number; last_fired_at: number | null }
         | undefined;
       if (row === undefined) return null;
-      return { name: row.name, paused: row.paused === 1, updatedAt: row.updated_at };
+      return { name: row.name, paused: row.paused === 1, updatedAt: row.updated_at, lastFiredAt: row.last_fired_at ?? null };
     },
 
     setCronPaused(name: string, paused: boolean): void {
@@ -467,12 +497,18 @@ export function initDatabase(dbPath: string): Database {
         name: string;
         paused: number;
         updated_at: number;
+        last_fired_at: number | null;
       }>;
       return rows.map((r) => ({
         name: r.name,
         paused: r.paused === 1,
         updatedAt: r.updated_at,
+        lastFiredAt: r.last_fired_at ?? null,
       }));
+    },
+
+    setLastFiredAt(name: string, nowS: number): void {
+      setLastFiredAtStmt.run({ name, now_s: nowS });
     },
 
     walCheckpoint(): void {
