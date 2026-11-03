@@ -33,10 +33,14 @@ mini-specs live in [`BACKLOG.md`](BACKLOG.md).
 
 ## Active Roadmap
 
+---
+
+## Completed
+
 ### 122. Fix stale parent task checkboxes in auth-credential-proxy and browser-test-harness specs
 
 Two DEPRECATED specs have stale top-level task checkboxes: their sub-tasks are all `[x]` but
-the parent task lines remain `[ ]`. In `.kiro/specs/auth-credential-proxy/tasks.md`, tasks
+the parent task lines remained `[ ]`. In `.kiro/specs/auth-credential-proxy/tasks.md`, tasks
 `1`, `2`, `6`, `9`, `10`, `16`, `17`, `20`, `22` have all non-optional sub-tasks checked but
 the parent is unchecked (the spec is DEPRECATED, marked "Do not queue these tasks"; work
 shipped through ROADMAP items 32–41). In `.kiro/specs/browser-test-harness/tasks.md`, tasks
@@ -45,11 +49,9 @@ ROADMAP items 14–18). Same stale-checkbox pattern as ROADMAP items 97, 98, 100
 Documentation-only: no code, no tests.
 
 - Spec: `BACKLOG.md § P2.38`
-- [ ] Complete · PR: —
+- [x] Complete · PR: #198
 
 ---
-
-## Completed
 
 ### 121. Add `events_processed_24h` stat to the SPA Overview dashboard
 

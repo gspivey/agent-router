@@ -961,7 +961,7 @@ Tests:
 
 ---
 
-### P2.38 — Fix stale parent task checkboxes in auth-credential-proxy and browser-test-harness specs
+### P2.38 — Fix stale parent task checkboxes in auth-credential-proxy and browser-test-harness specs ✅ DONE (PR #198)
 
 Two DEPRECATED specs have stale top-level task checkboxes: their sub-tasks are all `[x]` (the
 work shipped through ROADMAP items 32–41 for auth-credential-proxy, and 14–18 for
